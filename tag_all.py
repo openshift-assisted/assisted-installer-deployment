@@ -8,6 +8,7 @@ import sys
 
 def get_logger():
     logging.getLogger("requests").setLevel(logging.ERROR)
+    logging.getLogger("urllib3").setLevel(logging.ERROR)
     log = logging.getLogger('')
     log.setLevel(logging.DEBUG)
     format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")

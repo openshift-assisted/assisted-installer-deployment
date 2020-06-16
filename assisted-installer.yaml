@@ -1,2 +1,4 @@
-eranco74/assisted-installer: 2e3bfbea7631d2b8d4ddf5ed050fb6d29dcce947
+eranco74/assisted-installer: d7b53c0d538a470a655f7197967f31bb31eb1613
 filanov/bm-inventory: d625aadf20fe23974f0d5bc8bb42c6d0254fe56d
+openshift-metal3/facet: 0f63386692a41f7e277df09eb24bd80d0829dc65
+oshercc/ignition-manifests-and-kubeconfig-generate: missing
