@@ -1,2 +1,6 @@
-#oshercc/coreos_installation_iso: db1b0c67197aec9198df09efe31c248c72bda8d1
-ori-amizur/introspector: df8cb97c8b0768c197b771b4c55c7f721154f80f
+eranco74/assisted-installer: ed14ddb2341369ed3435777c4a87cc0f7290ca36
+filanov/bm-inventory: ae86a3ad4f9cfcb31e04bcbdd9d83b3be9304522
+openshift-metal3/facet: d9b2ee93a0724ef3f5f6aece18bfe1b3d3cfb2d9
+oshercc/ignition-manifests-and-kubeconfig-generate: 49d83d1f73604fb45f4816020a4d7115196419a6
+oshercc/coreos_installation_iso: df3775b819390c4ef9e07325ce1df4e720113605
+ori-amizur/introspector: fd7bde71f1c2d24a84bfc1886c07ca127948b30a
