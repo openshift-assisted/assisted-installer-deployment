@@ -22,7 +22,7 @@ class GitApiUtils(object):
 
     def create_tag(self, repo, revision, tag):
         """Create a tag for a specific revision
-        
+
         :param str repo: repository name
         :param str revision:  branch name or commit sha in the repository
         :param str tag: The tag to create (e.g. 'v1.0.0')
@@ -47,6 +47,40 @@ class GitApiUtils(object):
         response.raise_for_status()
         return response.json().get('url')
     
+    def delete_tag(self, repo, tag):
+        """Delete a tag from a repository
+
+        :param str repo: repository name
+        :param str tag: The tag to delete (e.g. 'v1.0.0')
+        """
+        logging.info('Deleting tag %(tag)s in repository: %(repo)s', dict(tag=tag, repo=repo))
+        ref_url = "%s/%s/git/refs/tags/%s" % (self.GIT_API_REPOS, repo, tag)
+        response = requests.delete(ref_url, auth=self._credentials, timeout=self.GIT_REQUEST_TIMEOUT)
+        response.raise_for_status()
+
+    def list_tags(self, repo):
+        """Get the list of tags from a repository
+
+        :param str repo: repository name
+
+        :return list: List of tags
+        """
+        logging.info('Listing tags in repository: %(repo)s', dict(repo=repo))
+        ref_url = "%s/%s/git/refs/tags" % (self.GIT_API_REPOS, repo)
+        response = requests.get(ref_url, auth=self._credentials, timeout=self.GIT_REQUEST_TIMEOUT)
+        response.raise_for_status()
+        return [i.get("ref").split("/", 2)[-1] for i in response.json()]
+
+    def tag_exists(self, repo, tag):
+        """Check if a tag exists in a repository
+
+        :param str repo: repository name
+        :param str tag: The tag to delete (e.g. 'v1.0.0')
+
+        :return bool: True if tag exists else false
+        """
+        return tag in self.list_tags(repo)
+
     @staticmethod
     def _get_credentials_from_netrc(netrc_path=None):
         '''Get the user credentials from .netrc file'''
