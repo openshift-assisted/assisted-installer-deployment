@@ -19,7 +19,6 @@ class GitApiUtils(object):
         else:
             self._credentials = self._get_credentials_from_netrc()
 
-
     def create_tag(self, repo, revision, tag):
         """Create a tag for a specific revision
 
@@ -46,7 +45,7 @@ class GitApiUtils(object):
         response = requests.post(ref_url, auth=self._credentials, json=ref_data, timeout=self.GIT_REQUEST_TIMEOUT)
         response.raise_for_status()
         return response.json().get('url')
-    
+
     def delete_tag(self, repo, tag):
         """Delete a tag from a repository
 

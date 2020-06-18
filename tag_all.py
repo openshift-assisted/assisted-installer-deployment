@@ -6,6 +6,7 @@ import yaml
 import logging
 import sys
 
+
 def get_logger():
     logging.getLogger("requests").setLevel(logging.ERROR)
     logging.getLogger("urllib3").setLevel(logging.ERROR)
@@ -45,6 +46,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Tag all assisted installer repositories')
     parser.add_argument('-t', '--tag', help='The tag to create', type=str, required=True)
     parser.add_argument('-f', '--force', help='Delete tag if oreviosly exists', action="store_true")
-    parser.add_argument('-m', '--manifest', help='Path to manifest file',type=str, default="./assisted-installer.yaml")
+    parser.add_argument('-m', '--manifest', help='Path to manifest file', type=str, default="./assisted-installer.yaml")
     args = parser.parse_args()
     main(args.manifest, args.tag, args.force)
