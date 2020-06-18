@@ -1,0 +1,16 @@
+all: pep8 pylint build image
+
+.PHONY: pep8 pylint clean build
+build:
+	python setup.py sdist
+
+pep8:
+	pep8 --max-line-length=145 release
+
+pylint:
+	mkdir -p reports
+	PYLINTHOME=reports/ pylint release
+
+clean:
+	rm -rf build dist *egg-info ./__pycache__
+	find -name *.pyc -delete

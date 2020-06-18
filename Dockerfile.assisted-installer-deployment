@@ -1,0 +1,4 @@
+FROM python:3
+COPY dist/assisted-installer-release-*.tar.gz ./
+RUN pip install ./assisted-installer-release-*.tar.gz
+ENTRYPOINT ["release"]

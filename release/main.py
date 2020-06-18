@@ -1,10 +1,10 @@
 #!/usr/bin/python3
 
 import argparse
-import gittools
-import yaml
 import logging
 import sys
+import yaml
+from release import gittools
 
 
 def get_logger():
@@ -12,14 +12,13 @@ def get_logger():
     logging.getLogger("urllib3").setLevel(logging.ERROR)
     log = logging.getLogger('')
     log.setLevel(logging.DEBUG)
-    format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    ch = logging.StreamHandler(sys.stdout)
-    ch.setFormatter(format)
-    log.addHandler(ch)
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    log.addHandler(stream_handler)
     return log
 
 
-def main(manifest, tag, delete_if_exists=False):
+def tag_all(manifest, tag, delete_if_exists=False):
     '''Read the manifest file and create a tag for each entry'''
     logger = get_logger()
     with open(manifest, 'r') as manifest_file:
@@ -42,10 +41,14 @@ def main(manifest, tag, delete_if_exists=False):
     logger.info("Done")
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description='Tag all assisted installer repositories')
     parser.add_argument('-t', '--tag', help='The tag to create', type=str, required=True)
     parser.add_argument('-f', '--force', help='Delete tag if oreviosly exists', action="store_true")
     parser.add_argument('-m', '--manifest', help='Path to manifest file', type=str, default="./assisted-installer.yaml")
     args = parser.parse_args()
-    main(args.manifest, args.tag, args.force)
+    tag_all(args.manifest, args.tag, args.force)
+
+
+if __name__ == "__main__":
+    main()

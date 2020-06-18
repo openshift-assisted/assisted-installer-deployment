@@ -1,0 +1,13 @@
+CHANGES
+=======
+
+* Added skipper build and makefile Added python requirements and dev-requirements Added pylint and pep3 checks Moved code to release directory Added pip package build Added dockerfile
+* Fixed format
+* Added force option to tag\_all.py
+* Updated manifest
+* Updated manifest to latest stable
+* Updated manifest
+* Added git gnore
+* Updated manifest file
+* Added tag\_all.py Added initial assisted-installer.yaml
+* Initial commit

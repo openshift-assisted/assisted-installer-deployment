@@ -5,7 +5,7 @@ import os
 import requests
 
 
-class GitApiUtils(object):
+class GitApiUtils():
     GIT_API_PREFIX = "https://api.github.com"
     GIT_API_REPOS = "%s/repos" % GIT_API_PREFIX
     GIT_REPO_TREES_URI_PREFIX = "/git/trees"
