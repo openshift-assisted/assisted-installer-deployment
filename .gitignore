@@ -3,3 +3,4 @@ dist/
 reports/
 .eggs/
 *egg-info
+**/RCS/**

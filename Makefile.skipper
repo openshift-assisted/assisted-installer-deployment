@@ -1,4 +1,4 @@
-all: pep8 pylint build image
+all: pep8 pylint build
 
 .PHONY: pep8 pylint clean build
 build:
