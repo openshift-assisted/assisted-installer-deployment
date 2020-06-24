@@ -1,6 +1,11 @@
 CHANGES
 =======
 
+v1.0.2
+------
+
+* Manifest changes for the v1.0.2
+* Fixed errors in Makefiles, and fixed the README
 * Added skipper build and makefile Added python requirements and dev-requirements Added pylint and pep3 checks Moved code to release directory Added pip package build Added dockerfile
 * Fixed format
 * Added force option to tag\_all.py
