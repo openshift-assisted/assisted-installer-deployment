@@ -31,7 +31,7 @@ def main():
 
     deployment[args.repo] = args.hash
     with open(args.deployment, "w") as f:
-        yaml.dump(deployment, f)
+        yaml.dump(deployment, f, default_flow_style=False)
     print("updated {} repo with {} hash".format(args.repo, args.hash))
 
 if __name__ == "__main__":
