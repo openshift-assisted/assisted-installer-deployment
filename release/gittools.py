@@ -36,7 +36,7 @@ class GitApiUtils():
             "message": "release %s" % tag,
             "type": "commit",
         }
-        url = "%s/%s/git/tags" % (self.GIT_API_REPOS, repo)
+        url = "%s/%s/tags" % (self.GIT_API_REPOS, repo)
         response = requests.post(url, auth=self._credentials, json=data, timeout=self.GIT_REQUEST_TIMEOUT)
         response.raise_for_status()
         tag_obj = response.json()
