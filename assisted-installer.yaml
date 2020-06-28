@@ -1,6 +1,6 @@
 eranco74/assisted-installer: 4cf9c929d98625be03c259a4b9706693c750c23c
-filanov/bm-inventory: c852ae25e86b72cccb2ba8a141837f6c7edb50d0
+filanov/bm-inventory: 1d16004c457177c97edabe4369e37a2602b4c3ea
 openshift-metal3/facet: 4543c24f8284e3f9efc55660eafe3a21be59e466
-oshercc/ignition-manifests-and-kubeconfig-generate: 81aedab566a3e4e1a217a8ce5ab8c2c55b68cce9
-oshercc/coreos_installation_iso: e2636c6316e7f2bf5e958b2bbc3ca481190f40d1
 ori-amizur/introspector: 1716ee2358a515bf449b56dbe6850aeefe2c1bee
+oshercc/coreos_installation_iso: e2636c6316e7f2bf5e958b2bbc3ca481190f40d1
+oshercc/ignition-manifests-and-kubeconfig-generate: 81aedab566a3e4e1a217a8ce5ab8c2c55b68cce9
