@@ -1,9 +1,19 @@
 CHANGES
 =======
 
+* Added check option that return a list of missing images
+* Added delete option
+* Added untag option
+* MGMT-1376 Add repository images list to the assisted-installer.yaml
+* updating release test10
+* Fix yaml dump
+* Fixed issue with numbered list on the README
+* Add a update hash tool
+
 v1.0.2
 ------
 
+* Fixed wrong hash of facets for v1.0.2
 * Manifest changes for the v1.0.2
 * Fixed errors in Makefiles, and fixed the README
 * Added skipper build and makefile Added python requirements and dev-requirements Added pylint and pep3 checks Moved code to release directory Added pip package build Added dockerfile
