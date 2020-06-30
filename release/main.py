@@ -35,9 +35,9 @@ def tag_all(manifest, tag, delete_if_exists=False):
                 gtools.delete_tag(repo, tag)
         else:
             raise ValueError("%s tag already exists in these repositories %s" % (tag, repos_with_tag))
-    for repo, revision in manifest_contnet.items():
-        logger.info("Creating %s tag in repo: %s, revision: %s", tag, repo, revision)
-        gtools.create_tag(repo, revision, tag)
+    for repo, repo_info in manifest_contnet.items():
+        logger.info("Creating %s tag in repo: %s, revision: %s", tag, repo, repo_info['revision'])
+        gtools.create_tag(repo, repo_info['revision'], tag)
     logger.info("Done")
 
 
