@@ -54,21 +54,22 @@ def untag_all(manifest, tag):
             repos_with_tag.append(repo)
     if repos_with_tag:
         for repo in repos_with_tag:
+            logger.info("Deleting %s tag from %s", tag, repo)
             gtools.delete_tag(repo, tag)
 
 
 def main():
     parser = argparse.ArgumentParser(description='Tag all assisted installer repositories')
-    tag_options = parser.add_mutually_exclusive_group()
-    tag_options.add_argument('-t', '--tag', help='The tag to create', type=str, required=True)
-    tag_options.add_argument('-t', '--untag', help='The tag to delete', type=str, required=True)
-    parser.add_argument('-f', '--force', help='Delete tag if oreviosly exists', action="store_true")
+    parser.add_argument('-t', '--tag', help='The tag to create', type=str, required=True)
+    parser.add_argument('-d', '--delete', help='Delete the tag from all repos', action="store_true")
+    parser.add_argument('-f', '--force', help='Override the tag if previosly exists', action="store_true")
     parser.add_argument('-m', '--manifest', help='Path to manifest file', type=str, default="./assisted-installer.yaml")
     args = parser.parse_args()
-    if args.tag:
+    if args.delete:
+      untag_all(args.manifest, args.tag)
+    elif args.tag:
         tag_all(args.manifest, args.tag, args.force)
-    else:
-        untag_all(args.manifest, args.tag)
+      
 
 if __name__ == "__main__":
     main()
