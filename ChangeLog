@@ -1,6 +1,10 @@
 CHANGES
 =======
 
+v1.0.4
+------
+
+* Hashes for v1.0.4
 * Added check option that return a list of missing images
 * Added delete option
 * Added untag option
