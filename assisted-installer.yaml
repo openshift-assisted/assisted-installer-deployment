@@ -9,7 +9,7 @@ filanov/bm-inventory:
   - bm-inventory
   - s3-object-expirer
 openshift-metal3/facet: 
-  revision: 54d24364c25ca46056cb062b19d1949d82f4b3ea
+  revision: 6b4702a7f3c1a36c886094c094a453a7b3c796d0
   images:
   - ocp-metal-ui
 oshercc/ignition-manifests-and-kubeconfig-generate: 
