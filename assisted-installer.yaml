@@ -4,7 +4,7 @@ eranco74/assisted-installer:
   - assisted-installer-controller
   - assisted-installer
 filanov/bm-inventory: 
-  revision: a0cc79d1c9b999c5d3ea85181e90bbbb7dd4018a
+  revision: 7fa395e0b4f27bb48a0042a1f8373260ad221f99
   images:
   - bm-inventory
   - s3-object-expirer
