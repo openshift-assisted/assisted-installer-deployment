@@ -1,27 +1,26 @@
-eranco74/assisted-installer: 
-  revision: 162b693fc41398fec520999ead3b03d3cf328f80
+eranco74/assisted-installer:
+  revision: f9596dfd86deb14e932d9e28c32f6dacd7524d21
   images:
   - assisted-installer-controller
   - assisted-installer
-filanov/bm-inventory: 
-  revision: f3fb1eb755247e4ca76de215c94cc0023859e6f0
+filanov/bm-inventory:
+  revision: ec678e1f7b27a45747acadf35bcb504ea3a93a82
   images:
   - bm-inventory
-  - s3-object-expirer
-openshift-metal3/facet: 
-  revision: 6b4702a7f3c1a36c886094c094a453a7b3c796d0
+openshift-metal3/facet:
+  revision: 98d0175bce717a7b32325a39f25493d2e14105ba
   images:
   - ocp-metal-ui
-oshercc/ignition-manifests-and-kubeconfig-generate: 
+oshercc/ignition-manifests-and-kubeconfig-generate:
   revision: 81aedab566a3e4e1a217a8ce5ab8c2c55b68cce9
   images:
   - ignition-manifests-and-kubeconfig-generate
-oshercc/coreos_installation_iso: 
-  revision: e2636c6316e7f2bf5e958b2bbc3ca481190f40d1
+oshercc/coreos_installation_iso:
+  revision: e2f44f9be67d4eee03330fbb0e3ac28d592e2aa3
   images:
   - installer-image-build
-ori-amizur/introspector: 
-  revision: 3b4cb2de35405b0b24667b92090b4ce42ba4bd7b
+ori-amizur/introspector:
+  revision: 627be4a1e73ff08a84259810e748556008996ca9
   images:
   - connectivity_check
   - hardware_info
