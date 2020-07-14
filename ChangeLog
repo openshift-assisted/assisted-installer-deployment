@@ -1,9 +1,19 @@
 CHANGES
 =======
 
+* Updated bm-inventory hash for v1.0.5
+
+v1.0.5
+------
+
+* Updated manifest for v1.0.5
+
 v1.0.4
 ------
 
+* UI hash change for v1.0.4
+* Another bm-inventory hash change for v1.0.4
+* Updated bm-inventory hash for v1.0.4
 * Hashes for v1.0.4
 * Added check option that return a list of missing images
 * Added delete option
