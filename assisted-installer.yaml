@@ -1,10 +1,10 @@
 eranco74/assisted-installer:
-  revision: f9596dfd86deb14e932d9e28c32f6dacd7524d21
+  revision: d0ffef742a26a46b16edf9a740dead140816663e
   images:
   - assisted-installer-controller
   - assisted-installer
 filanov/bm-inventory:
-  revision: 4a85e6d73c72d847ffd2e2d652a2ab619d230dea
+  revision: 13822c3e5bbb2716f8127fba1634a9aa2579ddd1
   images:
   - bm-inventory
 openshift-metal3/facet:
@@ -20,7 +20,7 @@ oshercc/coreos_installation_iso:
   images:
   - installer-image-build
 ori-amizur/introspector:
-  revision: 627be4a1e73ff08a84259810e748556008996ca9
+  revision: 24fd6f6ef88b663069ee47665bb417a4c9cea9d9
   images:
   - connectivity_check
   - hardware_info
