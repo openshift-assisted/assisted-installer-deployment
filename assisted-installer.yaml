@@ -8,7 +8,7 @@ filanov/bm-inventory:
   images:
   - bm-inventory
 openshift-metal3/facet:
-  revision: 98d0175bce717a7b32325a39f25493d2e14105ba
+  revision: ff9f309fb479d274dddfadb82c447d3e2a1e4bc1
   images:
   - ocp-metal-ui
 oshercc/ignition-manifests-and-kubeconfig-generate:
