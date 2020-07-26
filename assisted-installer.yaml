@@ -4,7 +4,7 @@ eranco74/assisted-installer:
   - assisted-installer-controller
   - assisted-installer
 filanov/bm-inventory:
-  revision: ada48689cdfcf0a85c1686a372761aaef90ad83d
+  revision: 43352390e1ff446e907b5559753af86ae5261e57
   images:
   - bm-inventory
 openshift-metal3/facet:
