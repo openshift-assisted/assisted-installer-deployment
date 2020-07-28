@@ -29,7 +29,7 @@ def main():
         return
 
 
-    deployment[args.repo] = args.hash
+    deployment[args.repo]["revision"] = args.hash
     with open(args.deployment, "w") as f:
         yaml.dump(deployment, f, default_flow_style=False)
     print("updated {} repo with {} hash".format(args.repo, args.hash))
