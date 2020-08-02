@@ -1,11 +1,18 @@
 CHANGES
 =======
 
-v1.0.6.
+* Updated hashes for v1.0.8
+
+v1.0.8
+------
+
+* Move hash update from relase job to repo
+* Update update\_hash tool
+
+v1.0.6.3
 --------
 
-* Updated bm-inventory for v1.0.6.3 - Install OCP 4.5.3
-
+* Updated bm-inventory for v1.0.6.3
 
 v1.0.6.2
 --------
