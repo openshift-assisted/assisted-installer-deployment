@@ -1,26 +1,26 @@
 eranco74/assisted-installer:
-  revision: d0ffef742a26a46b16edf9a740dead140816663e
+  revision: b7657411b4552b46edd88c8c9fd47368bf7b3839
   images:
   - assisted-installer-controller
   - assisted-installer
 filanov/bm-inventory:
-  revision: 43352390e1ff446e907b5559753af86ae5261e57
+  revision: 8c5cb08bc1cbab59dbf3f685794d89185534ce77
   images:
   - bm-inventory
 openshift-metal3/facet:
-  revision: ff9f309fb479d274dddfadb82c447d3e2a1e4bc1
+  revision: 521cd8e4e07dc3aff5dd48bca8cbca0ae3244c8a
   images:
   - ocp-metal-ui
 oshercc/ignition-manifests-and-kubeconfig-generate:
-  revision: 81aedab566a3e4e1a217a8ce5ab8c2c55b68cce9
+  revision: 372f10d66357fd805df2b708f9881dd03c0cddb6
   images:
   - ignition-manifests-and-kubeconfig-generate
 oshercc/coreos_installation_iso:
-  revision: e2f44f9be67d4eee03330fbb0e3ac28d592e2aa3
+  revision: 196bcb0da115178e40b524b909627bb350cbfab6
   images:
   - installer-image-build
 ori-amizur/introspector:
-  revision: 24fd6f6ef88b663069ee47665bb417a4c9cea9d9
+  revision: 7fbd9c25093ab6699541f57c5e8535a01f320bf6
   images:
   - connectivity_check
   - hardware_info
