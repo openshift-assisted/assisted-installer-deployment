@@ -4,6 +4,7 @@ CHANGES
 v1.0.7
 ------
 
+* Updated bm-inventory hash for v1.0.7
 * Updated assisted-installer hash for v1.0.7
 * Updated hashes for v1.0.7
 * Move hash update from relase job to repo
