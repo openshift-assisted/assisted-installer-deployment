@@ -1,5 +1,5 @@
 eranco74/assisted-installer:
-  revision: b7657411b4552b46edd88c8c9fd47368bf7b3839
+  revision: a35669b4b093f15d943dbacc41f9d2a7b5652e0d
   images:
   - assisted-installer-controller
   - assisted-installer
