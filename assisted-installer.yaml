@@ -1,12 +1,12 @@
-eranco74/assisted-installer:
-  revision: a35669b4b093f15d943dbacc41f9d2a7b5652e0d
+openshift/assisted-installer:
+  revision: 162b693fc41398fec520999ead3b03d3cf328f80
   images:
   - assisted-installer-controller
   - assisted-installer
-filanov/bm-inventory:
-  revision: d2f0c36e21438aac031231e7bcb72b8e302ab19e
+openshift/assisted-service:
+  revision: 10127328b9603aba18163a447cbec4c3b7d41d8b
   images:
-  - bm-inventory
+  - assisted-service
 openshift-metal3/facet:
   revision: 521cd8e4e07dc3aff5dd48bca8cbca0ae3244c8a
   images:
