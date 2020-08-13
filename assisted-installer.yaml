@@ -14,7 +14,7 @@ openshift-metal3/facet:
 openshift/assisted-ignition-generator:
   revision: 8ae5f287596614bcab67498bdd9272c79caef2fa
   images:
-  - ignition-manifests-and-kubeconfig-generate
+  - assisted-ignition-generator
 oshercc/coreos_installation_iso:
   revision: 196bcb0da115178e40b524b909627bb350cbfab6
   images:
