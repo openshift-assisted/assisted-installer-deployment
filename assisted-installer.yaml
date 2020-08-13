@@ -11,16 +11,16 @@ openshift-metal3/facet:
   revision: 521cd8e4e07dc3aff5dd48bca8cbca0ae3244c8a
   images:
   - ocp-metal-ui
-oshercc/ignition-manifests-and-kubeconfig-generate:
-  revision: 372f10d66357fd805df2b708f9881dd03c0cddb6
+openshift/assisted-ignition-generator:
+  revision: 8ae5f287596614bcab67498bdd9272c79caef2fa
   images:
   - ignition-manifests-and-kubeconfig-generate
 oshercc/coreos_installation_iso:
   revision: 196bcb0da115178e40b524b909627bb350cbfab6
   images:
   - installer-image-build
-ori-amizur/introspector:
-  revision: 7fbd9c25093ab6699541f57c5e8535a01f320bf6
+openshift/assisted-installer-agent:
+  revision: 6dbef262aaf793d0f991cbe7ebaed2127f4a3612
   images:
   - connectivity_check
   - hardware_info
