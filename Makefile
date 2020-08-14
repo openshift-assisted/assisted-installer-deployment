@@ -7,7 +7,7 @@ image: build
 	skipper build assisted-installer-deployment
 
 #update: image
-#	GIT_REVISION=${GIT_REVISION} docker build --build-arg GIT_REVISION -t $(SERVICE) -f Dockerfile.ignition-manifests-and-kubeconfig-generate .
+#	GIT_REVISION=${GIT_REVISION} docker build --build-arg GIT_REVISION -t $(SERVICE) -f Dockerfile.assisted-ignition-generator .
 #	docker push $(SERVICE)
 
 local-update: image
