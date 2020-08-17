@@ -3,6 +3,7 @@ openshift/assisted-installer:
   images:
   - assisted-installer-controller
   - assisted-installer
+  - assisted-iso-create
 openshift/assisted-service:
   revision: 10127328b9603aba18163a447cbec4c3b7d41d8b
   images:
@@ -15,10 +16,6 @@ openshift/assisted-ignition-generator:
   revision: 8ae5f287596614bcab67498bdd9272c79caef2fa
   images:
   - assisted-ignition-generator
-oshercc/coreos_installation_iso:
-  revision: 196bcb0da115178e40b524b909627bb350cbfab6
-  images:
-  - assisted-iso-create
 openshift/assisted-installer-agent:
   revision: 6dbef262aaf793d0f991cbe7ebaed2127f4a3612
   images:
