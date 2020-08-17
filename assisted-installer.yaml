@@ -1,14 +1,14 @@
 openshift/assisted-installer:
-  revision: 162b693fc41398fec520999ead3b03d3cf328f80
+  revision: 60ef28fbc6fdcc7128f4c62538bedb783328a366
   images:
   - assisted-installer-controller
   - assisted-installer
 openshift/assisted-service:
-  revision: 10127328b9603aba18163a447cbec4c3b7d41d8b
+  revision: 931bb06eedc3afadeb1f6c11881bb23b8c0a9189
   images:
   - assisted-service
 openshift-metal3/facet:
-  revision: 521cd8e4e07dc3aff5dd48bca8cbca0ae3244c8a
+  revision: f2b461c47ecfb58c57ddc53ab8faa2b2efb8af39
   images:
   - ocp-metal-ui
 openshift/assisted-ignition-generator:
@@ -16,7 +16,7 @@ openshift/assisted-ignition-generator:
   images:
   - assisted-ignition-generator
 oshercc/coreos_installation_iso:
-  revision: 196bcb0da115178e40b524b909627bb350cbfab6
+  revision: 4fa79773fbdf4a013dd4b4a30975e3a3b2743ca1
   images:
   - installer-image-build
 openshift/assisted-installer-agent:
