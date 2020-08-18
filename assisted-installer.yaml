@@ -3,11 +3,11 @@ openshift/assisted-installer:
   images:
   - assisted-installer-controller
   - assisted-installer
-  - assisted-iso-create
 openshift/assisted-service:
   revision: 23c70cc4dff007c33f98c8f4be977561204316a6
   images:
   - assisted-service
+  - assisted-iso-create
 openshift-metal3/facet:
   revision: 72d67f5741740cc0969449c874de899c4ab724a8
   images:
