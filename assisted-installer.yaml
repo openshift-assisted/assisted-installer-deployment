@@ -1,23 +1,23 @@
 openshift/assisted-installer:
-  revision: c72381dc79177558eb1eed7997bf368a77a51363
+  revision: 35e9be297e2f75de92d4da1711ca6fc09829e07a
   images:
   - assisted-installer-controller
   - assisted-installer
 openshift/assisted-service:
-  revision: 6b9d3c1d5a3902967318f2b4b7c5bdc2337c7f58
+  revision: 8095be475c3c55deb95fd0943efc29e03e11e91f
   images:
   - assisted-service
   - assisted-iso-create
 openshift-metal3/facet:
-  revision: c42f482d5169de3463428387e7a82c083b4cfa67
+  revision: 60240945bc4c2efe33e54ec7fd308e82a3785d56
   images:
   - ocp-metal-ui
 openshift/assisted-ignition-generator:
-  revision: 7ba26e450187482b0fb9db99e44e90bd9a9c881f
+  revision: 400074093fdd2c51527e879fa2bbcbf9fb54a0d8
   images:
   - assisted-ignition-generator
 openshift/assisted-installer-agent:
-  revision: 6dbef262aaf793d0f991cbe7ebaed2127f4a3612
+  revision: 0a05fca9b5e72dc6bdaaad6ea6d4560f8ddaa91d
   images:
   - assisted-installer-agent
   - connectivity_check
