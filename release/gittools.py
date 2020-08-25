@@ -53,7 +53,7 @@ class GitApiUtils():
         :param str tag: The tag to delete (e.g. 'v1.0.0')
         """
         logging.info('Deleting tag %(tag)s in repository: %(repo)s', dict(tag=tag, repo=repo))
-        ref_url = "%s/%s/git/refs/tags/%s" % (self.GIT_API_REPOS, repo, tag)
+        ref_url = "%s/%s/tags/%s" % (self.GIT_API_REPOS, repo, tag)
         response = requests.delete(ref_url, auth=self._credentials, timeout=self.GIT_REQUEST_TIMEOUT)
         response.raise_for_status()
 
@@ -64,11 +64,12 @@ class GitApiUtils():
 
         :return list: List of tags
         """
+
         logging.info('Listing tags in repository: %(repo)s', dict(repo=repo))
-        ref_url = "%s/%s/git/refs/tags" % (self.GIT_API_REPOS, repo)
+        ref_url = "%s/%s/tags" % (self.GIT_API_REPOS, repo)
         response = requests.get(ref_url, auth=self._credentials, timeout=self.GIT_REQUEST_TIMEOUT)
         response.raise_for_status()
-        return [i.get("ref").split("/", 2)[-1] for i in response.json()]
+        return [i.get("name") for i in response.json()]
 
     def tag_exists(self, repo, tag):
         """Check if a tag exists in a repository

@@ -31,6 +31,9 @@ def tag_all(manifest, tag, delete_if_exists=False):
     gtools = gittools.GitApiUtils()
     repos_with_tag = []
     for repo in manifest_contnet.keys():
+        if not repo.startswith("openshift/"):
+            logging.info("Skipping tagging %s witch is not part of openshift"% (repo))
+            continue
         if gtools.tag_exists(repo, tag):
             repos_with_tag.append(repo)
     if repos_with_tag:
@@ -40,6 +43,8 @@ def tag_all(manifest, tag, delete_if_exists=False):
         else:
             raise ValueError("%s tag already exists in these repositories %s" % (tag, repos_with_tag))
     for repo, repo_info in manifest_contnet.items():
+        if not repo.startswith("openshift/"):
+            continue
         logger.info("Creating %s tag in repo: %s, revision: %s", tag, repo, repo_info['revision'])
         gtools.create_tag(repo, repo_info['revision'], tag)
     logger.info("Done")
