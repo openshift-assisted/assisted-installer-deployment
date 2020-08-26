@@ -20,8 +20,3 @@ openshift/assisted-installer-agent:
   revision: 699cbbd0f40ffda29b3ef26cdc297b63222d03e6
   images:
   - assisted-installer-agent
-  - connectivity_check
-  - hardware_info
-  - agent
-  - inventory
-  - free_addresses
