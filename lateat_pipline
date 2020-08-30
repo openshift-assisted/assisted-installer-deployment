@@ -1,5 +1,3 @@
-String cron_string = BRANCH_NAME == "master" ? "daily" : ""
-
 pipeline {
     agent { label 'centos_worker' }
     triggers { cron(cron_string) }
