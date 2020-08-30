@@ -16,23 +16,17 @@ pipeline {
 
                 withCredentials([usernamePassword(credentialsId: '9fa5c056-6227-4f70-97df-6aa31854c20a', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]){
                     sh('''
+                        commitDate="date +%d-%m-%Y-%H-%M"
                         git config --local credential.helper "!f() { echo username=\\$GIT_USERNAME; echo password=\\$GIT_PASSWORD; }; f"
                         git commit -am "Daily commit" -am "`$commitDate`"
+                        git push --delete origin latest
+                        git tag -d latest
                         git tag -f latest
+                        git tag -f `$commitDate`
                         git push --tags origin
-                        git push origin HEAD:master
-                        git push origin HEAD:`$commitDate`
+                        git push origin HEAD:osher/latest_pipline
                     ''')
                 }
-
-                //sshagent(['9fa5c056-6227-4f70-97df-6aa31854c20a	']) {
-                //    sh '''git commit -am "Daily commit" -am "`$commitDate`"'''
-                //    sh 'git tag -f latest'
-                //    sh 'git push --tags origin'
-                //    sh 'git push origin HEAD:master'
-                    // sh '''git push https://$RONNIEL1_USER:$RONNIEL1@github.com/eranco74/assisted-installer-deployment.git --all'''
-                //    sh 'git push origin HEAD:`$commitDate`'
-                //}
             }
         }
     }
