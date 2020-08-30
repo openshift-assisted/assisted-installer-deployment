@@ -1,0 +1,37 @@
+String cron_string = BRANCH_NAME == "master" ? "daily" : ""
+
+pipeline {
+    agent { label 'centos_worker' }
+    triggers { cron(cron_string) }
+    environment {
+        SLACK_TOKEN = credentials('slack-token')
+    }
+    options {
+      timeout(time: 1, unit: 'HOURS') 
+    }
+
+    stages {
+        stage('Update master and snapshot branch') {
+            steps {
+                sh 'python3 tools/update_assisted_installer_yaml.py --full'
+                sh '''commitDate="date +%d-%m-%Y-%H-%M"'''
+                sh '''git commit -am "Daily commit" -am "`$commitDate`"'''
+                sh 'git tag -f latest'
+                sh 'git push --tags origin'
+                sh 'git push origin HEAD:master'
+                sh 'git push origin HEAD:`$commitDate`'
+            }
+        }
+    }
+
+    post {
+        failure {
+            script {
+                    sh '''
+                           echo '{"text":"Daily release fail"}' > data.txt
+                           curl -X POST -H 'Content-type: application/json' --data-binary "@data.txt"  https://hooks.slack.com/services/$SLACK_TOKEN
+                    '''
+            }
+        }
+    }
+}
