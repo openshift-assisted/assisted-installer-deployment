@@ -24,7 +24,7 @@ pipeline {
                         git tag -f latest
                         git tag -f `$commitDate`
                         git push --tags origin
-                        git push origin HEAD:osher/latest_pipline
+                        git push origin HEAD:master
                     ''')
                 }
             }
