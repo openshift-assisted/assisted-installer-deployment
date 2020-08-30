@@ -1,6 +1,5 @@
 pipeline {
     agent { label 'centos_worker' }
-    triggers { cron(cron_string) }
     environment {
         SLACK_TOKEN = credentials('slack-token')
     }
@@ -11,13 +10,29 @@ pipeline {
     stages {
         stage('Update master and snapshot branch') {
             steps {
+                sh '''pip3 install yamlordereddictloader'''
                 sh 'python3 tools/update_assisted_installer_yaml.py --full'
                 sh '''commitDate="date +%d-%m-%Y-%H-%M"'''
-                sh '''git commit -am "Daily commit" -am "`$commitDate`"'''
-                sh 'git tag -f latest'
-                sh 'git push --tags origin'
-                sh 'git push origin HEAD:master'
-                sh 'git push origin HEAD:`$commitDate`'
+
+                withCredentials([usernamePassword(credentialsId: '9fa5c056-6227-4f70-97df-6aa31854c20a', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]){
+                    sh('''
+                        git config --local credential.helper "!f() { echo username=\\$GIT_USERNAME; echo password=\\$GIT_PASSWORD; }; f"
+                        git commit -am "Daily commit" -am "`$commitDate`"
+                        git tag -f latest
+                        git push --tags origin
+                        git push origin HEAD:master
+                        git push origin HEAD:`$commitDate`
+                    ''')
+                }
+
+                //sshagent(['9fa5c056-6227-4f70-97df-6aa31854c20a	']) {
+                //    sh '''git commit -am "Daily commit" -am "`$commitDate`"'''
+                //    sh 'git tag -f latest'
+                //    sh 'git push --tags origin'
+                //    sh 'git push origin HEAD:master'
+                    // sh '''git push https://$RONNIEL1_USER:$RONNIEL1@github.com/eranco74/assisted-installer-deployment.git --all'''
+                //    sh 'git push origin HEAD:`$commitDate`'
+                //}
             }
         }
     }
