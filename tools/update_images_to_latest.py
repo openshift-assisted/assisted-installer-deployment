@@ -37,7 +37,7 @@ def main():
             try:
                 tag_image(image_full_name)
             except Exception as ex:
-                logging("Failed to tag {image}\nreason: {exception}".format(image=image, exception=ex))
+                logging("Failed to tag {image}, reason: {exception}".format(image=image, exception=ex))
 
 def tag_image(image):
     logging.info("Tagging image {} to {}".format(image, args.tag))
@@ -56,4 +56,11 @@ def login_to_quayio():
     subprocess.check_output(cmd, shell=True)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as ex:
+        logging.error("Error while updating images tags, reason: {}".format(ex))
+        subprocess.check_output("docker logout quay.io", shell=True)
+        raise ex
+    else:
+        subprocess.check_output("docker logout quay.io", shell=True)
