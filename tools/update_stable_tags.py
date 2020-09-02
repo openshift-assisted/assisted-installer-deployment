@@ -23,15 +23,19 @@ retagging_commands = [
             ]
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--tag", help="assisted_installer_tag", type=str,
- default="stable")
+parser.add_argument("--tag", nargs='+', help="assisted_installer_tag", type=str)
 args = parser.parse_args()
 
 def main():
+    for tag in args.tag:
+        logging.info("Retagging {}".format(tag))
+        run_retagging_commands(tag)
+
+def run_retagging_commands(tag):
     timestamp = datetime.now().strftime("%d/%m/%Y-%H-%M")
     for cmd in retagging_commands:
         logging.info("running: {}".format(cmd))
-        subprocess.check_output(cmd.format(tag=args.tag, date=timestamp), shell=True)
+        subprocess.check_output(cmd.format(tag=tag, date=timestamp), shell=True)
 
 if __name__ == "__main__":
     main()
