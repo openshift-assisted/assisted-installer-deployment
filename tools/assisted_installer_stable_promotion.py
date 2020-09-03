@@ -48,19 +48,19 @@ def tag_image(image):
     logging.info("Tagging image {image} to {tag} & {timestamped_tag}".format(
         image=image, tag=args.tag, timestamped_tag=timestamped_tag))
 
-    subprocess.check_output("docker pull {}".format(image), shell=True)
+    subprocess.check_output("podman pull {}".format(image), shell=True)
 
     # seting images names & tags
     tagged_image = "{image}:{tag}".format(image=image.rsplit(":")[0], tag=args.tag)
     timestamp_tagged_image = "{image}:{tag}".format(image=image.rsplit(":")[0], tag=timestamped_tag)
 
     # Tagging images
-    subprocess.check_output("docker tag {} {}".format(image, tagged_image), shell=True)
-    subprocess.check_output("docker tag {} {}".format(image, timestamp_tagged_image), shell=True)
+    subprocess.check_output("podman tag {} {}".format(image, tagged_image), shell=True)
+    subprocess.check_output("podman tag {} {}".format(image, timestamp_tagged_image), shell=True)
 
     # Pushing images
-    subprocess.check_output("docker push {}".format(tagged_image), shell=True)
-    subprocess.check_output("docker push {}".format(timestamp_tagged_image), shell=True)
+    subprocess.check_output("podman push {}".format(tagged_image), shell=True)
+    subprocess.check_output("podman push {}".format(timestamp_tagged_image), shell=True)
 
 def tag_repo(tag):
     logging.info("Tagging repo with {tag}".format(tag=tag))
