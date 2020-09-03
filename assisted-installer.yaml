@@ -9,7 +9,7 @@ openshift/assisted-service:
   - assisted-service
   - assisted-iso-create
 openshift-metal3/facet:
-  revision: 3f3763b207f4a16bd22efa47d8890ec31f2a21a0
+  revision: c55fa713d8eb22f97e947354dd2a487b93bb4010
   images:
   - ocp-metal-ui
 openshift/assisted-ignition-generator:
