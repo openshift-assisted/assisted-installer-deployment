@@ -12,14 +12,19 @@ pipeline {
             steps {
                 sh '''pip3 install yamlordereddictloader'''
                 sh 'python3 tools/update_assisted_installer_yaml.py --full'
-                sh '''commitDate="date +%d-%m-%Y-%H-%M"'''
-
                 withCredentials([usernamePassword(credentialsId: '9fa5c056-6227-4f70-97df-6aa31854c20a', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]){
                     sh('''
-                        commitDate="date +%d-%m-%Y-%H-%M"
-                        git config --local credential.helper "!f() { echo username=\\$GIT_USERNAME; echo password=\\$GIT_PASSWORD; }; f"
-                        git commit -am "Daily commit" -am "`$commitDate`"
-                        git push origin HEAD:master
+                        if [ -z $(git status --porcelain) ];
+                        then
+                            commitDate="date +%d-%m-%Y-%H-%M"
+                            git config --local credential.helper "!f() { echo username=\\$GIT_USERNAME; echo password=\\$GIT_PASSWORD; }; f"
+                            git commit -am "Daily commit" -am "`$commitDate`"
+                            git push origin HEAD:master
+                        else
+                            echo "Noting to commit"
+                        fi
+
+
                     ''')
                 }
             }
@@ -29,11 +34,10 @@ pipeline {
     post {
         failure {
             script {
-                    sh '''
-                           echo '{"text":"Daily release fail"}' > data.txt
-                           curl -X POST -H 'Content-type: application/json' --data-binary "@data.txt"  https://hooks.slack.com/services/$SLACK_TOKEN
-                    '''
+                def data = [text: "Daily release fail, see: ${BUILD_URL}"]
+                writeJSON(file: 'data.txt', json: data, pretty: 4)
             }
+            sh '''curl -X POST -H 'Content-type: application/json' --data-binary "@data.txt"  https://hooks.slack.com/services/$SLACK_TOKEN'''
         }
     }
 }
