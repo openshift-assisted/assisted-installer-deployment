@@ -14,7 +14,7 @@ pipeline {
                 sh 'python3 tools/update_assisted_installer_yaml.py --full'
                 withCredentials([usernamePassword(credentialsId: '9fa5c056-6227-4f70-97df-6aa31854c20a', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]){
                     sh('''
-                        if [ -z $(git status --porcelain) ];
+                        if [ "$(git status --porcelain)" ];
                         then
                             commitDate="date +%d-%m-%Y-%H-%M"
                             git config --local credential.helper "!f() { echo username=\\$GIT_USERNAME; echo password=\\$GIT_PASSWORD; }; f"
