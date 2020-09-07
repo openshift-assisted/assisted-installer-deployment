@@ -20,6 +20,9 @@ pipeline {
                             git config --local credential.helper "!f() { echo username=\\$GIT_USERNAME; echo password=\\$GIT_PASSWORD; }; f"
                             git commit -am "Daily commit" -am "`$commitDate`"
                             git push origin HEAD:master
+
+                            git tag latest -f
+                            git push origin latest -f
                         else
                             echo "Noting to commit"
                         fi
