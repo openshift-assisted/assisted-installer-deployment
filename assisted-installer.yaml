@@ -4,12 +4,12 @@ openshift/assisted-installer:
   - assisted-installer-controller
   - assisted-installer
 openshift/assisted-service:
-  revision: 3d2454ba388c23bf59b9b6d65880c985c732cd8f
+  revision: 990e3e0c8e81b492665d044c569e21f29869d928
   images:
   - assisted-service
   - assisted-iso-create
 openshift-metal3/facet:
-  revision: d6c974e680b9ae82de2c095cacf221326cbc349f
+  revision: 8cb7d96c7f3f4f2b2e351dcb5030db3dbeff5bd1
   images:
   - ocp-metal-ui
 openshift/assisted-ignition-generator:
@@ -20,3 +20,14 @@ openshift/assisted-installer-agent:
   revision: c20bd63e42036d0c116f82d9f97f6bd371f7a1c6
   images:
   - assisted-installer-agent
+
+# Downstream images:
+# - assisted-installer:
+#     hash: 29308754372ece30c7dd2480ae0065a43bde1f92
+#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-rhel8:v4.6.0-13
+# - assisted-installer-controller:
+#     hash: 29308754372ece30c7dd2480ae0065a43bde1f92
+#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-reporter-rhel8:v4.6.0-9
+# - assisted-installer-agent:
+#     hash: c20bd63e42036d0c116f82d9f97f6bd371f7a1c6
+#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v4.6.0-12
