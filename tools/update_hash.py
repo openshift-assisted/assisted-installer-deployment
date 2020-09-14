@@ -1,12 +1,15 @@
 import argparse
 import time
 import subprocess
-import yaml
 import sys
 import os
 import re
 import yamlordereddictloader
 
+import sys
+from ruamel.yaml import YAML
+
+yaml = YAML()
 
 def update_hash(deployment_yaml, repo, hash):
         pattern = re.compile(r'\b[0-9a-f]{40}\b')
@@ -15,7 +18,7 @@ def update_hash(deployment_yaml, repo, hash):
             sys.exit("the passed hash {} is not a valid SHA1 hash".format(hash))
 
         with open(deployment_yaml, "r") as f:
-            deployment = yaml.load(f, Loader=yamlordereddictloader.Loader)
+            deployment = yaml.load(f)
         if repo not in deployment:
             sys.exit("repo {} is not located in the deployment file".format(args.repo))
         if hash == deployment[repo]:
@@ -25,7 +28,7 @@ def update_hash(deployment_yaml, repo, hash):
 
         deployment[repo]["revision"] = hash
         with open(deployment_yaml, "w") as f:
-            yaml.dump(deployment, f, default_flow_style=False, Dumper=yamlordereddictloader.Dumper)
+            yaml.dump(deployment, f)
         print("updated {} repo with {} hash".format(repo, hash))
 
 
