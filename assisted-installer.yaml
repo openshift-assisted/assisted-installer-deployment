@@ -4,7 +4,7 @@ openshift/assisted-installer:
   - assisted-installer-controller
   - assisted-installer
 openshift/assisted-service:
-  revision: af1213d19636016f2400aee168ad182339aed3ce
+  revision: a63552a1ba5c42b410e356282ac2f4bd21cac063
   images:
   - assisted-service
   - assisted-iso-create
@@ -17,7 +17,7 @@ openshift/assisted-ignition-generator:
   images:
   - assisted-ignition-generator
 openshift/assisted-installer-agent:
-  revision: c20bd63e42036d0c116f82d9f97f6bd371f7a1c6
+  revision: ff0732f58da697c2b7c35530b282750838461cec
   images:
   - assisted-installer-agent
 
