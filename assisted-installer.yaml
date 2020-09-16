@@ -23,13 +23,11 @@ openshift/assisted-installer-agent:
 
 # Downstream images:
 # - assisted-installer:
-#     hash: 29308754372ece30c7dd2480ae0065a43bde1f92
-#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-rhel8:v4.6.0-13
-#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-rhel8:v4.6.0-14
+#     hash: 4d18213cb16e9ad2519acd3bfe8df70effe92215
+#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-rhel8:v4.6.0-17
 # - assisted-installer-controller:
-#     hash: 29308754372ece30c7dd2480ae0065a43bde1f92
-#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-reporter-rhel8:v4.6.0-9
-#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-reporter-rhel8:v4.6.0-10
+#     hash: 4d18213cb16e9ad2519acd3bfe8df70effe92215
+#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-reporter-rhel8:v4.6.0-13
 # - assisted-installer-agent:
-#     hash: c20bd63e42036d0c116f82d9f97f6bd371f7a1c6
-#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v4.6.0-12
+#     hash: 06a598d8c162761c4a02ce8a7801864bb106fc6b
+#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v4.6.0-15
