@@ -1,6 +1,97 @@
 CHANGES
 =======
 
+v1.0.9.3
+--------
+
+* Updated hashes for v1.0.9.3
+* Daily commit
+* Daily commit
+* move pip to pip3
+* Daily commit
+* PR update
+* add Downstream images data
+* Save comments when updateing assisted-installer.yaml
+* Daily commit
+* Daily commit
+* Daily commit
+* Added jira\_cmd tool
+
+v1.0.9.2
+--------
+
+* Updated hashed for v1.0.9.2
+* Daily commit
+* Daily commit
+* Tag latest with daily update
+* Daily commit
+* added support to use the assisted\_installer\_stable\_promotion tool to tag version-tags
+* Updated hashes for v1.0.9.1
+* Daily commit
+* Fix checking if commits are available
+* Daily commit
+* don't fail when no commits & notificatiuon with link
+* Daily commit
+* Daily commit
+* Moving promotion script to use podman (#15)
+* Promotion script, tagging images & tagging repo (#14)
+
+v1.0.9
+------
+
+* Hashes for v1.0.9 release
+* Daily commit
+* Daily commit
+
+01.09.2020.01.16
+----------------
+
+* Daily commit
+
+31.08.2020.14.29
+----------------
+
+* Daily commit
+
+30.08.2020.17.40
+----------------
+
+* Daily commit
+* cange target branch to master
+* Jenkins daily latest update
+* Daily commit
+* test
+* test
+* Add release pipline
+
+2020.08.29.04.31
+----------------
+
+* Daily commit
+
+2020.08.28.04.31
+----------------
+
+* Daily commit
+
+2020.08.27.09.28
+----------------
+
+* Daily commit
+* Update stable v1.0.9
+* Removed old images
+* updating release master
+* updating release master
+* updating release master
+* Move iso create to assisted-service
+* updating release master
+* Remove coreos\_installation\_iso repo
+* Update iso builder image
+* add  agent image =
+* Update ignition image name
+* Move repos to openshift
+* move repos to openshift
+
 v1.0.7
 ------
 
