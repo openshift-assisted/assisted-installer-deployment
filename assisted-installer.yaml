@@ -1,15 +1,15 @@
 openshift/assisted-installer:
-  revision: 4d18213cb16e9ad2519acd3bfe8df70effe92215
+  revision: 84035310be124f1014780516e257bfc30555d41b
   images:
   - assisted-installer-controller
   - assisted-installer
 openshift/assisted-service:
-  revision: 55c0e659b0f9f7fda4153e635fceeb6f8211a757
+  revision: b793c526a1687a3181d657d8feb0196a414ed48d
   images:
   - assisted-service
   - assisted-iso-create
 openshift-metal3/facet:
-  revision: ed029c9cb36d3e0282ec24d0fa9cd131cd401bb3
+  revision: b2363b995b023fe74ed5a456d656301bec65c6a5
   images:
   - ocp-metal-ui
 openshift/assisted-ignition-generator:
@@ -23,14 +23,17 @@ openshift/assisted-installer-agent:
 
 # Downstream images:
 # - assisted-installer:
-#     hash: 4d18213cb16e9ad2519acd3bfe8df70effe92215
-#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-rhel8:v4.6.0-17
+#     hash: 84035310be124f1014780516e257bfc30555d41b
+#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-rhel8:v4.6.0-19
+#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-rhel8:v4.6.0-19
 # - assisted-installer-controller:
-#     hash: 4d18213cb16e9ad2519acd3bfe8df70effe92215
-#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-reporter-rhel8:v4.6.0-13
+#     hash: 84035310be124f1014780516e257bfc30555d41b
+#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-reporter-rhel8:v4.6.0-15
+#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-reporter-rhel8:v4.6.0-15
 # - assisted-installer-agent:
 #     hash: 06a598d8c162761c4a02ce8a7801864bb106fc6b
 #     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v4.6.0-15
+#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-agent-rhel8:v4.6.0-15
 # - OPENSHIFT_INSTALL_RELEASE_IMAGE:
 #     quay.io/ocpmetal/ocp-release:4.6.0-0.nightly-2020-08-31-220837
 #
