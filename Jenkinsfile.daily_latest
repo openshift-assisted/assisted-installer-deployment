@@ -11,6 +11,7 @@ pipeline {
         stage('Update master and snapshot branch') {
             steps {
                 sh '''pip3 install -r requirements.txt'''
+                sh '''git clean -f'''
                 sh 'python3 tools/update_assisted_installer_yaml.py --full'
                 withCredentials([usernamePassword(credentialsId: '9fa5c056-6227-4f70-97df-6aa31854c20a', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]){
                     sh('''
