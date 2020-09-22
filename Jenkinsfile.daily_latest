@@ -22,8 +22,8 @@ pipeline {
                             git commit -am "Daily commit" -am "`$commitDate`"
                             git push origin HEAD:master
 
-                            git tag latest -f
-                            git push origin latest -f
+                            git tag nightly -f
+                            git push origin nightly -f
                         else
                             echo "Noting to commit"
                         fi
