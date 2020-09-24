@@ -12,10 +12,6 @@ openshift-metal3/facet:
   revision: 02772c24a6094ffd547b2e09fb5440d93698a6c2
   images:
   - ocp-metal-ui
-openshift/assisted-ignition-generator:
-  revision: 4698ae7c5e99b6845c87d3fc8b61eca876f715b5
-  images:
-  - assisted-ignition-generator
 openshift/assisted-installer-agent:
   revision: 382c69e29d29e74e495dc13ef392d6f5fce2fe91
   images:
