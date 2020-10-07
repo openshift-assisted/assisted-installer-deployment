@@ -8,7 +8,7 @@ import re
 logging.basicConfig(format='%(asctime)s %(message)s')
 logging.getLogger().setLevel(logging.INFO)
 
-REPO_URL = "https://github.com/openshift/assisted-service.git"
+REPO_URL_TEMPLATE = "https://github.com/openshift/{}.git"
 valid_commit_regex = '^([A-Z]+-[0-9]+|#[0-9]+|merge|no-issue)'
 
 ############################################################################################
@@ -20,14 +20,16 @@ parser.add_argument("--from-version", help="From version to document", type=str)
 parser.add_argument("--to-version", help="To version to document", type=str)
 parser.add_argument("--documentation-dir", help="deployment yaml file to update", type=str,
                     default=os.path.join(os.path.dirname(__file__), "../versions_documentation"))
+parser.add_argument("--repo", help="repo to document", type=str, default="assisted-service")
 args = parser.parse_args()
 
+documentation_path = os.path.join(args.documentation_dir, args.repo)
 
 def main():
     version_documentation_list = list()
 
-    if not os.path.exists(args.documentation_dir):
-        os.makedirs(args.documentation_dir)
+    if not os.path.exists(documentation_path):
+        os.makedirs(documentation_path)
 
     os.mkdir("temp")
     try:
@@ -52,7 +54,8 @@ def process_logs(git_logs_line, version_documentation_list):
 
 
 def get_versions_log():
-    subprocess.check_output("git clone {}".format(REPO_URL), shell=True, cwd="temp")
+    repo_url = REPO_URL_TEMPLATE.format(args.repo)
+    subprocess.check_output("git clone {}".format(repo_url), shell=True, cwd="temp")
     raw_log = subprocess.check_output("git log {tagS}...{tagE} ".format(tagS=args.from_version, tagE=args.to_version),
                                       shell=True, cwd="temp/assisted-service")
     print("*"*0)
@@ -63,7 +66,7 @@ def get_versions_log():
 def write_documentation_to_file(version_documentation_list):
     version_documentation = '\n'.join(version_documentation_list)
     file_name = "version_documentation_{}_to_{}".format(args.from_version, args.to_version)
-    file_path = os.path.join(args.documentation_dir, file_name)
+    file_path = os.path.join(documentation_path, file_name)
 
     logging.info("Writing version documentation to {}".format(file_path))
     logging.info("Version documentation: {}".format(version_documentation))
