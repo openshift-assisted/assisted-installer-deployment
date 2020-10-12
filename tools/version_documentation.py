@@ -16,8 +16,8 @@ valid_commit_regex = '^([A-Z]+-[0-9]+|#[0-9]+|merge|no-issue)'
 ############################################################################################
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--from-version", help="From version to document", type=str)
-parser.add_argument("--to-version", help="To version to document", type=str)
+parser.add_argument("--from-version", help="From version to document", type=str, required=True)
+parser.add_argument("--to-version", help="To version to document", type=str, required=True)
 parser.add_argument("--documentation-dir", help="deployment yaml file to update", type=str,
                     default=os.path.join(os.path.dirname(__file__), "../versions_documentation"))
 parser.add_argument("--repo", help="repo to document", type=str, default="assisted-service")
