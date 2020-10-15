@@ -339,7 +339,6 @@ def calc_tests_success_rate(issues):
         table.append(row)
     print(tabulate(table, headers="keys", tablefmt="psql"))
 
-
 if __name__ == "__main__":
     helpDescription = textwrap.dedent("""
     Tool to help perform common operations on Jira tickets
@@ -373,6 +372,7 @@ if __name__ == "__main__":
     selectors = selectorsGroup.add_mutually_exclusive_group(required=True)
     selectors.add_argument("-s", "--search-query", required=False, help="Search query to use")
     selectors.add_argument("-i", "--issue", required=False, help="Issue key")
+    selectors.add_argument("-bz", "--bz-issue", required=False, help="BZ issue key")
     selectors.add_argument("-I", "--integration-status", help="Select the TT issues running for an integration ticket")
     selectors.add_argument("-nf", "--named-filter", action=buildEpicFilterAction, dest="search_query",  help="Search for Epics matching the given named filter")
     selectors.add_argument("-ce", "--current-version-epics", action='store_const',
@@ -428,6 +428,8 @@ if __name__ == "__main__":
 
     if args.issue is not None:
         issues = [jiraTool.jira().issue(args.issue)]
+    elif args.bz_issue is not None:
+        issues = jiraTool.jira().search_issues('project = OCPBUGSM AND component = assisted-installer and summary ~ "{}"'.format(args.bz_issue))
     else:
         issues = jiraTool.jira().search_issues(args.search_query, maxResults=args.max_results)
 
