@@ -13,7 +13,7 @@ openshift-metal3/facet:
   images:
   - ocp-metal-ui
 openshift/assisted-installer-agent:
-  revision: 6fcfff8bfd66bcf05fb0cec2ca609be2c518a578
+  revision: 22c33e020c803dbfec41e6875ed7e6a44883b558
   images:
   - assisted-installer-agent
 
