@@ -1,19 +1,19 @@
 openshift/assisted-installer:
-  revision: 08a0ca837247d867a3fbb1953415e8f417754ed2
+  revision: 220aa85dc6ae77c5d69d10b92a65fe1155028bac
   images:
   - assisted-installer-controller
   - assisted-installer
 openshift/assisted-service:
-  revision: c631bd9262b1c32b61801f285d79822e0782f45b
+  revision: 1463352938a68995a8107526aa6d4e81895a8d51
   images:
   - assisted-service
   - assisted-iso-create
 openshift-metal3/facet:
-  revision: d047d6f2709c59af9f7becc10d694bfc811cde37
+  revision: 090731fa7ac7c416b72068c5212926c053ad047f
   images:
   - ocp-metal-ui
 openshift/assisted-installer-agent:
-  revision: 22c33e020c803dbfec41e6875ed7e6a44883b558
+  revision: 1616c72ceaddf82d0e8986367b045b02d32a5164
   images:
   - assisted-installer-agent
 
