@@ -3,7 +3,7 @@ from datetime import datetime
 import numpy
 import sys
 import netrc
-from github import Github
+from github import Github, GithubException
 import os
 import argparse
 
@@ -37,7 +37,12 @@ def main(args):
    username, password = get_credentials_from_netrc(args.netrc)
    gclient = Github(username, password)
 
-   repo = gclient.get_repo(args.repo)
+   try:
+      repo = gclient.get_repo(args.repo)
+   except GithubException:
+      print("Error: cannot find repository: {}".format(args.repo))
+      return
+
    prs = repo.get_pulls(state=args.status)
    print("number of PRs: {}".format(prs.totalCount))
 
