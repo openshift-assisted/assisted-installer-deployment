@@ -82,10 +82,10 @@ def get_raw_field(issue, fieldName):
 
 def get_assignee(issue):
     try:
-        return i.raw['fields']['assignee']['displayName']
+        return issue.fields.assignee.displayName
     except:
         try:
-            return i.fields.assignee._session["displayName"]
+            return issue.raw['fields']['assignee']['displayName']
         except:
             return "Unassigned"
 
@@ -97,7 +97,7 @@ def format_key_for_print(key, isMarkdown):
 
 def get_data_for_print(issues, isTT=False, withStatus=True, withAssignee=True, withFixVersion=False,
                        isMarkdown=False):
-    headers = ['key', 'summary', 'component']
+    headers = ['key', 'summary', 'component', 'priority']
     if withStatus:
         headers.append('status')
     if withAssignee:
@@ -110,7 +110,7 @@ def get_data_for_print(issues, isTT=False, withStatus=True, withAssignee=True, w
     table = []
     for i in issues:
         row = {'key': format_key_for_print(i.key, isMarkdown=isMarkdown), 'summary': i.fields.summary,
-               'component': [c.name for c in i.fields.components]}
+               'component': [c.name for c in i.fields.components], 'priority': i.fields.priority.name}
         if withStatus:
             row['status'] = i.fields.status
         if withFixVersion:
@@ -155,19 +155,36 @@ class JiraTool(object):
         except Exception as e:
             logger.exceptio("Error linking to %s", to_ticket.key, e)
 
-    def get_selected_issues(self, issues, isEpicTasks):
-        if not isEpicTasks:
+    def get_selected_issues(self, issues, isEpicTasks=False, is_issue_links=False):
+        if not isEpicTasks and not is_issue_links:
             return issues
+        elif is_issue_links:
+            linked_issue_keys = []
+            linked_issues = []
+            for i in issues:
+                for l in i.fields.issuelinks:
+                    linked_issue_keys.append(self.extract_linked_issue(l).key)
+
+            if len(linked_issue_keys):
+                linked_issues =  self._jira.search_issues("issue in (%s)" % (",".join(linked_issue_keys)),
+                                                          maxResults=self._maxResults)
+            return linked_issues
 
         return self._jira.search_issues("\"Epic Link\" in (%s)" % (",".join([i.key for i in issues])),
                                         maxResults=self._maxResults)
 
+    @staticmethod
+    def extract_linked_issue(issue_link):
+        try:
+            return issue_link.outwardIssue
+        except:
+            return issue_link.inwardIssue
+
+
     def remove_links(self, ticket, to_remove):
         for l in ticket.fields.issuelinks:
-            try:
-                key = l.outwardIssue.key
-            except:
-                key = l.inwardIssue.key
+            key = self.extract_linked_issue(l).key
+
 
             if key == to_remove.key:
                 try:
@@ -375,10 +392,13 @@ if __name__ == "__main__":
     selectors.add_argument("-bz", "--bz-issue", required=False, help="BZ issue key")
     selectors.add_argument("-I", "--integration-status", help="Select the TT issues running for an integration ticket")
     selectors.add_argument("-nf", "--named-filter", action=buildEpicFilterAction, dest="search_query",  help="Search for Epics matching the given named filter")
+    selectors.add_argument("-tt", "--triaging-tickets", action='store_const',
+                           dest="search_query", const='project = MGMT AND component = "Assisted-installer Triage"', help="Search for Assisted Installer triaging tickets")
     selectors.add_argument("-ce", "--current-version-epics", action='store_const',
                            dest="search_query", const=SEARCH_QUERY_EPICS + CURRENT_VERSION_FILTER, help="Search for Epics planned for current version")
     selectors.add_argument("-ne", "--next-version-epics", action="store_const",
                            dest="search_query", const=SEARCH_QUERY_EPICS + NEXT_VERSION_FILTER, help="Search for Epics planned for next version")
+    parser.add_argument("-li", "--linked-issues", action="store_true", help="Output the issues linked to selected issues")
     parser.add_argument("-m", "--max-results", default=MAX_RESULTS, help="Maximum results to return for search query")
     parser.add_argument("-t", "--tt-report", action="store_true", help="Search output tailored for for TT tickets")
     parser.add_argument("-v", "--verbose", action="store_true", help="Output verbose logging")
@@ -445,18 +465,18 @@ if __name__ == "__main__":
         if args.link_to is not None:
             to_ticket = jiraTool.jira().issue(args.link_to)
             logger.info("Linking search result to %s", to_ticket.key)
-            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+            for i in jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues):
                 jiraTool.link_tickets(i, to_ticket)
 
         if args.remove_link is not None:
             to_remove = jiraTool.jira().issue(args.remove_link)
             logger.info("Removing link to %s from search result to: ", to_remove)
-            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+            for i in jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues):
                 jiraTool.remove_links(i, to_remove)
         sys.exit()
 
     if args.fix_version is not None:
-        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+        for i in jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues):
             if len(i.fields.fixVersions) != 1 or args.fix_version != i.fields.fixVersions[0].name:
                 if i.fields.status.name in ["Closed"]:
                     logger.info("Not changing fixVersion of {}, because it is {}".format(i.key,
@@ -475,7 +495,7 @@ if __name__ == "__main__":
         sys.exit()
 
     if args.print_servers:
-        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+        for i in jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues):
             try:
                 servers = get_raw_field(i, FIELD_TEST_SERVERS)
                 if servers is None:
@@ -488,9 +508,9 @@ if __name__ == "__main__":
                 sys.exit()
 
     if args.print_report:
-        print_report_table(jiraTool.get_selected_issues(issues, args.epic_tasks), args.tt_report)
+        print_report_table(jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues), args.tt_report)
     elif args.print_markdown_report:
-        print_report_table(jiraTool.get_selected_issues(issues, args.epic_tasks), args.tt_report,
+        print_report_table(jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues), args.tt_report,
                            isMarkdown=True)
     elif args.print_csv_report:
-        print_report_csv(jiraTool.get_selected_issues(issues, args.epic_tasks), args.tt_report)
+        print_report_csv(jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues), args.tt_report)
