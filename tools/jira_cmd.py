@@ -155,6 +155,22 @@ class JiraTool(object):
         except Exception as e:
             logger.exceptio("Error linking to %s", to_ticket.key, e)
 
+    def add_watchers(self, ticket, watchers):
+        try:
+            for watcher in watchers:
+                logger.info("Adding %s as watcher to %s", watcher, ticket.key)
+                self._jira.add_watcher(ticket.key, watcher)
+        except Exception as e:
+            logger.exception("Error adding watcher to %s", ticket.key)
+
+    def remove_watchers(self, ticket, watchers):
+        try:
+            for watcher in watchers:
+                logger.info("removing %s as watcher from %s", watcher, ticket.key)
+                self._jira.remove_watcher(ticket.key, watcher)
+        except Exception as e:
+            logger.exception("Error removing watcher to %s", ticket.key)
+
     def get_selected_issues(self, issues, isEpicTasks=False, is_issue_links=False):
         if not isEpicTasks and not is_issue_links:
             return issues
@@ -410,6 +426,8 @@ if __name__ == "__main__":
     ops.add_argument("-pmd", "--print-markdown-report", action="store_true", help="Print issues details")
     ops.add_argument("-al", "--link-to", default=None, help="Link tickets from search result to provided ticket")
     ops.add_argument("-rl", "--remove-link", default=None, help="Remove the provided ticket tickets in search results")
+    ops.add_argument("-aw", "--add-watchers", default=None, nargs="+", help="Add the watcher to the selected tickets")
+    ops.add_argument("-rw", "--remove-watchers", default=None, nargs="+", help="Remove the watcher from the selected tickets")
     ops.add_argument("-e", "--update-epic-progress", action="store_true", help="update epics progress according to its issues")
     ops.add_argument("-S", "--print-servers", action="store_true", help="Print the rackattack servers that the test used")
     ops.add_argument("-f", "--fix-version", help="Set the fixVersion of selected tickets")
@@ -460,6 +478,16 @@ if __name__ == "__main__":
 
     if args.test_success_rate:
         calc_tests_success_rate(issues)
+
+    if args.add_watchers is not None or args.remove_watchers is not None:
+        if args.add_watchers is not None:
+            for i in jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues):
+                jiraTool.add_watchers(i, args.add_watchers)
+
+        if args.remove_watchers is not None:
+            for i in jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues):
+                jiraTool.remove_watchers(i, args.remove_watchers)
+        sys.exit()
 
     if args.link_to is not None or args.remove_link is not None:
         if args.link_to is not None:
