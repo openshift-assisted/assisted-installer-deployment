@@ -246,7 +246,7 @@ class JiraTool(object):
                 return self._jira.search_issues(urllib.parse.unquote(query.split('jql=')[1].replace('+', '%20')),
                                                 maxResults=self._maxResults)
             except Exception as ex:
-                    logging.error('Failed to get qury {}'.format(ex))
+            logging.error('Failed to get query {}'.format(ex))
                     return []
         else:
             logger.warn("Could not parse {} test links".format(test_type))
