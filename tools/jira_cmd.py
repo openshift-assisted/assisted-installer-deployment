@@ -335,7 +335,7 @@ if __name__ == "__main__":
     parser.add_argument("-et", "--epic-tasks", action="store_true",
                         help="Operate on tickets that belong to epics in selection, "
                         + "instead of the selected tickets themselves")
-    parser.add_argument("-is", "--include-status", nargs="+", choices=valid_status,
+    parser.add_argument("-is", "--include-status", action='append', choices=valid_status,
                         help="filter issues based on supplied statuses when printing the issues details")
     opsGroup = parser.add_argument_group(title="Operations to perform on selected issues")
     ops = opsGroup.add_mutually_exclusive_group(required=True)
