@@ -14,6 +14,7 @@ import logging
 import textwrap
 from urllib.parse import urlparse
 from tabulate import tabulate
+from collections import Counter
 import jira
 
 
@@ -81,7 +82,7 @@ def format_key_for_print(key, isMarkdown):
     return f"[{key}](https://issues.redhat.com/browse/{key})"
 
 def get_data_for_print(issues, withStatus=True, withAssignee=True, withFixVersion=False,
-                       isMarkdown=False):
+                       isMarkdown=False, issues_count=None):
     headers = ['key', 'summary', 'component', 'priority']
     if withStatus:
         headers.append('status')
@@ -89,6 +90,9 @@ def get_data_for_print(issues, withStatus=True, withAssignee=True, withFixVersio
         headers.append('assignee')
     if withFixVersion:
         headers.append('fixVersion')
+    if issues_count:
+        headers.append('count')
+
 
     table = []
     for i in issues:
@@ -101,21 +105,23 @@ def get_data_for_print(issues, withStatus=True, withAssignee=True, withFixVersio
         if withAssignee:
             assignee = get_assignee(i)
             row['assignee'] = assignee
+        if issues_count:
+            row['count'] = issues_count[i.key]
         table.append(row)
 
     return headers, table
 
 
-def print_report_csv(issues):
-    headers, data = get_data_for_print(issues)
+def print_report_csv(issues, issues_count=None):
+    headers, data = get_data_for_print(issues, issues_count=issues_count)
     csvout = csv.DictWriter(sys.stdout, delimiter='|', fieldnames=headers)
     csvout.writeheader()
     for row in data:
         csvout.writerow(row)
 
 
-def print_report_table(issues, isMarkdown=False):
-    _, data = get_data_for_print(issues, isMarkdown=isMarkdown)
+def print_report_table(issues, isMarkdown=False, issues_count=None):
+    _, data = get_data_for_print(issues, isMarkdown=isMarkdown, issues_count=issues_count)
     fmt = "github" if isMarkdown else "psql"
     print(tabulate(data, headers="keys", tablefmt=fmt))
 
@@ -152,21 +158,23 @@ class JiraTool():
         except:
             logger.exception("Error removing watcher to %s", ticket.key)
 
-    def get_selected_issues(self, issues, isEpicTasks=False, is_issue_links=False):
-        if not isEpicTasks and not is_issue_links:
+    def get_selected_linked_issues(self, issues):
+        linked_issue_keys = []
+        linked_issues = []
+        for i in issues:
+            for l in i.fields.issuelinks:
+                linked_issue_keys.append(self.extract_linked_issue(l).key)
+
+        issue_keys_count = Counter(linked_issue_keys)
+        if linked_issue_keys:
+            linked_issues = self._jira.search_issues("issue in (%s)" % (",".join(set(linked_issue_keys))),
+                                                     maxResults=self._maxResults)
+        return linked_issues, issue_keys_count
+
+
+    def get_selected_issues(self, issues, isEpicTasks=False):
+        if not isEpicTasks:
             return issues
-
-        if is_issue_links:
-            linked_issue_keys = []
-            linked_issues = []
-            for i in issues:
-                for l in i.fields.issuelinks:
-                    linked_issue_keys.append(self.extract_linked_issue(l).key)
-
-            if linked_issue_keys:
-                linked_issues = self._jira.search_issues("issue in (%s)" % (",".join(set(linked_issue_keys))),
-                                                         maxResults=self._maxResults)
-            return linked_issues
 
         return self._jira.search_issues("\"Epic Link\" in (%s)" % (",".join([i.key for i in issues])),
                                         maxResults=self._maxResults)
@@ -274,15 +282,19 @@ def main(args):
                 logger.info("issue %s is already at fixVersion %s", i.key, args.fix_version)
         sys.exit()
 
-    issues = jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues)
+    issues_count = None
+    if args.linked_issues:
+        issues, issues_count = jiraTool.get_selected_linked_issues(issues)
+    else:
+        issues = jiraTool.get_selected_issues(issues, args.epic_tasks)
 
     if args.print_report:
-        print_report_table(filter_issue_status(issues, args.include_status))
+        print_report_table(filter_issue_status(issues, args.include_status), issues_count=issues_count)
     elif args.print_markdown_report:
         print_report_table(filter_issue_status(issues, args.include_status),
-                           isMarkdown=True)
+                           isMarkdown=True, issues_count=issues_count)
     elif args.print_csv_report:
-        print_report_csv(filter_issue_status(issues, args.include_status))
+        print_report_csv(filter_issue_status(issues, args.include_status), issues_count=issues_count)
 
 
 if __name__ == "__main__":
