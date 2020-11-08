@@ -169,7 +169,13 @@ class JiraTool():
         if linked_issue_keys:
             linked_issues = self._jira.search_issues("issue in (%s)" % (",".join(set(linked_issue_keys))),
                                                      maxResults=self._maxResults)
-        return linked_issues, issue_keys_count
+        # remove triaging tickets from the list
+        filtered_linked_issues = []
+        for i in linked_issues:
+            if "Assisted-installer Triage" not in [c.name for c in i.fields.components]:
+                filtered_linked_issues.append(i)
+
+        return filtered_linked_issues, issue_keys_count
 
 
     def get_selected_issues(self, issues, isEpicTasks=False):
