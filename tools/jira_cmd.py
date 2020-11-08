@@ -1,6 +1,8 @@
 #!/usr/bin/env python
+# pylint: disable=invalid-name,bare-except
 
 # A tool to perform various operations on Jira
+
 
 
 import os
@@ -162,7 +164,7 @@ class JiraTool():
                     linked_issue_keys.append(self.extract_linked_issue(l).key)
 
             if linked_issue_keys:
-                linked_issues = self._jira.search_issues("issue in (%s)" % (",".join(linked_issue_keys)),
+                linked_issues = self._jira.search_issues("issue in (%s)" % (",".join(set(linked_issue_keys))),
                                                          maxResults=self._maxResults)
             return linked_issues
 
@@ -206,6 +208,19 @@ class buildEpicFilterAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         setattr(namespace, self.dest, SEARCH_QUERY_EPICS + values)
 
+
+def filter_issue_status(issues, statuses):
+    if not statuses:
+        return issues
+
+    filtered_issues = []
+    for i in issues:
+        if i.fields.status.name in statuses:
+            filtered_issues.append(i)
+
+    return filtered_issues
+
+
 def main(args):
     j = jira_netrc_login(args.netrc)
     jiraTool = JiraTool(j, maxResults=args.max_results)
@@ -245,8 +260,7 @@ def main(args):
         for i in jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues):
             if len(i.fields.fixVersions) != 1 or args.fix_version != i.fields.fixVersions[0].name:
                 if i.fields.status.name in ["Closed"]:
-                    logger.info("Not changing fixVersion of {}, because it is {}".format(i.key,
-                                                                                         i.fields.status))
+                    logger.info("Not changing fixVersion of %s because it is %s", i.key, i.fields.status)
                     continue
 
                 logger.info("setting fixVersion %s to issue %s", args.fix_version, i.key)
@@ -260,16 +274,19 @@ def main(args):
                 logger.info("issue %s is already at fixVersion %s", i.key, args.fix_version)
         sys.exit()
 
+    issues = jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues)
+
     if args.print_report:
-        print_report_table(jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues))
+        print_report_table(filter_issue_status(issues, args.include_status))
     elif args.print_markdown_report:
-        print_report_table(jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues),
+        print_report_table(filter_issue_status(issues, args.include_status),
                            isMarkdown=True)
     elif args.print_csv_report:
-        print_report_csv(jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues))
+        print_report_csv(filter_issue_status(issues, args.include_status))
 
 
 if __name__ == "__main__":
+    valid_status = ['QE Review', 'To Do', 'Done', 'Obsolete', 'Code Review', 'In Progress']
     helpDescription = textwrap.dedent("""
     Tool to help perform common operations on Jira tickets
     Use it to select Jirat ticket using one of the selection arguments,
@@ -318,6 +335,8 @@ if __name__ == "__main__":
     parser.add_argument("-et", "--epic-tasks", action="store_true",
                         help="Operate on tickets that belong to epics in selection, "
                         + "instead of the selected tickets themselves")
+    parser.add_argument("-is", "--include-status", nargs="+", choices=valid_status,
+                        help="filter issues based on supplied statuses when printing the issues details")
     opsGroup = parser.add_argument_group(title="Operations to perform on selected issues")
     ops = opsGroup.add_mutually_exclusive_group(required=True)
     ops.add_argument("-p", "--print-report", action="store_true", help="Print issues details")
