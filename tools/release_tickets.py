@@ -1,19 +1,20 @@
+#!/usr/bin/env python
+# pylint: disable=invalid-name,bare-except,too-many-arguments,redefined-outer-name
+
 import argparse
 import subprocess
-import yaml
 import csv
 import re
 import os
 import sys
 import logging
 import netrc
-import jira
-import bugzilla
-import logging
-import urllib.request, urllib.error, urllib.parse
-from tabulate import tabulate
 from urllib.parse import urlparse
 from collections import defaultdict
+import yaml
+import jira
+import bugzilla
+from tabulate import tabulate
 
 
 logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
@@ -27,9 +28,9 @@ BZ_REFERENCE_FIELD = "customfield_12316840"
 DEFAULT_NETRC_FILE = "~/.netrc"
 BZ_SERVER = "https://bugzilla.redhat.com"
 JIRA_SERVER = "https://issues.redhat.com/"
-REPORT_FORMAT_CSV="csv_report"
-REPORT_FORMAT_MARKDOWN="markdown_report"
-REPORT_FORMAT_STD="std_report"
+REPORT_FORMAT_CSV = "csv_report"
+REPORT_FORMAT_MARKDOWN = "markdown_report"
+REPORT_FORMAT_STD = "std_report"
 
 
 def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
@@ -47,8 +48,8 @@ def get_bz_client(username, password):
     logger.info("log-in to bugzilla with username: %s", username)
     if username == "apikey":
         return bugzilla.RHBugzilla3(BZ_SERVER, api_key=password)
-    else:
-        return bugzilla.RHBugzilla3(BZ_SERVER, user=username, password=password)
+
+    return bugzilla.RHBugzilla3(BZ_SERVER, user=username, password=password)
 
 def create_dir(dirname):
     try:
@@ -77,16 +78,16 @@ def get_manifest_yaml(commit=None):
     if commit:
         out = subprocess.check_output("git show {}:assisted-installer.yaml".format(commit), shell=True)
         return yaml.safe_load(out)
-    else:
-        with open("assisted-installer.yaml") as fin:
-            return yaml.safe_load(fin)
+
+    with open("assisted-installer.yaml") as fin:
+        return yaml.safe_load(fin)
 
 def get_commit_from_manifest(manifest, repo):
     return manifest[repo]['revision']
 
 def get_field_by_name(issue, fieldName):
     try:
-        return issue.fields.__getattribute__(issue.fields, "customfield_12316840")
+        return issue.fields.__getattribute__(issue.fields, fieldName)
     except:
         return None
 
@@ -128,8 +129,8 @@ def print_report_csv(issues, issues_in_repos):
 
 def print_report_table(issues, issues_in_repos, isMarkdown=False):
     _, data = get_data_for_print(issues, issues_in_repos, isMarkdown=isMarkdown)
-    format = "github" if isMarkdown else "psql"
-    print(tabulate(data, headers="keys", tablefmt=format))
+    fmt = "github" if isMarkdown else "psql"
+    print(tabulate(data, headers="keys", tablefmt=fmt))
 
 
 def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_version=None, specific_issue=None,
@@ -159,7 +160,7 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
     issues = get_issues_info(jclient, issue_keys)
     if report_format is not None:
         if report_format == REPORT_FORMAT_CSV:
-            print_report_csv(issues)
+            print_report_csv(issues, issues_in_repos)
         elif report_format == REPORT_FORMAT_STD:
             print_report_table(issues, issues_in_repos, isMarkdown=False)
         else:
@@ -269,5 +270,5 @@ if __name__ == "__main__":
         bzclient = get_bz_client(busername, bpassword)
 
     main(jclient, bzclient, args.from_version, args.to_version, args.report_format, specific_issue=args.issue,
-         fix_version = args.fixed_in_value, should_update=args.update_bz_fixed_in, is_dry_run=args.dry_run,
+         fix_version=args.fixed_in_value, should_update=args.update_bz_fixed_in, is_dry_run=args.dry_run,
          requested_repos=args.repos)
