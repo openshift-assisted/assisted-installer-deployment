@@ -38,12 +38,12 @@ def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
 
 
 def get_jira_client(username, password):
-    logger.info("log-in with username: %s", username)
+    logger.info("log-in to Jira with username: %s", username)
     return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
 
 
 def get_bz_client(username, password):
-    logger.info("log-in with username: %s", username)
+    logger.info("log-in to bugzilla with username: %s", username)
     if username == "apikey":
         return bugzilla.RHBugzilla3(BZ_SERVER, api_key=password)
     else:
@@ -72,9 +72,13 @@ def get_issues_list_for_repo(repo, from_commit, to_commit):
     matches = ISSUES_REGEX.findall(raw_log.decode('utf-8'), re.MULTILINE)
     return [i for i, _ in matches]
 
-def get_manifest_yaml(commit):
-    out = subprocess.check_output("git show {}:assisted-installer.yaml".format(commit), shell=True)
-    return yaml.load(out, yaml.SafeLoader)
+def get_manifest_yaml(commit=None):
+    if commit:
+        out = subprocess.check_output("git show {}:assisted-installer.yaml".format(commit), shell=True)
+        return yaml.safe_load(out)
+    else:
+        with open("assisted-installer.yaml") as fin:
+            return yaml.safe_load(fin)
 
 def get_commit_from_manifest(manifest, repo):
     return manifest[repo]['revision']
@@ -127,7 +131,7 @@ def print_report_table(issues, isMarkdown=False):
 
 
 def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_version=None, specific_issue=None,
-         should_update=False):
+         should_update=False, is_dry_run=False):
     issue_keys = []
     if specific_issue is not None:
         issue_keys = [specific_issue]
@@ -138,7 +142,6 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
         for repo, rep_data in to_manifest.items():
             repo_to_commit = get_commit_from_manifest(to_manifest, repo)
             repo_from_commit = get_commit_from_manifest(from_manifest, repo)
-
             issue_keys.extend(get_issues_list_for_repo(repo, repo_from_commit, repo_to_commit))
 
         issue_keys = set(issue_keys)
@@ -154,13 +157,22 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
             print_report_table(issues, isMarkdown=True)
 
     if should_update:
-        fix_version_to_update = fix_version if fix_version is not None else format_fix_version(to_commit)
-        update_fix_versions_for_all_bz_issues(bzclient, issues, fix_version_to_update)
+        if fix_version:
+            fix_version_to_update = fix_version
+        else:
+            if not to_commit.startswith(("v", "V")):
+                logger.error("Cannot update Bugzilla's 'fixed in' value because no 'fix-version' was supplied, "
+                             + " and 'to-version' (%s), does not match the format of versions '[vV]*'",
+                             to_commit)
+                return
+            fix_version_to_update = format_fix_version(to_commit)
+
+        update_fix_versions_for_all_bz_issues(bzclient, issues, fix_version_to_update, is_dry_run=is_dry_run)
 
 def format_fix_version(version):
     return "OCP-Metal-{}".format(version)
 
-def update_fix_versions_for_all_bz_issues(bzclient, issues, fix_version):
+def update_fix_versions_for_all_bz_issues(bzclient, issues, fix_version, is_dry_run=False):
     bz_issues = []
 
     for i in issues:
@@ -174,9 +186,12 @@ def update_fix_versions_for_all_bz_issues(bzclient, issues, fix_version):
     if len(bz_issues) == 0:
         logger.info("No issues selected for updating")
     else:
-        logger.info("Updating tickets %s with fixed_in %s", str(bz_issues), fix_version)
-        bu = bzclient.build_update(fixed_in=fix_version)
-        bzclient.update_bugs(bz_issues, bu)
+        if is_dry_run:
+            logger.info("Dry-run: Updating tickets %s with fixed_in %s", str(bz_issues), fix_version)
+        else:
+            logger.info("Updating tickets %s with fixed_in %s", str(bz_issues), fix_version)
+            bu = bzclient.build_update(fixed_in=fix_version)
+            bzclient.update_bugs(bz_issues, bu)
 
 
 def get_login(user_password, server):
@@ -198,9 +213,12 @@ if __name__ == "__main__":
     loginArgs.add_argument("-bup", "--bugzilla-user-password", required=False, help="Bugzilla username and password in the format of user:pass")
     selectionGroup = parser.add_argument_group(title="Issues selection")
     selectionGroup.add_argument("-f", "--from-version", help="From version", type=str, required=False)
-    selectionGroup.add_argument("-t", "--to-version", help="To version", type=str, required=False)
+    selectionGroup.add_argument("-t", "--to-version",
+                                help="To version. If not provided, the current content of the manifest will be used",
+                                type=str, required=False)
     selectionGroup.add_argument("-i", "--issue", required=False, help="Issue key")
     parser.add_argument("-v", "--verbose", action="store_true", help="Output verbose logging")
+    parser.add_argument("-d", "--dry-run", action="store_true", help="Dry run - do not update Bugzilla")
     actionGroup = parser.add_argument_group(title="Operations to perform on selected issues")
     poptions = actionGroup.add_mutually_exclusive_group(required=False)
     poptions.add_argument("-p", "--print-report", action="store_const", dest='report_format',
@@ -211,19 +229,19 @@ if __name__ == "__main__":
                           const=REPORT_FORMAT_MARKDOWN, help="Print issues details in markdown format")
     actionGroup.add_argument("-ubz", "--update-bz-fixed-in", action="store_true", help="Update Bugzilla bug "
                              + "'fixed_in' field, if the but in status 'QE REVIEW' or 'Done'")
-    actionGroup.add_argument("-fv", "--fixed-in-value", required=False, help="Value to update the Bugzilla's "
-                             + "'fixed_in' field")
+    actionGroup.add_argument("-fv", "--fixed-in-value", required=False,
+                             help="Value to update the Bugzilla's 'fixed_in' field. Required if 'to_version' is not supplied")
     args = parser.parse_args()
     if args.issue is None:
-        if args.to_version is None or args.from_version is None:
-            parser.error("Must provide 'from-version' and 'to-version' parameters, if a specific issue is "
+        if args.from_version is None:
+            parser.error("Must provide 'from-version'  parameter, if a specific issue is "
                          + "not selected")
     else:
         if args.to_version is not None or args.from_version is not None:
             parser.error("If a specific issue is selected, 'from-version' and 'to-version' parameters cannot "
                          + "be supplied")
-        if args.update_bz_fixed_in and args.fixed_in_value is None:
-            parser.error("When updating 'fixed_in' of an specific issue, 'fixed-in-value' must be supplied")
+    if args.update_bz_fixed_in and args.to_version is None and args.fixed_in_value is None:
+        parser.error("When updating 'fixed_in' and 'to_version' is not provided, 'fixed-in-value' must be supplied")
 
     if args.report_format is None and not args.update_bz_fixed_in:
         parser.error("An action must be chosen. Must select a report format and/or to update bugzilla")
@@ -234,7 +252,10 @@ if __name__ == "__main__":
     jusername, jpassword = get_login(args.jira_user_password, JIRA_SERVER)
     busername, bpassword = get_login(args.bugzilla_user_password, BZ_SERVER)
     jclient = get_jira_client(jusername, jpassword)
-    bzclient = get_bz_client(busername, bpassword)
+    if not args.update_bz_fixed_in:
+        bzclient = None
+    else:
+        bzclient = get_bz_client(busername, bpassword)
 
     main(jclient, bzclient, args.from_version, args.to_version, args.report_format, specific_issue=args.issue,
-         fix_version = args.fixed_in_value, should_update=args.update_bz_fixed_in)
+         fix_version = args.fixed_in_value, should_update=args.update_bz_fixed_in, is_dry_run=args.dry_run)
