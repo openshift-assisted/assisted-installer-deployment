@@ -184,7 +184,7 @@ def jira_login(user_password, server):
         username, password = get_credentials_from_netrc(urlparse(server).hostname, args.netrc)
     else:
         try:
-            [username, password] = args.user_password.split(":", 1)
+            [username, password] = user_password.split(":", 1)
         except:
             logger.error("Failed to parse user:password")
     return username, password
