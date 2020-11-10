@@ -13,6 +13,7 @@ import logging
 import urllib.request, urllib.error, urllib.parse
 from tabulate import tabulate
 from urllib.parse import urlparse
+from collections import defaultdict
 
 
 logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
@@ -104,28 +105,29 @@ def format_key_for_print(key, isMarkdown):
 
     return f"[{key}](https://issues.redhat.com/browse/{key})"
 
-def get_data_for_print(issues, isMarkdown=False):
-    headers = ['key', 'summary', 'status']
+def get_data_for_print(issues, issues_in_repos, isMarkdown=False):
+    headers = ['key', 'summary', 'status', 'repos']
     table = []
     for i in issues:
         row = {'key': format_key_for_print(i.key, isMarkdown=isMarkdown),
                'summary': i.fields.summary,
-               'status': i.fields.status.name}
+               'status': i.fields.status.name,
+               'repos': ", ".join(issues_in_repos[i.key])}
         table.append(row)
 
     return headers, table
 
 
-def print_report_csv(issues):
-    headers, data = get_data_for_print(issues)
+def print_report_csv(issues, issues_in_repos):
+    headers, data = get_data_for_print(issues, issues_in_repos)
     csvout = csv.DictWriter(sys.stdout, delimiter='|', fieldnames=headers)
     csvout.writeheader()
     for row in data:
         csvout.writerow(row)
 
 
-def print_report_table(issues, isMarkdown=False):
-    _, data = get_data_for_print(issues, isMarkdown=isMarkdown)
+def print_report_table(issues, issues_in_repos, isMarkdown=False):
+    _, data = get_data_for_print(issues, issues_in_repos, isMarkdown=isMarkdown)
     format = "github" if isMarkdown else "psql"
     print(tabulate(data, headers="keys", tablefmt=format))
 
@@ -133,17 +135,21 @@ def print_report_table(issues, isMarkdown=False):
 def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_version=None, specific_issue=None,
          should_update=False, is_dry_run=False, requested_repos=None):
     issue_keys = []
+    issues_in_repos = defaultdict(set)
     if specific_issue is not None:
         issue_keys = [specific_issue]
     else:
         from_manifest = get_manifest_yaml(from_commit)
         to_manifest = get_manifest_yaml(to_commit)
 
-        for repo, rep_data in to_manifest.items():
+        for repo, _ in to_manifest.items():
             if not requested_repos or os.path.basename(repo) in requested_repos:
                 repo_to_commit = get_commit_from_manifest(to_manifest, repo)
                 repo_from_commit = get_commit_from_manifest(from_manifest, repo)
-                issue_keys.extend(get_issues_list_for_repo(repo, repo_from_commit, repo_to_commit))
+                keys = get_issues_list_for_repo(repo, repo_from_commit, repo_to_commit)
+                issue_keys.extend(keys)
+                for k in keys:
+                    issues_in_repos[k].add(os.path.basename(repo))
 
         issue_keys = set(issue_keys)
 
@@ -155,9 +161,9 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
         if report_format == REPORT_FORMAT_CSV:
             print_report_csv(issues)
         elif report_format == REPORT_FORMAT_STD:
-            print_report_table(issues, isMarkdown=False)
+            print_report_table(issues, issues_in_repos, isMarkdown=False)
         else:
-            print_report_table(issues, isMarkdown=True)
+            print_report_table(issues, issues_in_repos, isMarkdown=True)
 
     if should_update:
         if fix_version:
