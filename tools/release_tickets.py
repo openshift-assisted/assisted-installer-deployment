@@ -179,7 +179,7 @@ def update_fix_versions_for_all_bz_issues(bzclient, issues, fix_version):
         bzclient.update_bugs(bz_issues, bu)
 
 
-def jira_login(user_password, server):
+def get_login(user_password, server):
     if user_password is None:
         username, password = get_credentials_from_netrc(urlparse(server).hostname, args.netrc)
     else:
@@ -231,8 +231,8 @@ if __name__ == "__main__":
     if args.verbose:
         logger.setLevel(logging.DEBUG)
 
-    jusername, jpassword = jira_login(args.jira_user_password, JIRA_SERVER)
-    busername, bpassword = jira_login(args.jira_user_password, BZ_SERVER)
+    jusername, jpassword = get_login(args.jira_user_password, JIRA_SERVER)
+    busername, bpassword = get_login(args.bugzilla_user_password, BZ_SERVER)
     jclient = get_jira_client(jusername, jpassword)
     bzclient = get_bz_client(busername, bpassword)
 
