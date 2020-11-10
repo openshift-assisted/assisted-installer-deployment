@@ -131,7 +131,7 @@ def print_report_table(issues, isMarkdown=False):
 
 
 def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_version=None, specific_issue=None,
-         should_update=False, is_dry_run=False):
+         should_update=False, is_dry_run=False, requested_repos=None):
     issue_keys = []
     if specific_issue is not None:
         issue_keys = [specific_issue]
@@ -140,12 +140,15 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
         to_manifest = get_manifest_yaml(to_commit)
 
         for repo, rep_data in to_manifest.items():
-            repo_to_commit = get_commit_from_manifest(to_manifest, repo)
-            repo_from_commit = get_commit_from_manifest(from_manifest, repo)
-            issue_keys.extend(get_issues_list_for_repo(repo, repo_from_commit, repo_to_commit))
+            if not requested_repos or os.path.basename(repo) in requested_repos:
+                repo_to_commit = get_commit_from_manifest(to_manifest, repo)
+                repo_from_commit = get_commit_from_manifest(from_manifest, repo)
+                issue_keys.extend(get_issues_list_for_repo(repo, repo_from_commit, repo_to_commit))
 
         issue_keys = set(issue_keys)
 
+    if not issue_keys:
+        return
 
     issues = get_issues_info(jclient, issue_keys)
     if report_format is not None:
@@ -193,7 +196,6 @@ def update_fix_versions_for_all_bz_issues(bzclient, issues, fix_version, is_dry_
             bu = bzclient.build_update(fixed_in=fix_version)
             bzclient.update_bugs(bz_issues, bu)
 
-
 def get_login(user_password, server):
     if user_password is None:
         username, password = get_credentials_from_netrc(urlparse(server).hostname, args.netrc)
@@ -205,6 +207,7 @@ def get_login(user_password, server):
     return username, password
 
 if __name__ == "__main__":
+    VALID_REPOS = ['assisted-installer', 'assisted=service', 'assisted-installer-agent', 'facet']
     parser = argparse.ArgumentParser()
     loginGroup = parser.add_argument_group(title="login options")
     loginArgs = loginGroup.add_mutually_exclusive_group()
@@ -219,6 +222,8 @@ if __name__ == "__main__":
     selectionGroup.add_argument("-i", "--issue", required=False, help="Issue key")
     parser.add_argument("-v", "--verbose", action="store_true", help="Output verbose logging")
     parser.add_argument("-d", "--dry-run", action="store_true", help="Dry run - do not update Bugzilla")
+    parser.add_argument("-r", "--repos", action='append', choices=VALID_REPOS,
+                        help="Get tickets for the specified repos")
     actionGroup = parser.add_argument_group(title="Operations to perform on selected issues")
     poptions = actionGroup.add_mutually_exclusive_group(required=False)
     poptions.add_argument("-p", "--print-report", action="store_const", dest='report_format',
@@ -258,4 +263,5 @@ if __name__ == "__main__":
         bzclient = get_bz_client(busername, bpassword)
 
     main(jclient, bzclient, args.from_version, args.to_version, args.report_format, specific_issue=args.issue,
-         fix_version = args.fixed_in_value, should_update=args.update_bz_fixed_in, is_dry_run=args.dry_run)
+         fix_version = args.fixed_in_value, should_update=args.update_bz_fixed_in, is_dry_run=args.dry_run,
+         requested_repos=args.repos)
