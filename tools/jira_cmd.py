@@ -342,6 +342,10 @@ if __name__ == "__main__":
     selectors.add_argument("-tt", "--triaging-tickets", action='store_const',
                            dest="search_query", const='project = MGMT AND component = "Assisted-installer Triage"',
                            help="Search for Assisted Installer triaging tickets")
+    selectors.add_argument("-rtt", "--recent-triaging-tickets", action='store_const',
+                           dest="search_query",
+                           const='project = MGMT AND component = "Assisted-installer Triage" and created > -7d',
+                           help="Search for Assisted Installer triaging tickets")
     selectors.add_argument("-ce", "--current-version-epics", action='store_const',
                            dest="search_query", const=SEARCH_QUERY_EPICS + CURRENT_VERSION_FILTER,
                            help="Search for Epics planned for current version")
