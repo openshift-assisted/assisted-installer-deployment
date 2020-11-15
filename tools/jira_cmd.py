@@ -26,6 +26,9 @@ MAX_RESULTS = 100
 SEARCH_QUERY_EPICS = 'project = MGMT AND component = "MGMT OCP Metal" AND type = Epic AND filter = '
 CURRENT_VERSION_FILTER = '12347072'
 NEXT_VERSION_FILTER = '12347073'
+VALID_PRINT_FIELDS = ['key', 'summary', 'component', 'priority', 'status', 'assignee', 'fixVersion', 'sprint']
+DEFAULT_PRINT_FIELDS = ['component', 'priority', 'status', 'assignee']
+PERMENANT_PRINT_FIELDS = ['key', 'summary']
 
 logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
 logger = logging.getLogger(__name__)
@@ -90,30 +93,36 @@ def format_key_for_print(key, isMarkdown):
 
     return f"[{key}](https://issues.redhat.com/browse/{key})"
 
-def get_data_for_print(issues, withStatus=True, withAssignee=True, withFixVersion=False,
-                       isMarkdown=False, issues_count=None):
-    headers = ['key', 'summary', 'component', 'priority']
-    if withStatus:
-        headers.append('status')
-    if withAssignee:
-        headers.append('assignee')
-    if withFixVersion:
-        headers.append('fixVersion')
-    if issues_count:
-        headers.append('count')
+def get_data_for_print(issues, isMarkdown=False, issues_count=None, print_fields=None):
+    if not print_fields:
+        print_fields = DEFAULT_PRINT_FIELDS
 
+    headers = PERMENANT_PRINT_FIELDS + print_fields
 
     table = []
     for i in issues:
-        row = {'key': format_key_for_print(i.key, isMarkdown=isMarkdown), 'summary': i.fields.summary,
-               'component': [c.name for c in i.fields.components], 'priority': i.fields.priority.name}
-        if withStatus:
+        row = {}
+        if 'key' in headers:
+            row['key'] = i.key
+        if 'summary' in headers:
+            row['summary'] = i.fields.summary
+        if 'component' in headers:
+            row['component'] = [c.name for c in i.fields.components]
+        if 'priority' in headers:
+            row['priority'] = i.fields.priority.name
+        if 'status' in headers:
             row['status'] = i.fields.status
-        if withFixVersion:
+        if 'fixVersion' in headers:
             row['fixVersion'] = "" if len(i.fields.fixVersions) == 0 else i.fields.fixVersions[0].name
-        if withAssignee:
+        if 'assignee' in headers:
             assignee = get_assignee(i)
             row['assignee'] = assignee
+        if 'sprint' in headers:
+            sid = get_sprint_id(i)
+            if sid:
+                row['sprint'] = "({}) {}".format(sid, get_sprint_name(i))
+            else:
+                row['sprint'] = ""
         if issues_count:
             row['count'] = issues_count[i.key]
         table.append(row)
@@ -121,16 +130,18 @@ def get_data_for_print(issues, withStatus=True, withAssignee=True, withFixVersio
     return headers, table
 
 
-def print_report_csv(issues, issues_count=None):
-    headers, data = get_data_for_print(issues, issues_count=issues_count)
+def print_report_csv(issues, issues_count=None, print_fields=None):
+    headers, data = get_data_for_print(issues, issues_count=issues_count,
+                                       print_fields=print_fields)
     csvout = csv.DictWriter(sys.stdout, delimiter='|', fieldnames=headers)
     csvout.writeheader()
     for row in data:
         csvout.writerow(row)
 
 
-def print_report_table(issues, isMarkdown=False, issues_count=None):
-    _, data = get_data_for_print(issues, isMarkdown=isMarkdown, issues_count=issues_count)
+def print_report_table(issues, isMarkdown=False, issues_count=None, print_fields=None):
+    _, data = get_data_for_print(issues, isMarkdown=isMarkdown, issues_count=issues_count,
+                                 print_fields=print_fields)
     fmt = "github" if isMarkdown else "psql"
     print(tabulate(data, headers="keys", tablefmt=fmt))
 
@@ -326,16 +337,19 @@ def main(args):
     if args.print_raw:
         print_raw(issues)
     if args.print_report:
-        print_report_table(filter_issue_status(issues, args.include_status), issues_count=issues_count)
+        print_report_table(filter_issue_status(issues, args.include_status), issues_count=issues_count,
+                           print_fields=args.print_field)
     elif args.print_markdown_report:
         print_report_table(filter_issue_status(issues, args.include_status),
-                           isMarkdown=True, issues_count=issues_count)
+                           isMarkdown=True, issues_count=issues_count,
+                           print_fields=args.print_field)
     elif args.print_csv_report:
-        print_report_csv(filter_issue_status(issues, args.include_status), issues_count=issues_count)
+        print_report_csv(filter_issue_status(issues, args.include_status), issues_count=issues_count,
+                         print_fields=args.print_field)
 
 
 if __name__ == "__main__":
-    valid_status = ['QE Review', 'To Do', 'Done', 'Obsolete', 'Code Review', 'In Progress']
+    VALID_STATUS = ['QE Review', 'To Do', 'Done', 'Obsolete', 'Code Review', 'In Progress']
     helpDescription = textwrap.dedent("""
     Tool to help perform common operations on Jira tickets
     Use it to select Jirat ticket using one of the selection arguments,
@@ -388,8 +402,10 @@ if __name__ == "__main__":
     parser.add_argument("-et", "--epic-tasks", action="store_true",
                         help="Operate on tickets that belong to epics in selection, "
                         + "instead of the selected tickets themselves")
-    parser.add_argument("-is", "--include-status", action='append', choices=valid_status,
+    parser.add_argument("-is", "--include-status", action='append', choices=VALID_STATUS,
                         help="filter issues based on supplied statuses when printing the issues details")
+    parser.add_argument("-pf", "--print-field", action='append', choices=VALID_PRINT_FIELDS,
+                        help="Add provided fields to the output")
     opsGroup = parser.add_argument_group(title="Operations to perform on selected issues")
     ops = opsGroup.add_mutually_exclusive_group(required=True)
     ops.add_argument("-p", "--print-report", action="store_true", help="Print issues details")
