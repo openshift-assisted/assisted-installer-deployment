@@ -3,10 +3,9 @@
 
 # A tool to perform various operations on Jira
 
-
-
 import os
 import sys
+import re
 import csv
 import argparse
 import netrc
@@ -20,18 +19,7 @@ import jira
 
 JIRA_SERVER = "https://issues.redhat.com/"
 
-#FIELD_DELIVERED_PERCENT = 'customfield_13614'
-#FIELD_RESOLVED_PERCENT = 'customfield_13615'
-#FIELD_STORY_POINTS = 'customfield_10004'
-#FIELD_TEST_PATH = 'customfield_11800'
-#FIELD_TEST_SERVERS = 'customfield_13605'
-#FIELD_INT_MONKEY_TESTS = 'customfield_13400'
-#FIELD_INT_UPGRADE_TESTS = 'customfield_13600'
-#FIELD_PROJECT_NAME = 'customfield_13603'
-#FIELD_PROJECT_HASH = 'customfield_13604'
-#AUTO_DELIVERY_TEST = 'customfield_13600'
-#FIELD_ROOTFS_STAR_HASH = 'customfield_11201'
-#FIELD_TEST_NAME = 'customfield_11401'
+FIELD_SPRINT = 'customfield_12310940'
 
 MAX_RESULTS = 100
 
@@ -65,6 +53,27 @@ def get_raw_field(issue, fieldName):
     except:
         return None
 
+def get_sprint_name(issue):
+    sprint_str = get_raw_field(issue, FIELD_SPRINT)
+    if not sprint_str:
+        return None
+
+    m = re.findall(r',name=([^,]+),', sprint_str[0])
+    if not m:
+        return None
+
+    return m[0]
+
+def get_sprint_id(issue):
+    sprint_str = get_raw_field(issue, FIELD_SPRINT)
+    if not sprint_str:
+        return None
+
+    m = re.findall(r',sequence=([0-9]+),', sprint_str[0])
+    if not m:
+        return None
+
+    return int(m[0])
 
 def get_assignee(issue):
     try:
@@ -124,6 +133,12 @@ def print_report_table(issues, isMarkdown=False, issues_count=None):
     _, data = get_data_for_print(issues, isMarkdown=isMarkdown, issues_count=issues_count)
     fmt = "github" if isMarkdown else "psql"
     print(tabulate(data, headers="keys", tablefmt=fmt))
+
+
+def print_raw(issues):
+    import pprint
+    for i in issues:
+        pprint.pprint(i.raw)
 
 
 class JiraTool():
@@ -246,13 +261,27 @@ def main(args):
     else:
         issues = jiraTool.jira().search_issues(args.search_query, maxResults=args.max_results)
 
+    if args.sprint:
+        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+            sprint_value = get_sprint_id(i)
+            if sprint_value == args.sprint:
+                logger.debug("Issue %s is already at sprint %s", i.key, args.sprint)
+                continue
+
+            logger.info("setting sprint %s to issue %s", args.sprint, i.key)
+            try:
+                i.update(fields={FIELD_SPRINT: args.sprint}, notify=False)
+            except:
+                log_exception("Could not set sprint of {}".format(i.key))
+        sys.exit()
+
     if args.add_watchers is not None or args.remove_watchers is not None:
         if args.add_watchers is not None:
-            for i in jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues):
+            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
                 jiraTool.add_watchers(i, args.add_watchers)
 
         if args.remove_watchers is not None:
-            for i in jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues):
+            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
                 jiraTool.remove_watchers(i, args.remove_watchers)
         sys.exit()
 
@@ -260,18 +289,18 @@ def main(args):
         if args.link_to is not None:
             to_ticket = jiraTool.jira().issue(args.link_to)
             logger.info("Linking search result to %s", to_ticket.key)
-            for i in jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues):
+            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
                 jiraTool.link_tickets(i, to_ticket)
 
         if args.remove_link is not None:
             to_remove = jiraTool.jira().issue(args.remove_link)
             logger.info("Removing link to %s from search result to: ", to_remove)
-            for i in jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues):
+            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
                 jiraTool.remove_links(i, to_remove)
         sys.exit()
 
     if args.fix_version is not None:
-        for i in jiraTool.get_selected_issues(issues, args.epic_tasks, args.linked_issues):
+        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
             if len(i.fields.fixVersions) != 1 or args.fix_version != i.fields.fixVersions[0].name:
                 if i.fields.status.name in ["Closed"]:
                     logger.info("Not changing fixVersion of %s because it is %s", i.key, i.fields.status)
@@ -294,6 +323,8 @@ def main(args):
     else:
         issues = jiraTool.get_selected_issues(issues, args.epic_tasks)
 
+    if args.print_raw:
+        print_raw(issues)
     if args.print_report:
         print_report_table(filter_issue_status(issues, args.include_status), issues_count=issues_count)
     elif args.print_markdown_report:
@@ -362,10 +393,13 @@ if __name__ == "__main__":
     opsGroup = parser.add_argument_group(title="Operations to perform on selected issues")
     ops = opsGroup.add_mutually_exclusive_group(required=True)
     ops.add_argument("-p", "--print-report", action="store_true", help="Print issues details")
+    ops.add_argument("-pr", "--print-raw", action="store_true", help="Print raw issues details")
     ops.add_argument("-pc", "--print-csv-report", action="store_true", help="Print issues details")
     ops.add_argument("-pmd", "--print-markdown-report", action="store_true", help="Print issues details")
     ops.add_argument("-al", "--link-to", default=None, help="Link tickets from search result to provided ticket")
     ops.add_argument("-rl", "--remove-link", default=None, help="Remove the provided ticket tickets in search results")
+    ops.add_argument("-sp", "--sprint", default=None, type=int,
+                     help="Assigne the tickets in search results to the provided sprint")
     ops.add_argument("-aw", "--add-watchers", default=None, nargs="+", help="Add the watcher to the selected tickets")
     ops.add_argument("-rw", "--remove-watchers", default=None, nargs="+", help="Remove the watcher from the selected tickets")
     ops.add_argument("-f", "--fix-version", help="Set the fixVersion of selected tickets")
