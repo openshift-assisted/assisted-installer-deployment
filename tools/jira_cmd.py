@@ -340,8 +340,8 @@ if __name__ == "__main__":
     selectors.add_argument("-nf", "--named-filter", action=buildEpicFilterAction, dest="search_query",
                            help="Search for Epics matching the given named filter")
     selectors.add_argument("-tt", "--triaging-tickets", action='store_const',
-                           dest="search_query", const='project = MGMT AND component = "Assisted-installer Triage"',
-                           help="Search for Assisted Installer triaging tickets")
+                           dest="search_query", const='project = MGMT AND component = "Assisted-installer Triage" AND resolved > -7d',
+                           help="Search for Assisted Installer triaging tickets for past 7 days")
     selectors.add_argument("-rtt", "--recent-triaging-tickets", action='store_const',
                            dest="search_query",
                            const='project = MGMT AND component = "Assisted-installer Triage" and created > -7d',
