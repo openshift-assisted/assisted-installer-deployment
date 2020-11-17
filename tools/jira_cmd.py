@@ -20,6 +20,7 @@ import jira
 JIRA_SERVER = "https://issues.redhat.com/"
 
 FIELD_SPRINT = 'customfield_12310940'
+FIELD_CONTRIBUTORS = 'customfield_12315950'
 
 MAX_RESULTS = 100
 
@@ -52,7 +53,7 @@ def jira_netrc_login(netrcFile):
 
 def get_raw_field(issue, fieldName):
     try:
-        return issue.raw['fields'][fieldName]
+        return issue.fields.__dict__[fieldName]
     except:
         return None
 
@@ -167,6 +168,26 @@ class JiraTool():
             res.raise_for_status()
         except:
             logger.exceptio("Error linking to %s", to_ticket.key)
+
+    def add_assignee_as_contributor(self, ticket):
+        try:
+            assignee = ticket.fields.assignee
+            if not assignee:
+                logger.debug("Ticket %s is not assigned", ticket.key)
+                return
+
+            contributors = get_raw_field(ticket, FIELD_CONTRIBUTORS)
+            if not contributors:
+                contributors = []
+            contributor_names = [u.name for u in contributors]
+            if assignee.name in contributor_names:
+                logger.debug("%s is already contributor of %s", assignee.name, ticket.key)
+                return
+            contributor_names.append(assignee.name)
+            logger.info("Adding %s as contributor to %s", assignee.name, ticket.key)
+            ticket.update(fields={FIELD_CONTRIBUTORS: [{'name': u} for u in contributor_names]}, notify=False)
+        except:
+            logger.exception("Error adding contributor to %s", ticket.key)
 
     def add_watchers(self, ticket, watchers):
         try:
@@ -286,6 +307,11 @@ def main(args):
                 log_exception("Could not set sprint of {}".format(i.key))
         sys.exit()
 
+    if args.update_contributors:
+        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+            jiraTool.add_assignee_as_contributor(i)
+        sys.exit()
+
     if args.add_watchers is not None or args.remove_watchers is not None:
         if args.add_watchers is not None:
             for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
@@ -382,8 +408,13 @@ if __name__ == "__main__":
     selectors.add_argument("-s", "--search-query", required=False, help="Search query to use")
     selectors.add_argument("-i", "--issue", required=False, help="Issue key")
     selectors.add_argument("-bz", "--bz-issue", required=False, help="BZ issue key")
+    selectors.add_argument("-crepics", "--current-release-epics-filter", action=buildEpicFilterAction, dest="search_query",
+                           help="Search for Epics matching the given named filter")
     selectors.add_argument("-nf", "--named-filter", action=buildEpicFilterAction, dest="search_query",
                            help="Search for Epics matching the given named filter")
+    selectors.add_argument("-cre", "--current-release-epics", action='store_const',
+                           dest="search_query", const='filter in ("AI sprint planning current epics")',
+                           help="Search for current release epics")
     selectors.add_argument("-tt", "--triaging-tickets", action='store_const',
                            dest="search_query", const='project = MGMT AND component = "Assisted-installer Triage"',
                            help="Search for Assisted Installer triaging tickets")
@@ -419,6 +450,7 @@ if __name__ == "__main__":
     ops.add_argument("-aw", "--add-watchers", default=None, nargs="+", help="Add the watcher to the selected tickets")
     ops.add_argument("-rw", "--remove-watchers", default=None, nargs="+", help="Remove the watcher from the selected tickets")
     ops.add_argument("-f", "--fix-version", help="Set the fixVersion of selected tickets")
+    ops.add_argument("-uc", "--update-contributors", action="store_true", help="Add assignee to contributors")
     args = parser.parse_args()
 
     if args.verbose:
