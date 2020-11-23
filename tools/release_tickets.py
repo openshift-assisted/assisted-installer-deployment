@@ -93,7 +93,7 @@ def get_field_by_name(issue, fieldName):
 
 def get_issues_info(jclient, keys):
     issues = jclient.search_issues("issue in ({})".format(",".join(keys)), fields=["key", "summary", "status",
-                                                                                   BZ_REFERENCE_FIELD])
+                                                                                   "assignee", BZ_REFERENCE_FIELD])
     return issues
 
 def get_bz_id_from_jira(issue):
@@ -107,12 +107,13 @@ def format_key_for_print(key, isMarkdown):
     return f"[{key}](https://issues.redhat.com/browse/{key})"
 
 def get_data_for_print(issues, issues_in_repos, isMarkdown=False):
-    headers = ['key', 'summary', 'status', 'repos']
+    headers = ['key', 'summary', 'status', 'assignee', 'repos']
     table = []
     for i in issues:
         row = {'key': format_key_for_print(i.key, isMarkdown=isMarkdown),
                'summary': i.fields.summary,
                'status': i.fields.status.name,
+               'assignee': i.fields.assignee,
                'repos': ", ".join(issues_in_repos[i.key])}
         table.append(row)
 
