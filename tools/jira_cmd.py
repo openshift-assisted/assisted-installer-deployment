@@ -99,6 +99,8 @@ def get_data_for_print(issues, isMarkdown=False, issues_count=None, print_fields
         print_fields = DEFAULT_PRINT_FIELDS
 
     headers = PERMENANT_PRINT_FIELDS + print_fields
+    if issues_count:
+        headers.append('count')
 
     table = []
     for i in issues:
