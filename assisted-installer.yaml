@@ -10,7 +10,7 @@ openshift/assisted-service:
   - assisted-service
   - assisted-iso-create
 openshift-metal3/facet:
-  revision: 2b1efad0b6e95e310bef43234a91450dda22f999
+  revision:	b62e0c9fed45b8c765a45c1148246ca1325742ce
   images:
   - ocp-metal-ui
 openshift/assisted-installer-agent:
