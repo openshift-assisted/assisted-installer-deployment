@@ -146,6 +146,8 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
 
         for repo, _ in to_manifest.items():
             if not requested_repos or os.path.basename(repo) in requested_repos:
+                if repo == 'openshift-assisted/assisted-ui' and from_commit == 'v1.0.12.1':
+                    continue
                 repo_to_commit = get_commit_from_manifest(to_manifest, repo)
                 repo_from_commit = get_commit_from_manifest(from_manifest, repo)
                 keys = get_issues_list_for_repo(repo, repo_from_commit, repo_to_commit)
@@ -215,7 +217,7 @@ def get_login(user_password, server):
     return username, password
 
 if __name__ == "__main__":
-    VALID_REPOS = ['assisted-installer', 'assisted=service', 'assisted-installer-agent', 'facet']
+    VALID_REPOS = ['assisted-installer', 'assisted=service', 'assisted-installer-agent', 'assisted-ui']
     parser = argparse.ArgumentParser()
     loginGroup = parser.add_argument_group(title="login options")
     loginArgs = loginGroup.add_mutually_exclusive_group()
