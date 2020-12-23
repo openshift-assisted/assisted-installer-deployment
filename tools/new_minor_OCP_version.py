@@ -90,8 +90,8 @@ def create_jira_ticket(jclient, latestV, currentV):
                                      description=summary)
 
     logger.info("Task created: %s", new_task)
-    add_watchers(jclient, new_issue)
-    return new_issue
+    add_watchers(jclient, new_task)
+    return new_task
 
 def add_watchers(jclient, issue):
     for w in DEFAULT_WATCHERS:

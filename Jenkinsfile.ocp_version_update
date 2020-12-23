@@ -16,7 +16,7 @@ pipeline {
             steps {
                 sh '''pip3 install -r requirements.txt'''
                 sh '''git clean -f'''
-                sh 'python3 tools/new_minor_OCP_version.py.py -up ${JIRA_CREDS}"'
+                sh "python3 tools/new_minor_OCP_version.py -up ${JIRA_CREDS}"
             }
         }
     }
