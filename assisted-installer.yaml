@@ -8,7 +8,6 @@ openshift/assisted-service:
   revision: 5138bfe5e29b0b8e6ae228719fef0640c78a7f3d
   images:
   - assisted-service
-  - assisted-iso-create
 openshift-assisted/assisted-ui:
   revision: 43b0c77f30455005c1a795037b6e0ecc8411015f
   images:
