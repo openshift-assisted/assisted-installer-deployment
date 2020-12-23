@@ -5,6 +5,7 @@ import yaml
 import logging
 import requests
 import argparse
+import subprocess
 from github import Github
 
 logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
@@ -14,10 +15,12 @@ logging.getLogger("__main__").setLevel(logging.INFO)
 OCP_LATEST_RELEASE_URL = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/latest/release.txt"
 OCP_VERSION_MAKEFILE_REGEX = re.compile("quay.io/openshift-release-dev/ocp-release:(.*)-x86_64")
 ASSISTED_SERVICE_MAKEFILE = "https://raw.githubusercontent.com/openshift/assisted-service/master/default_ocp_versions.json"
-ASSISTED_SERVICE_REPO = "https://github.com/openshift/assisted-service.git"
+ASSISTED_SERVICE_CLONE_CMD = "git clone https://{user_password}@github.com/openshift/assisted-service.git"
 JIRA_SERVER = "https://issues.redhat.com/"
 DEFAULT_NETRC_FILE = "~/.netrc"
 DEFAULT_WATCHERS = ["ronniela", "romfreiman", "lgamliel", "oscohen"]
+UPDATED_FILES = ["default_ocp_versions.json", "config/onprem-iso-fcc.yaml", "onprem-environment"]
+BRANCH_NAME = "update_ocp_version_to_{version}"
 
 def main(args):
     latest_ocp_version = get_latest_OCP_version()
@@ -28,9 +31,12 @@ def main(args):
             latest_ocp_version,
             current_assisted_service_ocp_version))
 
-        jusername, jpassword = get_login(args.user_password, JIRA_SERVER)
+        jusername, jpassword = get_login(args.jira_user_password)
         jclient = get_jira_client(jusername, jpassword)
-        create_jira_ticket(jclient, latest_ocp_version, current_assisted_service_ocp_version)
+        task = create_jira_ticket(jclient, latest_ocp_version, current_assisted_service_ocp_version)
+        if task:
+            update_ai_repo_to_new_ocp_version(args, current_assisted_service_ocp_version, latest_ocp_version, task)
+
     else:
         logging.info("OCP version {} is up to date".format(latest_ocp_version))
 
@@ -62,14 +68,11 @@ def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
     username, _, password = cred.authenticators(server)
     return username, password
 
-def get_login(user_password, server):
-    if user_password is None:
-        username, password = get_credentials_from_netrc(urlparse(server).hostname, args.netrc)
-    else:
-        try:
-            [username, password] = user_password.split(":", 1)
-        except:
-            logger.error("Failed to parse user:password")
+def get_login(user_password):
+    try:
+        [username, password] = user_password.split(":", 1)
+    except:
+        logger.error("Failed to parse user:password")
     return username, password
 
 # def open_OCP_version_update_JIRA_ticket():
@@ -116,12 +119,45 @@ def get_all_version_ocp_update_tickets(jclient):
 
     return set(issues)
 
+def clone_assisted_service(user_password):
+    cmd = ASSISTED_SERVICE_CLONE_CMD.format(user_password=user_password)
+    subprocess.check_output(cmd, shell=True)
+
+def change_version_in_files(old_version ,new_version):
+    old_version = old_version.replace(".", "\.")
+    for file in UPDATED_FILES:
+        subprocess.check_output(f"sed -i -e 's|{old_version}|{new_version}|g' assisted-service/{file}".format(
+            old_version=old_version,
+            new_version=new_version,
+            file=file
+        ),shell=True)
+
+def commit_and_push_version_update_changes(new_version, message_prefix):
+    subprocess.check_output("git commit -am\'{} Updating OCP version to {}\'".format(message_prefix, new_version), cwd="assisted-service", shell=True)
+
+    branch = BRANCH_NAME.format(version=new_version)
+    subprocess.check_output("git push origin HEAD:{}".format(branch), cwd="assisted-service", shell=True)
+
+
+def update_ai_repo_to_new_ocp_version(args, old_ocp_version, new_ocp_version, ticket_id):
+    clone_assisted_service(args.git_user_password)
+    change_version_in_files(old_ocp_version, new_ocp_version)
+    commit_and_push_version_update_changes(new_ocp_version, ticket_id)
+
+def open_pr(args, new_version):
+    branch = BRANCH_NAME.format(version=new_version)
+
+    gusername, gpassword = get_login(args.git_user_password)
+    g = Github(gusername, gpassword)
+    repo = g.get_repo("openshift/assisted-service")
+    pr = repo.create_pull(title="Update OCP version to {}".format(new_version), body="",head=branch, base="stable")
+    logging.info("new PR opend {}".format(pr.url))
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    loginGroup = parser.add_argument_group(title="login options")
-    loginArgs = loginGroup.add_mutually_exclusive_group()
-    loginArgs.add_argument("-up", "--user-password", help="Username and password in the format of user:pass")
+    parser.add_argument("-jup", "--jira-user-password", help="Username and password in the format of user:pass")
+    parser.add_argument("-gup", "--git-user-password", help="Username and password in the format of user:pass")
     args = parser.parse_args()
 
     main(args)
