@@ -4,12 +4,13 @@ pipeline {
         SLACK_TOKEN = credentials('slack-token')
         JIRA_CREDS = credentials('Ronnie-jira')
         GIT_CREDS = credentials('9fa5c056-6227-4f70-97df-6aa31854c20a')
+        JENKINS_CRED = credentials('bot-user-jenkins')
     }
 
     triggers { cron('0 0 * * 0') }
 
     options {
-      timeout(time: 1, unit: 'HOURS') 
+      timeout(time: 2, unit: 'HOURS')
     }
 
     stages {
@@ -17,7 +18,7 @@ pipeline {
             steps {
                 sh '''pip3 install -r requirements.txt'''
                 sh '''git clean -f'''
-                sh "python3 tools/new_minor_OCP_version.py -jup ${JIRA_CREDS} -gup ${GIT_CREDS} "
+                sh "python3 tools/new_minor_OCP_version.py -jup ${JIRA_CREDS} -gup ${GIT_CREDS} -jkup ${JENKINS_CRED}"
             }
         }
     }
