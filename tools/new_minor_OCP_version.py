@@ -1,7 +1,9 @@
 import re
 import json
 import jira
+import time
 import yaml
+import jenkins
 import logging
 import requests
 import argparse
@@ -14,6 +16,7 @@ from github import Github
 #  * open OCP version JIRA ticket
 #  * create a update branch
 #  * open a GitHub PR for the changes
+#  * test test-infra
 ###############################################
 
 logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
@@ -25,10 +28,13 @@ OCP_LATEST_RELEASE_URL = "https://mirror.openshift.com/pub/openshift-v4/x86_64/c
 ASSISTED_SERVICE_CLONE_CMD = "git clone https://{user_password}@github.com/openshift/assisted-service.git"
 UPDATED_FILES = ["default_ocp_versions.json", "config/onprem-iso-fcc.yaml", "onprem-environment"]
 OCP_VERSION_REGEX = re.compile("quay.io/openshift-release-dev/ocp-release:(.*)-x86_64")
-PR_MESSAGE = "{task}, Update OCP version to {version}"
+JENKINS_URL = "http://assisted-jenkins.usersys.redhat.com"
+PR_MESSAGE = "{task}, Bump OCP version from {current_version} to {version} (auto created)"
 BRANCH_NAME = "update_ocp_version_to_{version}"
 JIRA_SERVER = "https://issues.redhat.com/"
+TEST_INFRA_JOB = "assisted-test-infra/master"
 DEFAULT_NETRC_FILE = "~/.netrc"
+HOLD_LABEL = "do-not-merge/hold"
 
 DEFAULT_WATCHERS = ["ronniela", "romfreiman", "lgamliel", "oscohen"]
 PR_MENTION = ["romfreiman", "ronniel1", "gamli75", "oshercc"]
@@ -46,13 +52,41 @@ def main(args):
         task = create_task(args, current_assisted_service_ocp_version, latest_ocp_version)
         # task is not created in case task is available
         if task:
-            update_ai_repo_to_new_ocp_version(args, current_assisted_service_ocp_version, latest_ocp_version, task)
-            open_pr(args, latest_ocp_version , task)
+            branch = update_ai_repo_to_new_ocp_version(args, current_assisted_service_ocp_version, latest_ocp_version, task)
+            pr = open_pr(args, current_assisted_service_ocp_version, latest_ocp_version , task)
+            test_changes(branch, pr)
         else:
             logging.info("update to version {} already available".format(latest_ocp_version))
 
     else:
         logging.info("OCP version {} is up to date".format(latest_ocp_version))
+
+
+def test_changes(branch, pr):
+    # TODO add coment in PR
+    if test_test_infra_passes(branch):
+        logging.info("Test-infra test passed, removing hold branch")
+        remove_hold_lable(pr)
+    else:
+        logging.WARN("Test-infra test failed, not removing hold label")
+
+
+def test_test_infra_passes(branch):
+    jkusername, jkpassword = get_login(args.jenkins_user_password)
+    j = jenkins.Jenkins(JENKINS_URL, username=jkusername, password=jkpassword)
+    next_build_number = j.get_job_info(TEST_INFRA_JOB)['nextBuildNumber']
+    j.build_job(TEST_INFRA_JOB, parameters={"SERVICE_BRANCH": branch, "NOTIFY":False})
+    time.sleep(10)
+    while not j.get_build_info(TEST_INFRA_JOB, next_build_number)["result"]:
+        logging.info("waiting for job to finish")
+        time.sleep(30)
+    result = j.get_build_info(TEST_INFRA_JOB, next_build_number)["result"]
+    logging.info("Job finished with result {}".format(result))
+    return result == "SUCCESS"
+
+
+def remove_hold_lable(pr):
+    pr.remove_from_labels(HOLD_LABEL)
 
 
 def create_task(args, current_assisted_service_ocp_version, latest_ocp_version):
@@ -163,6 +197,7 @@ def commit_and_push_version_update_changes(new_version, message_prefix):
                                 cwd="assisted-service", shell=True)
 
     subprocess.check_output("git push origin HEAD:{}".format(branch), cwd="assisted-service", shell=True)
+    return branch
 
 def verify_latest_onprem_config():
     try:
@@ -173,23 +208,27 @@ def verify_latest_onprem_config():
 def update_ai_repo_to_new_ocp_version(args, old_ocp_version, new_ocp_version, ticket_id):
     clone_assisted_service(args.git_user_password)
     change_version_in_files(old_ocp_version, new_ocp_version)
-    commit_and_push_version_update_changes(new_ocp_version, ticket_id)
+    branch = commit_and_push_version_update_changes(new_ocp_version, ticket_id)
+    return branch
 
-def open_pr(args, new_version, task):
+def open_pr(args, current_version, new_version, task):
     branch = BRANCH_NAME.format(version=new_version)
 
     gusername, gpassword = get_login(args.git_user_password)
     g = Github(gusername, gpassword)
     repo = g.get_repo("openshift/assisted-service")
     body = " ".join(["@{}".format(user) for user in PR_MENTION])
-    pr = repo.create_pull(title=PR_MESSAGE.format(version=new_version, task=task), body=body,head=branch, base="master")
+    pr = repo.create_pull(title=PR_MESSAGE.format(current_version=current_version, target_version=new_version, task=task), body=body,head=branch, base="master")
+    pr.add_to_labels(HOLD_LABEL)
     logging.info("new PR opend {}".format(pr.url))
+    return pr
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-jup", "--jira-user-password", help="Username and password in the format of user:pass")
-    parser.add_argument("-gup", "--git-user-password", help="Username and password in the format of user:pass")
+    parser.add_argument("-jup", "--jira-user-password", help="JIRA Username and password in the format of user:pass")
+    parser.add_argument("-gup", "--git-user-password", help="GIT Username and password in the format of user:pass")
+    parser.add_argument("-jkup", "--jenkins-user-password",help="JENKINS Username and password in the format of user:pass")
     args = parser.parse_args()
 
     main(args)
