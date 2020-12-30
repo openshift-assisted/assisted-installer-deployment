@@ -63,26 +63,30 @@ def main(args):
 
 
 def test_changes(branch, pr):
-    # TODO add coment in PR
-    if test_test_infra_passes(branch):
+    test_infra_result = test_test_infra_passes(branch)
+    if test_infra_result[0]:
         logging.info("Test-infra test passed, removing hold branch")
         remove_hold_lable(pr)
+        pr.create_issue_comment("test-infra test passed, HOLD label removed, see {}".format(test_infra_result[1]))
     else:
         logging.WARN("Test-infra test failed, not removing hold label")
+        pr.create_issue_comment("test-infra test failed, HOLD label is set, see {}".format(test_infra_result[1]))
 
 
 def test_test_infra_passes(branch):
     jkusername, jkpassword = get_login(args.jenkins_user_password)
     j = jenkins.Jenkins(JENKINS_URL, username=jkusername, password=jkpassword)
     next_build_number = j.get_job_info(TEST_INFRA_JOB)['nextBuildNumber']
-    j.build_job(TEST_INFRA_JOB, parameters={"SERVICE_BRANCH": branch, "NOTIFY":False})
+    j.build_job(TEST_INFRA_JOB, parameters={"SERVICE_BRANCH": branch, "NOTIFY":False, "JOB_NAME": "Update_ocp_version"})
     time.sleep(10)
     while not j.get_build_info(TEST_INFRA_JOB, next_build_number)["result"]:
         logging.info("waiting for job to finish")
         time.sleep(30)
-    result = j.get_build_info(TEST_INFRA_JOB, next_build_number)["result"]
+    job_info = j.get_build_info(TEST_INFRA_JOB, next_build_number)
+    result = job_info["result"]
+    url = job_info["url"]
     logging.info("Job finished with result {}".format(result))
-    return result == "SUCCESS"
+    return result == "SUCCESS", url
 
 
 def remove_hold_lable(pr):
