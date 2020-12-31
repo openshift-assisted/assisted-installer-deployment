@@ -30,6 +30,9 @@ NEXT_VERSION_FILTER = '12347073'
 VALID_PRINT_FIELDS = ['key', 'summary', 'component', 'priority', 'status', 'assignee', 'fixVersion', 'sprint']
 DEFAULT_PRINT_FIELDS = ['component', 'priority', 'status', 'assignee']
 PERMENANT_PRINT_FIELDS = ['key', 'summary']
+TEAM_COMPONENT_PREFIX = 'AI-Team'
+PROJECT_LABELS = ['KNI-EDGE-4.8']
+ADMIN_ROLE_ID = '10002'
 
 logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
 logger = logging.getLogger(__name__)
@@ -159,9 +162,25 @@ class JiraTool():
     def __init__(self, jira, maxResults=MAX_RESULTS):
         self._jira = jira
         self._maxResults = maxResults
+        self._admin_in_projects = {}
 
     def jira(self):
         return self._jira
+
+    def is_admin_in_project(self, project):
+        try:
+            return self._admin_in_projects[project]
+        except:
+            pass
+
+        is_admin = False
+        try:
+            is_admin = self._jira.my_permissions(project)['permissions']['PROJECT_ADMIN']['havePermission']
+        except:
+            log_exception("Cannot get permissions for project {}".format(project))
+
+        self._admin_in_projects[project] = is_admin
+        return is_admin
 
     def link_tickets(self, ticket, to_ticket):
         try:
@@ -170,6 +189,9 @@ class JiraTool():
             res.raise_for_status()
         except:
             logger.exceptio("Error linking to %s", to_ticket.key)
+
+    def update_issue_fields(self, issue, fields_dict):
+        issue.update(fields=fields_dict, notify=self.is_admin_in_project(issue.fields.project.key))
 
     def add_assignee_as_contributor(self, ticket):
         try:
@@ -187,7 +209,7 @@ class JiraTool():
                 return
             contributor_names.append(assignee.name)
             logger.info("Adding %s as contributor to %s", assignee.name, ticket.key)
-            ticket.update(fields={FIELD_CONTRIBUTORS: [{'name': u} for u in contributor_names]}, notify=False)
+            self.update_issue_fields(ticket, {FIELD_CONTRIBUTORS: [{'name': u} for u in contributor_names]})
         except:
             logger.exception("Error adding contributor to %s", ticket.key)
 
@@ -206,6 +228,64 @@ class JiraTool():
                 self._jira.remove_watcher(ticket.key, watcher)
         except:
             logger.exception("Error removing watcher to %s", ticket.key)
+
+    def get_team_component(self, issue):
+        for c in issue.fields.components:
+            if c.name.startswith(TEAM_COMPONENT_PREFIX):
+                return c
+
+    def get_project_labels(self, issue):
+        labels = []
+        for l in issue.fields.labels:
+            if l in PROJECT_LABELS:
+                labels.append(l)
+
+        return labels
+
+    # There can only be one team component for an issue, so adding
+    # a team component, will replace the previous team component
+    def add_component(self, issue, component):
+        is_team_component = False
+        if component.startswith(TEAM_COMPONENT_PREFIX):
+            is_team_component = True
+        names = []
+        for c in issue.fields.components:
+            if c.name == component:
+                logger.debug("%s, is already in %s", component, issue.key)
+                return
+            if is_team_component and c.name.startswith(TEAM_COMPONENT_PREFIX):
+                logger.info("Removing team component %s from %s", c.name, issue.key)
+            else:
+                names.append({'name': c.name})
+        names.append({'name': component})
+        logger.info("add_component: updating %s with components: %s", issue.key, names)
+        self.update_issue_fields(issue, {"components":names})
+
+    def remove_component(self, issue, component):
+        was_found = False
+        names = []
+        for c in issue.fields.components:
+            if c.name == component:
+                logger.info("removing %s from %s", component, issue.key)
+                was_found = True
+            else:
+                names.append({'name': c.name})
+        if not was_found:
+            logger.debug("remove_component: component %s not found in %s", component, issue.key)
+        else:
+            logger.info("remove_component: updating %s with components: %s", issue.key, names)
+            self.update_issue_fields(issue, {"components":names})
+
+    def add_label(self, issue, label):
+        labels = [label]
+        for l in issue.fields.labels:
+            if l == label:
+                logger.debug("%s, is already in %s", label, issue.key)
+                return
+            else:
+                labels.append(c.name)
+        logger.info("add_label: updating %s with labels: %s", issue.key, labels)
+        self.update_issue_fields(issue, {"labels":labels})
 
     def get_selected_linked_issues(self, issues):
         linked_issue_keys = []
@@ -227,11 +307,14 @@ class JiraTool():
         return filtered_linked_issues, issue_keys_count
 
 
-    def get_selected_issues(self, issues, isEpicTasks=False):
+    def get_selected_issues(self, issues, isEpicTasks=False, onlyMgmtIssues=False):
         if not isEpicTasks:
             return issues
 
-        return self._jira.search_issues("\"Epic Link\" in (%s)" % (",".join([i.key for i in issues])),
+        extra_filter = ""
+        if onlyMgmtIssues:
+            extra_filter = ' and project = MGMT'
+        return self._jira.search_issues("\"Epic Link\" in (%s) %s" % (",".join([i.key for i in issues]), extra_filter),
                                         maxResults=self._maxResults)
 
     @staticmethod
@@ -283,6 +366,36 @@ def filter_issue_status(issues, statuses):
 
     return filtered_issues
 
+def epic_fixup(jtool, epic_list):
+    for epic in epic_list:
+        if epic.fields.issuetype.name != 'Epic':
+            logger.debug("Issue %s is not an Epic", epic.key)
+            continue
+        logger.info("Fixing epic %s", epic.key)
+
+        jtool.add_assignee_as_contributor(epic)
+
+        team = jtool.get_team_component(epic)
+        project_labels = jtool.get_project_labels(epic)
+        if team or project_labels:
+            epic_issues = jtool.get_selected_issues([epic], isEpicTasks=True, onlyMgmtIssues=True)
+
+        if team:
+            for i in epic_issues:
+                jtool.add_component(i, team.name)
+        else:
+            # should remove any Team Component from the epic tasks?
+            pass
+
+        if project_labels:
+            for i in epic_issues:
+                for l in project_labels:
+                    jtool.add_label(i, l)
+
+
+
+
+
 
 def main(args):
     j = jira_netrc_login(args.netrc)
@@ -304,14 +417,28 @@ def main(args):
 
             logger.info("setting sprint %s to issue %s", args.sprint, i.key)
             try:
-                i.update(fields={FIELD_SPRINT: args.sprint}, notify=False)
+                self.update_issue_fields(i, {FIELD_SPRINT: args.sprint})
             except:
                 log_exception("Could not set sprint of {}".format(i.key))
+        sys.exit()
+
+    if args.epic_fixup:
+        epic_fixup(jiraTool, jiraTool.get_selected_issues(issues))
         sys.exit()
 
     if args.update_contributors:
         for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
             jiraTool.add_assignee_as_contributor(i)
+        sys.exit()
+
+    if args.add_component is not None or args.remove_component is not None:
+        if args.add_component is not None:
+            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+                jiraTool.add_component(i, args.add_component)
+
+        if args.remove_component is not None:
+            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+                jiraTool.remove_component(i, args.remove_component)
         sys.exit()
 
     if args.add_watchers is not None or args.remove_watchers is not None:
@@ -348,8 +475,7 @@ def main(args):
                 logger.info("setting fixVersion %s to issue %s", args.fix_version, i.key)
                 i.fields.fixVersions = [{'name': args.fix_version}]
                 try:
-                    i.update(fields={'fixVersions': i.fields.fixVersions},
-                             notify=False)
+                    self.update_issue_fields(i, {'fixVersions': i.fields.fixVersions})
                 except:
                     log_exception("Could not set fixVersion of {}".format(i.key))
             else:
@@ -417,6 +543,9 @@ if __name__ == "__main__":
     selectors.add_argument("-cre", "--current-release-epics", action='store_const',
                            dest="search_query", const='filter in ("AI sprint planning current epics")',
                            help="Search for current release epics")
+    selectors.add_argument("-eff", "--epics-for-fixup", action='store_const',
+                           dest="search_query", const='filter = "AI epics for fixup"',
+                           help="Search for epics for fixup operation")
     selectors.add_argument("-tt", "--triaging-tickets", action='store_const',
                            dest="search_query", const='project = MGMT AND component = "Assisted-installer Triage"',
                            help="Search for Assisted Installer triaging tickets")
@@ -451,8 +580,18 @@ if __name__ == "__main__":
                      help="Assigne the tickets in search results to the provided sprint")
     ops.add_argument("-aw", "--add-watchers", default=None, nargs="+", help="Add the watcher to the selected tickets")
     ops.add_argument("-rw", "--remove-watchers", default=None, nargs="+", help="Remove the watcher from the selected tickets")
+    ops.add_argument("-ac", "--add-component", default=None, help="Add the component to the selected tickets")
+    ops.add_argument("-rc", "--remove-component", default=None, help="Remove the component from the selected tickets")
+    ops.add_argument("-ala", "--add-label", default=None, help="Add the label to the selected tickets")
+    ops.add_argument("-rla", "--remove-label", default=None, help="Remove the label from the selected tickets")
     ops.add_argument("-f", "--fix-version", help="Set the fixVersion of selected tickets")
     ops.add_argument("-uc", "--update-contributors", action="store_true", help="Add assignee to contributors")
+    ops.add_argument("-ef", "--epic-fixup", action="store_true", help=textwrap.dedent("""
+                                                                 Operate on epics. Will perform some common epic related fixups such as:
+                                                                 add assignee to the contributor field,
+                                                                 add epic's Team component to all tasks.
+                                                                 if epic has a project-related label, will add it to all tasks
+                                                                 """))
     args = parser.parse_args()
 
     if args.verbose:
