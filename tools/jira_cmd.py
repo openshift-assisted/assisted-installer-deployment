@@ -11,9 +11,10 @@ import argparse
 import netrc
 import logging
 import textwrap
+import pprint
 from urllib.parse import urlparse
-from tabulate import tabulate
 from collections import Counter
+from tabulate import tabulate
 import jira
 
 
@@ -97,7 +98,7 @@ def format_key_for_print(key, isMarkdown):
 
     return f"[{key}](https://issues.redhat.com/browse/{key})"
 
-def get_data_for_print(issues, isMarkdown=False, issues_count=None, print_fields=None):
+def get_data_for_print(issues, issues_count=None, print_fields=None):
     if not print_fields:
         print_fields = DEFAULT_PRINT_FIELDS
 
@@ -146,21 +147,20 @@ def print_report_csv(issues, issues_count=None, print_fields=None):
 
 
 def print_report_table(issues, isMarkdown=False, issues_count=None, print_fields=None):
-    _, data = get_data_for_print(issues, isMarkdown=isMarkdown, issues_count=issues_count,
+    _, data = get_data_for_print(issues, issues_count=issues_count,
                                  print_fields=print_fields)
     fmt = "github" if isMarkdown else "psql"
     print(tabulate(data, headers="keys", tablefmt=fmt))
 
 
 def print_raw(issues):
-    import pprint
     for i in issues:
         pprint.pprint(i.raw)
 
 
 class JiraTool():
-    def __init__(self, jira, maxResults=MAX_RESULTS):
-        self._jira = jira
+    def __init__(self, j, maxResults=MAX_RESULTS):
+        self._jira = j
         self._maxResults = maxResults
         self._admin_in_projects = {}
 
@@ -229,12 +229,15 @@ class JiraTool():
         except:
             logger.exception("Error removing watcher to %s", ticket.key)
 
-    def get_team_component(self, issue):
+    @staticmethod
+    def get_team_component(issue):
         for c in issue.fields.components:
             if c.name.startswith(TEAM_COMPONENT_PREFIX):
                 return c
+        return None
 
-    def get_project_labels(self, issue):
+    @staticmethod
+    def get_project_labels(issue):
         labels = []
         for l in issue.fields.labels:
             if l in PROJECT_LABELS:
@@ -364,7 +367,7 @@ class buildEpicFilterAction(argparse.Action):
     def __init__(self, option_strings, dest, nargs=None, **kwargs):
         if nargs is not None:
             raise ValueError("nargs not allowed")
-        super(buildEpicFilterAction, self).__init__(option_strings, dest, nargs, **kwargs)
+        super().__init__(option_strings, dest, nargs, **kwargs)
 
     def __call__(self, parser, namespace, values, option_string=None):
         setattr(namespace, self.dest, SEARCH_QUERY_EPICS + values)
@@ -411,7 +414,77 @@ def epic_fixup(jtool, epic_list):
                 jtool.remove_labels(i, missing_project_labels)
 
 
+def handle_component_update(args, jiraTool, issues):
+    if args.add_component is not None:
+        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+            jiraTool.add_component(i, args.add_component)
 
+    if args.remove_component is not None:
+        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+            jiraTool.remove_component(i, args.remove_component)
+
+
+def handle_labels_update(args, jiraTool, issues):
+    if args.add_labels is not None:
+        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+            jiraTool.add_labels(i, args.add_labels)
+
+    if args.remove_labels is not None:
+        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+            jiraTool.remove_labels(i, args.remove_labels)
+
+
+def handle_watchers_update(args, jiraTool, issues):
+    if args.add_watchers is not None:
+        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+            jiraTool.add_watchers(i, args.add_watchers)
+
+    if args.remove_watchers is not None:
+        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+            jiraTool.remove_watchers(i, args.remove_watchers)
+
+def handle_link_update(args, jiraTool, issues):
+    if args.link_to is not None:
+        to_ticket = jiraTool.jira().issue(args.link_to)
+        logger.info("Linking search result to %s", to_ticket.key)
+        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+            jiraTool.link_tickets(i, to_ticket)
+
+    if args.remove_link is not None:
+        to_remove = jiraTool.jira().issue(args.remove_link)
+        logger.info("Removing link to %s from search result to: ", to_remove)
+        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+            jiraTool.remove_links(i, to_remove)
+
+def handle_fix_version_update(args, jiraTool, issues):
+    for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+        if len(i.fields.fixVersions) != 1 or args.fix_version != i.fields.fixVersions[0].name:
+            if i.fields.status.name in ["Closed"]:
+                logger.info("Not changing fixVersion of %s because it is %s", i.key, i.fields.status)
+                continue
+
+            logger.info("setting fixVersion %s to issue %s", args.fix_version, i.key)
+            i.fields.fixVersions = [{'name': args.fix_version}]
+            try:
+                jiraTool.update_issue_fields(i, {'fixVersions': i.fields.fixVersions})
+            except:
+                log_exception("Could not set fixVersion of {}".format(i.key))
+        else:
+            logger.info("issue %s is already at fixVersion %s", i.key, args.fix_version)
+
+
+def handle_sprint_update(args, jiraTool, issues):
+    for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+        sprint_value = get_sprint_id(i)
+        if sprint_value == args.sprint:
+            logger.debug("Issue %s is already at sprint %s", i.key, args.sprint)
+            continue
+
+        logger.info("setting sprint %s to issue %s", args.sprint, i.key)
+        try:
+            jiraTool.update_issue_fields(i, {FIELD_SPRINT: args.sprint})
+        except:
+            log_exception("Could not set sprint of {}".format(i.key))
 
 
 def main(args):
@@ -426,17 +499,7 @@ def main(args):
         issues = jiraTool.jira().search_issues(args.search_query, maxResults=args.max_results)
 
     if args.sprint:
-        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
-            sprint_value = get_sprint_id(i)
-            if sprint_value == args.sprint:
-                logger.debug("Issue %s is already at sprint %s", i.key, args.sprint)
-                continue
-
-            logger.info("setting sprint %s to issue %s", args.sprint, i.key)
-            try:
-                self.update_issue_fields(i, {FIELD_SPRINT: args.sprint})
-            except:
-                log_exception("Could not set sprint of {}".format(i.key))
+        handle_sprint_update(args, jiraTool, issues)
         sys.exit()
 
     if args.epic_fixup:
@@ -449,64 +512,23 @@ def main(args):
         sys.exit()
 
     if args.add_labels is not None or args.remove_labels is not None:
-        if args.add_labels is not None:
-            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
-                jiraTool.add_labels(i, args.add_labels)
-
-        if args.remove_labels is not None:
-            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
-                jiraTool.remove_labels(i, args.remove_labels)
+        handle_labels_update(args, jiraTool, issues)
         sys.exit()
 
     if args.add_component is not None or args.remove_component is not None:
-        if args.add_component is not None:
-            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
-                jiraTool.add_component(i, args.add_component)
-
-        if args.remove_component is not None:
-            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
-                jiraTool.remove_component(i, args.remove_component)
+        handle_component_update(args, jiraTool, issues)
         sys.exit()
 
     if args.add_watchers is not None or args.remove_watchers is not None:
-        if args.add_watchers is not None:
-            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
-                jiraTool.add_watchers(i, args.add_watchers)
-
-        if args.remove_watchers is not None:
-            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
-                jiraTool.remove_watchers(i, args.remove_watchers)
+        handle_watchers_update(args, jiraTool, issues)
         sys.exit()
 
     if args.link_to is not None or args.remove_link is not None:
-        if args.link_to is not None:
-            to_ticket = jiraTool.jira().issue(args.link_to)
-            logger.info("Linking search result to %s", to_ticket.key)
-            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
-                jiraTool.link_tickets(i, to_ticket)
-
-        if args.remove_link is not None:
-            to_remove = jiraTool.jira().issue(args.remove_link)
-            logger.info("Removing link to %s from search result to: ", to_remove)
-            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
-                jiraTool.remove_links(i, to_remove)
+        handle_link_update(args, jiraTool, issues)
         sys.exit()
 
     if args.fix_version is not None:
-        for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
-            if len(i.fields.fixVersions) != 1 or args.fix_version != i.fields.fixVersions[0].name:
-                if i.fields.status.name in ["Closed"]:
-                    logger.info("Not changing fixVersion of %s because it is %s", i.key, i.fields.status)
-                    continue
-
-                logger.info("setting fixVersion %s to issue %s", args.fix_version, i.key)
-                i.fields.fixVersions = [{'name': args.fix_version}]
-                try:
-                    self.update_issue_fields(i, {'fixVersions': i.fields.fixVersions})
-                except:
-                    log_exception("Could not set fixVersion of {}".format(i.key))
-            else:
-                logger.info("issue %s is already at fixVersion %s", i.key, args.fix_version)
+        handle_fix_version_update(args, jiraTool, issues)
         sys.exit()
 
     issues_count = None
@@ -619,10 +641,10 @@ if __name__ == "__main__":
                                                                  add epic's Team component to all tasks.
                                                                  if epic has a project-related label, will add it to all tasks
                                                                  """))
-    args = parser.parse_args()
+    cmdline_args = parser.parse_args()
 
-    if args.verbose:
+    if cmdline_args.verbose:
         isVerbose = True
         logging.getLogger("__main__").setLevel(logging.DEBUG)
 
-    main(args)
+    main(cmdline_args)
