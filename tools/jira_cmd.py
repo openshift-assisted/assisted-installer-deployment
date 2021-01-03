@@ -31,7 +31,7 @@ VALID_PRINT_FIELDS = ['key', 'summary', 'component', 'priority', 'status', 'assi
 DEFAULT_PRINT_FIELDS = ['component', 'priority', 'status', 'assignee']
 PERMENANT_PRINT_FIELDS = ['key', 'summary']
 TEAM_COMPONENT_PREFIX = 'AI-Team'
-PROJECT_LABELS = ['KNI-EDGE-4.8']
+PROJECT_LABELS = ['KNI-EDGE-4.8', 'KNI-EDGE-4.8-DAY2']
 ADMIN_ROLE_ID = '10002'
 
 logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
@@ -274,18 +274,33 @@ class JiraTool():
             logger.debug("remove_component: component %s not found in %s", component, issue.key)
         else:
             logger.info("remove_component: updating %s with components: %s", issue.key, names)
-            self.update_issue_fields(issue, {"components":names})
+            self.update_issue_fields(issue, {"components": names})
 
-    def add_label(self, issue, label):
-        labels = [label]
+    def add_labels(self, issue, labels):
+        new_labels = labels.copy()
         for l in issue.fields.labels:
-            if l == label:
-                logger.debug("%s, is already in %s", label, issue.key)
-                return
+            if l in labels:
+                logger.debug("%s, is already in %s", l, issue.key)
             else:
-                labels.append(c.name)
-        logger.info("add_label: updating %s with labels: %s", issue.key, labels)
-        self.update_issue_fields(issue, {"labels":labels})
+                new_labels.append(l)
+        if new_labels != issue.fields.labels:
+            logger.info("add_labels: updating %s with labels: %s", issue.key, new_labels)
+            self.update_issue_fields(issue, {"labels": new_labels})
+
+    def remove_labels(self, issue, labels):
+        was_found = False
+        new_labels = []
+        for l in issue.fields.labels:
+            if l in labels:
+                logger.info("removing %s from %s", l, issue.key)
+                was_found = True
+            else:
+                new_labels.append(l)
+        if not was_found:
+            logger.debug("remove_labels: labels %s not found in %s", labels, issue.key)
+        else:
+            logger.info("remove_labels: updating %s with labels: %s", issue.key, new_labels)
+            self.update_issue_fields(issue, {"labels": new_labels})
 
     def get_selected_linked_issues(self, issues):
         linked_issue_keys = []
@@ -377,8 +392,7 @@ def epic_fixup(jtool, epic_list):
 
         team = jtool.get_team_component(epic)
         project_labels = jtool.get_project_labels(epic)
-        if team or project_labels:
-            epic_issues = jtool.get_selected_issues([epic], isEpicTasks=True, onlyMgmtIssues=True)
+        epic_issues = jtool.get_selected_issues([epic], isEpicTasks=True, onlyMgmtIssues=True)
 
         if team:
             for i in epic_issues:
@@ -389,9 +403,12 @@ def epic_fixup(jtool, epic_list):
 
         if project_labels:
             for i in epic_issues:
-                for l in project_labels:
-                    jtool.add_label(i, l)
+                jtool.add_labels(i, project_labels)
 
+        missing_project_labels = [l for l in PROJECT_LABELS if l not in project_labels]
+        if missing_project_labels:
+            for i in epic_issues:
+                jtool.remove_labels(i, missing_project_labels)
 
 
 
@@ -429,6 +446,16 @@ def main(args):
     if args.update_contributors:
         for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
             jiraTool.add_assignee_as_contributor(i)
+        sys.exit()
+
+    if args.add_labels is not None or args.remove_labels is not None:
+        if args.add_labels is not None:
+            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+                jiraTool.add_labels(i, args.add_labels)
+
+        if args.remove_labels is not None:
+            for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+                jiraTool.remove_labels(i, args.remove_labels)
         sys.exit()
 
     if args.add_component is not None or args.remove_component is not None:
@@ -582,8 +609,8 @@ if __name__ == "__main__":
     ops.add_argument("-rw", "--remove-watchers", default=None, nargs="+", help="Remove the watcher from the selected tickets")
     ops.add_argument("-ac", "--add-component", default=None, help="Add the component to the selected tickets")
     ops.add_argument("-rc", "--remove-component", default=None, help="Remove the component from the selected tickets")
-    ops.add_argument("-ala", "--add-label", default=None, help="Add the label to the selected tickets")
-    ops.add_argument("-rla", "--remove-label", default=None, help="Remove the label from the selected tickets")
+    ops.add_argument("-ala", "--add-labels", default=None, nargs="+", help="Add the label to the selected tickets")
+    ops.add_argument("-rla", "--remove-labels", nargs="+", default=None, help="Remove the label from the selected tickets")
     ops.add_argument("-f", "--fix-version", help="Set the fixVersion of selected tickets")
     ops.add_argument("-uc", "--update-contributors", action="store_true", help="Add assignee to contributors")
     ops.add_argument("-ef", "--epic-fixup", action="store_true", help=textwrap.dedent("""
