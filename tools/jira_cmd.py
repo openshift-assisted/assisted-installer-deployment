@@ -32,6 +32,7 @@ VALID_PRINT_FIELDS = ['key', 'summary', 'component', 'priority', 'status', 'assi
 DEFAULT_PRINT_FIELDS = ['component', 'priority', 'status', 'assignee']
 PERMENANT_PRINT_FIELDS = ['key', 'summary']
 TEAM_COMPONENT_PREFIX = 'AI-Team'
+NONE_EDGE_COMPONENTS = ['MGMT Integration']
 PROJECT_LABELS = ['KNI-EDGE-4.8', 'KNI-EDGE-4.8-DAY2']
 ADMIN_ROLE_ID = '10002'
 
@@ -39,6 +40,7 @@ logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
 logger = logging.getLogger(__name__)
 logging.getLogger("__main__").setLevel(logging.INFO)
 isVerbose = False
+isDryRun = False
 
 
 def log_exception(msg):
@@ -191,7 +193,10 @@ class JiraTool():
             logger.exceptio("Error linking to %s", to_ticket.key)
 
     def update_issue_fields(self, issue, fields_dict):
-        issue.update(fields=fields_dict, notify=self.is_admin_in_project(issue.fields.project.key))
+        if isDryRun:
+            print("Updating issue {} with fields: {}".format(issue.key, fields_dict))
+        else:
+            issue.update(fields=fields_dict, notify=self.is_admin_in_project(issue.fields.project.key))
 
     def add_assignee_as_contributor(self, ticket):
         try:
@@ -235,6 +240,16 @@ class JiraTool():
             if c.name.startswith(TEAM_COMPONENT_PREFIX):
                 return c
         return None
+
+    @staticmethod
+    # Returns True if one of the components provided is assigend to the issue
+    def get_existing_components(issue, components):
+        existing = []
+        for c in issue.fields.components:
+            for rc in components:
+                if rc == c.name:
+                    existing.append(rc)
+        return existing
 
     @staticmethod
     def get_project_labels(issue):
@@ -399,7 +414,8 @@ def epic_fixup(jtool, epic_list):
 
         if team:
             for i in epic_issues:
-                jtool.add_component(i, team.name)
+                if not jtool.get_existing_components(i, NONE_EDGE_COMPONENTS):
+                    jtool.add_component(i, team.name)
         else:
             # should remove any Team Component from the epic tasks?
             pass
@@ -610,6 +626,7 @@ if __name__ == "__main__":
     parser.add_argument("-li", "--linked-issues", action="store_true", help="Output the issues linked to selected issues")
     parser.add_argument("-m", "--max-results", default=MAX_RESULTS, help="Maximum results to return for search query")
     parser.add_argument("-v", "--verbose", action="store_true", help="Output verbose logging")
+    parser.add_argument("-d", "--dry-run", action="store_true", help="Do not update tickets")
     parser.add_argument("-et", "--epic-tasks", action="store_true",
                         help="Operate on tickets that belong to epics in selection, "
                         + "instead of the selected tickets themselves")
@@ -646,5 +663,7 @@ if __name__ == "__main__":
     if cmdline_args.verbose:
         isVerbose = True
         logging.getLogger("__main__").setLevel(logging.DEBUG)
+    if cmdline_args.dry_run:
+        isDryRun = True
 
     main(cmdline_args)
