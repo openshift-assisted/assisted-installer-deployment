@@ -26,6 +26,7 @@ logging.getLogger("__main__").setLevel(logging.INFO)
 ASSISTED_SERVICE_DOCPV = "https://raw.githubusercontent.com/openshift/assisted-service/master/default_ocp_versions.json"
 OCP_LATEST_RELEASE_URL = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/latest/release.txt"
 ASSISTED_SERVICE_CLONE_CMD = "git clone https://{user_password}@github.com/openshift/assisted-service.git"
+DELETE_ASSISTED_SERVICE_CLONE_CMD = "rm -rf assisted-service"
 UPDATED_FILES = ["default_ocp_versions.json", "config/onprem-iso-fcc.yaml", "onprem-environment"]
 OCP_VERSION_REGEX = re.compile("quay.io/openshift-release-dev/ocp-release:(.*)-x86_64")
 JENKINS_URL = "http://assisted-jenkins.usersys.redhat.com"
@@ -39,6 +40,7 @@ HOLD_LABEL = "do-not-merge/hold"
 DEFAULT_WATCHERS = ["ronniela", "romfreiman", "lgamliel", "oscohen"]
 PR_MENTION = ["romfreiman", "ronniel1", "gamli75", "oshercc"]
 DEFAULT_ASSIGN = "lgamliel"
+REPLACE_CONTEXT = ["\"{ocp_version}\"", "ocp-release:{ocp_version}"]
 
 def main(args):
     latest_ocp_version = get_latest_OCP_version()
@@ -178,17 +180,21 @@ def get_all_version_ocp_update_tickets(jclient):
     return set(issues)
 
 def clone_assisted_service(user_password):
+    subprocess.check_output(DELETE_ASSISTED_SERVICE_CLONE_CMD, shell=True)
     cmd = ASSISTED_SERVICE_CLONE_CMD.format(user_password=user_password)
     subprocess.check_output(cmd, shell=True)
 
 def change_version_in_files(old_version ,new_version):
     old_version = old_version.replace(".", "\.")
     for file in UPDATED_FILES:
-        subprocess.check_output(f"sed -i -e 's|{old_version}|{new_version}|g' assisted-service/{file}".format(
-            old_version=old_version,
-            new_version=new_version,
-            file=file
-        ),shell=True)
+        for context in REPLACE_CONTEXT:
+            old_version_context = context.format(ocp_version=old_version)
+            new_version_context = context.format(ocp_version=new_version)
+            subprocess.check_output(f"sed -i -e 's|{old_version_context}|{new_version_context}|g' assisted-service/{file}".format(
+                old_version=old_version,
+                new_version=new_version,
+                file=file
+            ),shell=True)
 
 def commit_and_push_version_update_changes(new_version, message_prefix):
     subprocess.check_output("git commit -am\'{} Updating OCP version to {}\'".format(message_prefix, new_version), cwd="assisted-service", shell=True)

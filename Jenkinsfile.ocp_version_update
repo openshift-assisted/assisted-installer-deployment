@@ -17,7 +17,7 @@ pipeline {
         stage('Update master and snapshot branch') {
             steps {
                 sh '''pip3 install -r requirements.txt'''
-                sh '''git clean -f'''
+                sh '''git clean -fdx'''
                 sh "python3 tools/new_minor_OCP_version.py -jup ${JIRA_CREDS} -gup ${GIT_CREDS} -jkup ${JENKINS_CRED}"
             }
         }
