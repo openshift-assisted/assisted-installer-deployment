@@ -218,7 +218,10 @@ def verify_latest_onprem_config():
 def update_ai_repo_to_new_ocp_version(args, old_ocp_version, new_ocp_version, ticket_id):
     clone_assisted_service(args.git_user_password)
     change_version_in_files(old_ocp_version, new_ocp_version)
-    subprocess.check_output("make update-ocp-version", shell=True)
+    try:
+        subprocess.check_output("make update-ocp-version", shell=True)
+    except:
+        pass
     branch = commit_and_push_version_update_changes(new_ocp_version, ticket_id)
     return branch
 
