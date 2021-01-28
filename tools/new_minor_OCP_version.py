@@ -7,7 +7,9 @@ import jenkins
 import logging
 import requests
 import argparse
+import sys
 import subprocess
+from bs4 import BeautifulSoup
 from github import Github
 
 ##############################################
@@ -43,7 +45,8 @@ DEFAULT_ASSIGN = "lgamliel"
 REPLACE_CONTEXT = ["\"{ocp_version}\"", "ocp-release:{ocp_version}"]
 
 def main(args):
-    latest_ocp_version = get_latest_OCP_version()
+    print(get_latest_OCP_fc_version("4.7.0-fc"))
+    sys.exit(0)
     current_assisted_service_ocp_version = get_default_OCP_version(latest_ocp_version)
 
     if latest_ocp_version != current_assisted_service_ocp_version:
@@ -102,8 +105,23 @@ def create_task(args, current_assisted_service_ocp_version, latest_ocp_version):
     return task
 
 
-def get_latest_OCP_version():
-    res = requests.get(OCP_LATEST_RELEASE_URL)
+def get_latest_OCP_fc_version(version):
+    res = requests.get("https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp-dev-preview/")
+    if not res.ok:
+        raise "can\'t get OCP fc versions"
+
+    page = res.text
+    soup = BeautifulSoup(page, 'html.parser')
+    fc_versions = [node.get('href') for node in soup.find_all('a') if node.get('href').startswith(version)]
+    latest = max(fc_versions)
+    release_file = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp-dev-preview/{}release.txt".format(latest)
+
+    return get_latest_OCP_version(release_file)
+
+def get_latest_OCP_version(page=None):
+    if not page:
+        page = OCP_LATEST_RELEASE_URL
+    res = requests.get(page)
     if not res.ok:
         raise "can\'t get OCP version"
 
