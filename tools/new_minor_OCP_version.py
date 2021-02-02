@@ -1,14 +1,18 @@
 import re
+import os
 import json
 import jira
 import time
 import yaml
+import ruamel.yaml
 import jenkins
 import logging
 import requests
 import argparse
 import subprocess
+from functools import partial
 from github import Github
+import gitlab
 
 ##############################################
 # Updates OCP version by:
@@ -19,15 +23,22 @@ from github import Github
 #  * test test-infra
 ###############################################
 
-logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(levelname)-10s %(message)s')
 logger = logging.getLogger(__name__)
 logging.getLogger("__main__").setLevel(logging.INFO)
 
 ASSISTED_SERVICE_DOCPV = "https://raw.githubusercontent.com/openshift/assisted-service/master/default_ocp_versions.json"
 OCP_LATEST_RELEASE_URL = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/latest/release.txt"
-ASSISTED_SERVICE_CLONE_CMD = "git clone https://{user_password}@github.com/openshift/assisted-service.git"
+ASSISTED_SERVICE_CLONE_CMD = "git clone https://{user_password}@github.com/openshift/assisted-service.git --depth=1"
+APP_INTERFACE_GITLAB_REPO = "gitlab.cee.redhat.com"
+APP_INTERFACE_CLONE_CMD = f"git clone git@{APP_INTERFACE_GITLAB_REPO}:service/app-interface.git --depth=1"
+APP_INTERFACE_GITLAB_API = f'https://{APP_INTERFACE_GITLAB_REPO}'
+APP_INTERFACE_CLONE_SSH_COMMAND = "ssh -o StrictHostKeyChecking=accept-new -i '{gitlab_key}'"
 DELETE_ASSISTED_SERVICE_CLONE_CMD = "rm -rf assisted-service"
+DELETE_APP_INTERFACE_CLONE_CMD = "rm -rf app-interface"
 UPDATED_FILES = ["default_ocp_versions.json", "config/onprem-iso-fcc.yaml", "onprem-environment"]
+OPENSHIFT_TEMPLATE_YAML = "openshift/template.yaml"
+APP_INTERFACE_SAAS_YAML = "app-interface/data/services/assisted-installer/cicd/saas.yaml"
 OCP_VERSION_REGEX = re.compile("quay.io/openshift-release-dev/ocp-release:(.*)-x86_64")
 JENKINS_URL = "http://assisted-jenkins.usersys.redhat.com"
 PR_MESSAGE = "{task}, Bump OCP version from {current_version} to {target_version} (auto created)"
@@ -36,11 +47,13 @@ JIRA_SERVER = "https://issues.redhat.com/"
 TEST_INFRA_JOB = "assisted-test-infra/master"
 DEFAULT_NETRC_FILE = "~/.netrc"
 HOLD_LABEL = "do-not-merge/hold"
-
 DEFAULT_WATCHERS = ["ronniela", "romfreiman", "lgamliel", "oscohen"]
 PR_MENTION = ["romfreiman", "ronniel1", "gamli75", "oshercc"]
 DEFAULT_ASSIGN = "lgamliel"
 REPLACE_CONTEXT = ["\"{ocp_version}\"", "ocp-release:{ocp_version}"]
+REDHAT_CERT_URL = 'https://password.corp.redhat.com/RH-IT-Root-CA.crt'
+REDHAT_CERT_LOCATION = "/tmp/redhat.cert"
+
 
 def main(args):
     latest_ocp_version = get_latest_OCP_version()
@@ -51,12 +64,18 @@ def main(args):
             latest_ocp_version,
             current_assisted_service_ocp_version))
 
-        task = create_task(args, current_assisted_service_ocp_version, latest_ocp_version)
+        ticket_id = create_task(args, current_assisted_service_ocp_version, latest_ocp_version)
+
         # task is not created in case task is available
-        if task:
-            branch = update_ai_repo_to_new_ocp_version(args, current_assisted_service_ocp_version, latest_ocp_version, task)
-            pr = open_pr(args, current_assisted_service_ocp_version, latest_ocp_version , task)
-            test_changes(branch, pr)
+        if ticket_id is not None:
+            branch, openshift_versions_json = update_ai_repo_to_new_ocp_version(args, current_assisted_service_ocp_version, latest_ocp_version, ticket_id)
+            pr = open_pr(args, current_assisted_service_ocp_version, latest_ocp_version , ticket_id)
+            test_success = test_changes(branch, pr)
+
+            if test_success:
+                fork = create_app_interface_fork()
+                branch = update_ai_app_sre_repo_to_new_ocp_version(fork, args, latest_ocp_version, openshift_versions_json, ticket_id)
+                _pr = open_app_interface_pr(fork, branch, current_assisted_service_ocp_version, latest_ocp_version, ticket_id)
         else:
             logging.info("update to version {} already available".format(latest_ocp_version))
 
@@ -65,14 +84,16 @@ def main(args):
 
 
 def test_changes(branch, pr):
-    test_infra_result = test_test_infra_passes(branch)
-    if test_infra_result[0]:
+    succeeded, url = test_test_infra_passes(branch)
+    if succeeded:
         logging.info("Test-infra test passed, removing hold branch")
         remove_hold_lable(pr)
-        pr.create_issue_comment("test-infra test passed, HOLD label removed, see {}".format(test_infra_result[1]))
+        pr.create_issue_comment(f"test-infra test passed, HOLD label removed, see {url}")
     else:
-        logging.WARN("Test-infra test failed, not removing hold label")
-        pr.create_issue_comment("test-infra test failed, HOLD label is set, see {}".format(test_infra_result[1]))
+        logging.warning("Test-infra test failed, not removing hold label")
+        pr.create_issue_comment(f"test-infra test failed, HOLD label is set, see {url}")
+
+    return succeeded
 
 
 def test_test_infra_passes(branch):
@@ -184,6 +205,16 @@ def clone_assisted_service(user_password):
     cmd = ASSISTED_SERVICE_CLONE_CMD.format(user_password=user_password)
     subprocess.check_output(cmd, shell=True)
 
+def clone_app_interface(gitlab_key):
+    logging.info(DELETE_APP_INTERFACE_CLONE_CMD)
+    subprocess.check_output(DELETE_APP_INTERFACE_CLONE_CMD, shell=True)
+    logging.info(APP_INTERFACE_CLONE_CMD)
+    logging.info(APP_INTERFACE_CLONE_SSH_COMMAND.format(gitlab_key=gitlab_key))
+    subprocess.check_output(APP_INTERFACE_CLONE_CMD, shell=True,
+                            env={**os.environ,
+                                 "GIT_SSH_COMMAND": APP_INTERFACE_CLONE_SSH_COMMAND.format(gitlab_key=gitlab_key)
+                                 })
+
 def change_version_in_files(old_version ,new_version):
     old_version = old_version.replace(".", "\.")
     for file in UPDATED_FILES:
@@ -195,6 +226,39 @@ def change_version_in_files(old_version ,new_version):
                 new_version=new_version,
                 file=file
             ),shell=True)
+
+def add_single_node_fake_4_8_release_image(openshift_versions_json):
+    versions = json.loads(openshift_versions_json)
+    versions["4.8"] = {
+        "display_name": "4.7-single-node-alpha",
+        "release_image": "registry.svc.ci.openshift.org/sno-dev/openshift-bip:0.2.0",
+        "rhcos_image": "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/pre-release/4.7.0-fc.2/rhcos-4.7.0-fc.2-x86_64-live.x86_64.iso",
+        "rhcos_version": "47.83.202101091644-0",
+        "support_level": "beta"
+    }
+    return json.dumps(versions)
+
+def change_version_in_files_app_interface(openshift_versions_json):
+    # Use a round trip loader to preserve the file as much as possible
+    with open(APP_INTERFACE_SAAS_YAML) as f:
+        saas = ruamel.yaml.round_trip_load(f, preserve_quotes=True)
+
+    # This is used to find the integration target among the targets
+    integration_ref = {"$ref": "/services/assisted-installer/namespaces/assisted-installer-integration.yml"}
+
+    # Extract the integration target
+    integration = next(target for target in saas["resourceTemplates"][0]["targets"]
+                       if target["namespace"] == integration_ref)
+
+    # TODO: This line needs to be removed once 4.8 is actually released
+    openshift_versions_json = add_single_node_fake_4_8_release_image(openshift_versions_json)
+
+    integration["parameters"]["OPENSHIFT_VERSIONS"] = openshift_versions_json
+
+    with open(APP_INTERFACE_SAAS_YAML, "w") as f:
+        # Dump with a round-trip dumper to preserve the file as much as possible.
+        # Use arbitrarily high width to prevent diff caused by line wrapping
+        ruamel.yaml.round_trip_dump(saas, f, width=2**16)
 
 def commit_and_push_version_update_changes(new_version, message_prefix):
     subprocess.check_output("git commit -am\'{} Updating OCP version to {}\'".format(message_prefix, new_version), cwd="assisted-service", shell=True)
@@ -209,6 +273,44 @@ def commit_and_push_version_update_changes(new_version, message_prefix):
     subprocess.check_output("git push origin HEAD:{}".format(branch), cwd="assisted-service", shell=True)
     return branch
 
+def commit_and_push_version_update_changes_app_interface(gitlab_key, fork, new_version, message_prefix):
+    def cmd(*args, **kwargs):
+        logging.info(args)
+        subprocess.check_output(*args, **kwargs, env={
+            **os.environ,
+            "GIT_SSH_COMMAND": APP_INTERFACE_CLONE_SSH_COMMAND.format(gitlab_key=gitlab_key)
+        }, cwd="app-interface", shell=True)
+
+    branch = BRANCH_NAME.format(version=new_version)
+
+    cmd("git fetch --unshallow origin")
+    cmd(f"git remote add fork {fork.ssh_url_to_repo}")
+    cmd(f"git checkout -b {branch}")
+    cmd(f"git commit -am \'{message_prefix} Updating OCP version to {new_version}\'")
+    cmd("git push --set-upstream fork")
+
+    return branch
+
+def create_app_interface_fork():
+    with open(REDHAT_CERT_LOCATION, "w") as f:
+        f.write(requests.get(REDHAT_CERT_URL).text)
+
+    os.environ["REQUESTS_CA_BUNDLE"] = REDHAT_CERT_LOCATION
+
+    gl = gitlab.Gitlab(APP_INTERFACE_GITLAB_API, private_token=args.gitlab_token)
+    gl.auth()
+
+    forks = gl.projects.get('service/app-interface').forks
+    try:
+        fork = forks.create({})
+    except gitlab.GitlabCreateError as e:
+        if e.error_message['name'] != "has already been taken":
+            fork = gl.projects.get(f'{gl.user.username}/app-interface')
+        else:
+            raise
+
+    return fork
+
 def verify_latest_onprem_config():
     try:
         subprocess.check_output("make verify-latest-onprem-config", cwd="assisted-service", shell=True)
@@ -216,14 +318,27 @@ def verify_latest_onprem_config():
         pass
 
 def update_ai_repo_to_new_ocp_version(args, old_ocp_version, new_ocp_version, ticket_id):
-    clone_assisted_service(args.git_user_password)
+    clone_assisted_service(args.github_user_password)
     change_version_in_files(old_ocp_version, new_ocp_version)
     try:
         subprocess.check_output("make update-ocp-version", shell=True)
     except:
         pass
+
+    with open(OPENSHIFT_TEMPLATE_YAML) as f:
+        openshift_versions_json = [param["value"] for param in
+                                   yaml.safe_load(f)["parameters"] if
+                                   param["name"] == "OPENSHIFT_VERSIONS"]
+
     branch = commit_and_push_version_update_changes(new_ocp_version, ticket_id)
-    return branch
+    return branch, openshift_versions_json
+
+def update_ai_app_sre_repo_to_new_ocp_version(fork, args, new_ocp_version, openshift_versions_json, ticket_id):
+    clone_app_interface(args.gitlab_key_file)
+
+    change_version_in_files_app_interface(openshift_versions_json)
+
+    return commit_and_push_version_update_changes_app_interface(args.gitlab_key_file, fork, new_ocp_version, ticket_id)
 
 def open_pr(args, current_version, new_version, task):
     branch = BRANCH_NAME.format(version=new_version)
@@ -232,17 +347,38 @@ def open_pr(args, current_version, new_version, task):
     g = Github(gusername, gpassword)
     repo = g.get_repo("openshift/assisted-service")
     body = " ".join(["@{}".format(user) for user in PR_MENTION])
-    pr = repo.create_pull(title=PR_MESSAGE.format(current_version=current_version, target_version=new_version, task=task), body=body,head=branch, base="master")
+    pr = repo.create_pull(
+        title=PR_MESSAGE.format(current_version=current_version, target_version=new_version, task=task),
+        body=body,
+        head=branch,
+        base="master"
+    )
     pr.add_to_labels(HOLD_LABEL)
-    logging.info("new PR opend {}".format(pr.url))
+    logging.info("new PR opened {}".format(pr.url))
+    return pr
+
+def open_app_interface_pr(fork, branch, current_version, new_version, task):
+    body = " ".join(["@{}".format(user) for user in PR_MENTION])
+    pr = fork.mergerequests.create({
+        'title': PR_MESSAGE.format(current_version=current_version, target_version=new_version, task=task),
+        'description': body,
+        'source_branch': branch,
+        'target_branch': 'master',
+        'target_project_id': fork.forked_from_project["id"],
+        'source_project_id': fork.id
+    })
+
+    logging.info("New PR opened {}".format(pr.web_url))
+
     return pr
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
-    parser.add_argument("-jup", "--jira-user-password", help="JIRA Username and password in the format of user:pass")
-    parser.add_argument("-gup", "--git-user-password", help="GIT Username and password in the format of user:pass")
-    parser.add_argument("-jkup", "--jenkins-user-password",help="JENKINS Username and password in the format of user:pass")
+    parser.add_argument("-jup", "--jira-user-password", help="JIRA Username and password in the format of user:pass", required=True)
+    parser.add_argument("-ghup", "--github-user-password", help="GITHUB Username and password in the format of user:pass", required=True)
+    parser.add_argument("-glkf", "--gitlab-key-file", help="GITLAB key file", required=True)
+    parser.add_argument("-glto", "--gitlab-token", help="GITLAB user token", required=True)
+    parser.add_argument("-jkup", "--jenkins-user-password",help="JENKINS Username and password in the format of user:pass", required=True)
     args = parser.parse_args()
 
     main(args)
