@@ -14,6 +14,8 @@ from functools import partial
 from github import Github
 import gitlab
 
+script_dir = os.path.dirname(os.path.realpath(__file__))
+
 ##############################################
 # Updates OCP version by:
 #  * check if new version is available
@@ -53,6 +55,7 @@ DEFAULT_ASSIGN = "lgamliel"
 REPLACE_CONTEXT = ["\"{ocp_version}\"", "ocp-release:{ocp_version}"]
 REDHAT_CERT_URL = 'https://password.corp.redhat.com/RH-IT-Root-CA.crt'
 REDHAT_CERT_LOCATION = "/tmp/redhat.cert"
+CUSTOM_OPENSHIFT_IMAGES = os.path.join(script_dir, "custom_openshift_images.json")
 
 
 def main(args):
@@ -228,14 +231,11 @@ def change_version_in_files(old_version ,new_version):
             ),shell=True)
 
 def add_single_node_fake_4_8_release_image(openshift_versions_json):
+    with open(CUSTOM_OPENSHIFT_IMAGES) as f:
+        custom_images = json.load(f)
+
     versions = json.loads(openshift_versions_json)
-    versions["4.8"] = {
-        "display_name": "4.7-single-node-alpha",
-        "release_image": "registry.svc.ci.openshift.org/sno-dev/openshift-bip:0.2.0",
-        "rhcos_image": "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/pre-release/4.7.0-fc.2/rhcos-4.7.0-fc.2-x86_64-live.x86_64.iso",
-        "rhcos_version": "47.83.202101091644-0",
-        "support_level": "beta"
-    }
+    versions["4.8"] = custom_images["single-node-alpha"]
     return json.dumps(versions)
 
 def change_version_in_files_app_interface(openshift_versions_json):
