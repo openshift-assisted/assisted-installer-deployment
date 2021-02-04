@@ -3,7 +3,7 @@ pipeline {
     environment {
         SLACK_TOKEN = credentials('slack-token')
         JIRA_CREDS = credentials('Ronnie-jira')
-        GIT_CREDS = credentials('9fa5c056-6227-4f70-97df-6aa31854c20a')
+        GIT_CREDS = credentials('oshercc_github_cred')
         JENKINS_CRED = credentials('bot-user-jenkins')
     }
 

@@ -25,7 +25,7 @@ logging.getLogger("__main__").setLevel(logging.INFO)
 
 ASSISTED_SERVICE_DOCPV = "https://raw.githubusercontent.com/openshift/assisted-service/master/default_ocp_versions.json"
 OCP_LATEST_RELEASE_URL = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/latest/release.txt"
-ASSISTED_SERVICE_CLONE_CMD = "git clone https://{user_password}@github.com/openshift/assisted-service.git"
+ASSISTED_SERVICE_CLONE_CMD = "git clone https://{user_password}@github.com/oshercc/assisted-service.git"
 DELETE_ASSISTED_SERVICE_CLONE_CMD = "rm -rf assisted-service"
 UPDATED_FILES = ["default_ocp_versions.json", "config/onprem-iso-fcc.yaml", "onprem-environment"]
 OCP_VERSION_REGEX = re.compile("quay.io/openshift-release-dev/ocp-release:(.*)-x86_64")
@@ -35,7 +35,7 @@ BRANCH_NAME = "update_ocp_version_to_{version}"
 JIRA_SERVER = "https://issues.redhat.com/"
 TEST_INFRA_JOB = "assisted-test-infra/master"
 DEFAULT_NETRC_FILE = "~/.netrc"
-HOLD_LABEL = "do-not-merge/hold"
+ASSISTED_SERVICE_PR_REPO = "openshift/assisted-service"
 
 DEFAULT_WATCHERS = ["ronniela", "romfreiman", "lgamliel", "oscohen"]
 PR_MENTION = ["romfreiman", "ronniel1", "gamli75", "oshercc"]
@@ -65,6 +65,7 @@ def main(args):
 
 
 def test_changes(branch, pr):
+    logging.info("testing changes")
     test_infra_result = test_test_infra_passes(branch)
     if test_infra_result[0]:
         logging.info("Test-infra test passed, removing hold branch")
@@ -184,6 +185,10 @@ def clone_assisted_service(user_password):
     cmd = ASSISTED_SERVICE_CLONE_CMD.format(user_password=user_password)
     subprocess.check_output(cmd, shell=True)
 
+    subprocess.check_output("git remote add upstream https://github.com/openshift/assisted-service.git", shell=True, cwd="assisted-service")
+    subprocess.check_output("git fetch upstream", shell=True, cwd="assisted-service")
+    subprocess.check_output("git reset upstream/master --hard", shell=True, cwd="assisted-service")
+
 def change_version_in_files(old_version ,new_version):
     old_version = old_version.replace(".", "\.")
     for file in UPDATED_FILES:
@@ -205,7 +210,6 @@ def commit_and_push_version_update_changes(new_version, message_prefix):
     if subprocess.check_output("git status --porcelain", cwd="assisted-service", shell=True):
         subprocess.check_output("git commit -am\'{} Updating OCP latest onprem-config to {}\'".format(message_prefix, new_version),
                                 cwd="assisted-service", shell=True)
-
     subprocess.check_output("git push origin HEAD:{}".format(branch), cwd="assisted-service", shell=True)
     return branch
 
@@ -219,7 +223,7 @@ def update_ai_repo_to_new_ocp_version(args, old_ocp_version, new_ocp_version, ti
     clone_assisted_service(args.git_user_password)
     change_version_in_files(old_ocp_version, new_ocp_version)
     try:
-        subprocess.check_output("make update-ocp-version", shell=True)
+        subprocess.check_output("make update-ocp-version", cwd="assisted-service", shell=True)
     except:
         pass
     branch = commit_and_push_version_update_changes(new_ocp_version, ticket_id)
@@ -230,12 +234,18 @@ def open_pr(args, current_version, new_version, task):
 
     gusername, gpassword = get_login(args.git_user_password)
     g = Github(gusername, gpassword)
-    repo = g.get_repo("openshift/assisted-service")
+    repo = g.get_repo(ASSISTED_SERVICE_PR_REPO)
     body = " ".join(["@{}".format(user) for user in PR_MENTION])
-    pr = repo.create_pull(title=PR_MESSAGE.format(current_version=current_version, target_version=new_version, task=task), body=body,head=branch, base="master")
-    pr.add_to_labels(HOLD_LABEL)
+    pr = repo.create_pull(title=PR_MESSAGE.format(current_version=current_version, target_version=new_version, task=task), body=body, head="{}:{}".format("oshercc", branch), base="master")
+    hold_pr(pr)
     logging.info("new PR opend {}".format(pr.url))
     return pr
+
+def hold_pr(pr):
+    pr.create_issue_comment('/hold')
+
+def unhold_pr(pr):
+    pr.create_issue_comment('/unhold')
 
 if __name__ == "__main__":
 
