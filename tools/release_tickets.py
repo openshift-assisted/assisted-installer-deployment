@@ -214,12 +214,12 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
                 return
             fix_version_to_update = format_fix_version(to_commit)
 
-        update_fix_versions_for_all_bz_issues(bzclient, issues, fix_version_to_update, is_dry_run=is_dry_run)
+        update_fix_versions_for_all_issues(bzclient, issues, fix_version_to_update, is_dry_run=is_dry_run)
 
 def format_fix_version(version):
     return "OCP-Metal-{}".format(version)
 
-def update_fix_versions_for_all_bz_issues(bzclient, issues, fix_version, is_dry_run=False):
+def update_fix_versions_for_all_issues(bzclient, issues, fix_version, is_dry_run=False):
     bz_issues = []
     jira_issues = []
 

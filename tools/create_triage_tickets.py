@@ -75,6 +75,7 @@ def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
     url = "{}/files/{}".format(LOGS_COLLECTOR, failure_id)
     new_issue = jclient.create_issue(project="MGMT",
                                      summary=summary,
+                                     versions=[{'name': 'OpenShift {}'.format(cluster_md['openshift_version'])}],
                                      components=[{'name': "Assisted-installer Triage"}],
                                      priority={'name': 'Blocker'},
                                      issuetype={'name': 'Bug'},
