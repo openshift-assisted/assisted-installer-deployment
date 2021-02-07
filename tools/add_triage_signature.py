@@ -62,9 +62,10 @@ def days_ago(datestr):
 ############################
 class Signature:
     is_dry_run = False
-    def __init__(self, jira_client, comment_identifying_string):
+    def __init__(self, jira_client, comment_identifying_string, old_comment_string=None):
         self._jclient = jira_client
         self._identifing_string = comment_identifying_string
+        self._old_identifing_string = old_comment_string
 
     def update_ticket(self, url, issue_key, should_update=False):
         try:
@@ -86,11 +87,13 @@ class Signature:
         for comment in comments:
             if self._identifing_string in comment.body:
                 return comment
+            elif self._old_identifing_string and self._old_identifing_string in comment.body:
+                return comment
         return None
 
     def _update_triaging_ticket(self, key, comment, should_update=False):
         report = "\n"
-        report += self._identifing_string
+        report += self._identifing_string + "\n"
         report += comment
         jira_comment = self._find_signature_comment(key)
         signature_name = type(self).__name__
@@ -147,7 +150,8 @@ class Signature:
 
 class HostsStatusSignature(Signature):
     def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Host details:\n")
+        super().__init__(jira_client, comment_identifying_string="h1. Install status:",
+                         old_comment_string="h1. Host details:")
 
     def _update_ticket(self, url, issue_key, should_update=False):
 
@@ -174,7 +178,11 @@ class HostsStatusSignature(Signature):
                 role=role,
                 status_info=str(info)))
 
-        report = self._generate_table_for_report(hosts)
+        report = "h2. Cluster Status\n"
+        report += "*status:* {}\n".format(cluster['status'])
+        report += "*status_info:* {}\n".format(cluster['status_info'])
+        report += "h2. Hosts status\n"
+        report += self._generate_table_for_report(hosts)
         self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
@@ -218,7 +226,7 @@ class FailureDescription(Signature):
 
 class HostsExtraDetailSignature(Signature):
     def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Host extra details:\n")
+        super().__init__(jira_client, comment_identifying_string="h1. Host extra details:")
 
     def _update_ticket(self, url, issue_key, should_update=False):
 
@@ -252,7 +260,7 @@ class HostsExtraDetailSignature(Signature):
 
 class StorageDetailSignature(Signature):
     def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Host storage details:\n")
+        super().__init__(jira_client, comment_identifying_string="h1. Host storage details:")
 
     def _update_ticket(self, url, issue_key, should_update=False):
 
@@ -292,7 +300,7 @@ class StorageDetailSignature(Signature):
 
 class ComponentsVersionSignature(Signature):
     def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Components version information:\n")
+        super().__init__(jira_client, comment_identifying_string="h1. Components version information:")
 
     def _update_ticket(self, url, issue_key, should_update=False):
 
@@ -320,7 +328,7 @@ class ComponentsVersionSignature(Signature):
 
 class LibvirtRebootFlagSignature(Signature):
     def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Potential hosts with libvirt _on_reboot_ flag issue (MGMT-2840):\n")
+        super().__init__(jira_client, comment_identifying_string="h1. Potential hosts with libvirt _on_reboot_ flag issue (MGMT-2840):")
 
     def _update_ticket(self, url, issue_key, should_update=False):
 
