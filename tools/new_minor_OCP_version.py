@@ -57,6 +57,7 @@ EXCLUDED_ENVIRONMENTS = {"integration-v3", "staging", "production"}  # Don't upd
 ASSISTED_SERVICE_CLONE_DIR = "assisted-service"
 ASSISTED_SERVICE_GITHUB_REPO = "openshift/assisted-service"
 ASSISTED_SERVICE_CLONE_URL = f"https://{{user_password}}@github.com/{ASSISTED_SERVICE_GITHUB_REPO}.git"
+ASSISTED_SERVICE_UPSTREAM_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_REPO}.git"
 ASSISTED_SERVICE_MASTER_DEFAULT_OCP_VERSIONS_JSON_URL = \
     f"https://raw.githubusercontent.com/{ASSISTED_SERVICE_GITHUB_REPO}/master/default_ocp_versions.json"
 UPDATED_FILES = ["default_ocp_versions.json", "config/onprem-iso-fcc.yaml", "onprem-environment"]
@@ -154,6 +155,7 @@ def main(args):
 
 
 def test_changes(args, branch, pr):
+    logging.info("testing changes")
     succeeded, url = test_test_infra_passes(args, branch)
     if succeeded:
         logging.info("Test-infra test passed, removing hold branch")
@@ -277,6 +279,14 @@ def clone_assisted_service(user_password):
 
     cmd(["git", "clone", ASSISTED_SERVICE_CLONE_URL.format(user_password=user_password),
          "--depth=1", ASSISTED_SERVICE_CLONE_DIR])
+
+    def git_cmd(*args: str):
+        return cmd(("git", "-C", ASSISTED_SERVICE_CLONE_DIR) + args)
+
+    git_cmd(["remote", "add", "upstream", ASSISTED_SERVICE_UPSTREAM_URL])
+    git_cmd(["fetch", "upstream"])
+    git_cmd(["reset", "upstream/master", "--hard"])
+
 
 
 def clone_app_interface(gitlab_key_file):
@@ -453,6 +463,14 @@ def open_pr(args, current_version, new_version, task):
     return pr
 
 
+def hold_pr(pr):    
+    pr.create_issue_comment('/hold')
+
+
+def unhold_pr(pr):
+    pr.create_issue_comment('/unhold')
+
+
 def open_app_interface_pr(fork, branch, current_version, new_version, task):
     body = " ".join([f"@{user}" for user in PR_MENTION])
     body = f"{body}\nSee ticket {JIRA_BROWSE_TICKET.format(ticket_id=task)}"
@@ -465,6 +483,8 @@ def open_app_interface_pr(fork, branch, current_version, new_version, task):
         'target_project_id': fork.forked_from_project["id"],
         'source_project_id': fork.id
     })
+
+    hold_pr(pr)
 
     logging.info(f"New PR opened {pr.web_url}")
 
