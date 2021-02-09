@@ -56,7 +56,8 @@ EXCLUDED_ENVIRONMENTS = {"integration-v3", "staging", "production"}  # Don't upd
 # assisted-service PR related constants
 ASSISTED_SERVICE_CLONE_DIR = "assisted-service"
 ASSISTED_SERVICE_GITHUB_REPO = "openshift/assisted-service"
-ASSISTED_SERVICE_CLONE_URL = f"https://{{user_password}}@github.com/{ASSISTED_SERVICE_GITHUB_REPO}.git"
+ASSISTED_SERVICE_GITHUB_FORK_REPO = "{github_user}/assisted-service"
+ASSISTED_SERVICE_CLONE_URL = f"https://{{user_login}}@github.com/{ASSISTED_SERVICE_GITHUB_FORK_REPO}.git"
 ASSISTED_SERVICE_UPSTREAM_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_REPO}.git"
 ASSISTED_SERVICE_MASTER_DEFAULT_OCP_VERSIONS_JSON_URL = \
     f"https://raw.githubusercontent.com/{ASSISTED_SERVICE_GITHUB_REPO}/master/default_ocp_versions.json"
@@ -140,18 +141,20 @@ def main(args):
                                                                         current_assisted_service_ocp_version,
                                                                         latest_ocp_version, task)
     logging.info(f"Using versions JSON {openshift_versions_json}")
-    pr = open_pr(args, current_assisted_service_ocp_version, latest_ocp_version, task)
-    test_success = test_changes(args, branch, pr)
+    github_pr = open_pr(args, current_assisted_service_ocp_version, latest_ocp_version, task)
+    test_success = test_changes(args, branch, github_pr)
 
     if test_success:
         fork = create_app_interface_fork(args)
         app_interface_branch = update_ai_app_sre_repo_to_new_ocp_version(fork, args, latest_ocp_version,
                                                                          openshift_versions_json, task)
-        pr = open_app_interface_pr(fork, app_interface_branch, current_assisted_service_ocp_version,
-                                    latest_ocp_version,
-                                    task)
+        gitlab_pr = open_app_interface_pr(fork, app_interface_branch, current_assisted_service_ocp_version,
+                                   latest_ocp_version,
+                                   task)
 
-        jira_client.add_comment(task, f"Created a PR in app-interface GitLab {pr.web_url}")
+        jira_client.add_comment(task, f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
+        github_pr.create_issue_comment(f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
+
 
 
 def test_changes(args, branch, pr):
@@ -159,7 +162,7 @@ def test_changes(args, branch, pr):
     succeeded, url = test_test_infra_passes(args, branch)
     if succeeded:
         logging.info("Test-infra test passed, removing hold branch")
-        remove_hold_label(pr)
+        unhold_pr(pr)
         pr.create_issue_comment(f"test-infra test passed, HOLD label removed, see {url}")
     else:
         logging.warning("Test-infra test failed, not removing hold label")
@@ -175,18 +178,15 @@ def test_test_infra_passes(args, branch):
     jenkins_client.build_job(TEST_INFRA_JOB,
                              parameters={"SERVICE_BRANCH": branch, "NOTIFY": False, "JOB_NAME": "Update_ocp_version"})
     time.sleep(10)
+    url = jenkins_client.get_build_info(TEST_INFRA_JOB, next_build_number)["url"]
     while not jenkins_client.get_build_info(TEST_INFRA_JOB, next_build_number)["result"]:
-        logging.info("waiting for job to finish")
+        logging.info(f"Waiting for job {url} to finish")
         time.sleep(30)
     job_info = jenkins_client.get_build_info(TEST_INFRA_JOB, next_build_number)
     result = job_info["result"]
     url = job_info["url"]
     logging.info(f"Job finished with result {result}")
     return result == "SUCCESS", url
-
-
-def remove_hold_label(pr):
-    pr.remove_from_labels(HOLD_LABEL)
 
 
 def create_task(args, current_assisted_service_ocp_version, latest_ocp_version):
@@ -251,7 +251,7 @@ def create_jira_ticket(jira_client, latest_version, current_version):
                                         issuetype={'name': 'Task'},
                                         description=ticket_text)
     jira_client.assign_issue(new_task, DEFAULT_ASSIGN)
-    logger.info(f"Task created: {new_task}")
+    logger.info(f"Task created: {new_task} - {JIRA_BROWSE_TICKET.format(ticket_id=new_task)}")
     add_watchers(jira_client, new_task)
     return new_task
 
@@ -274,19 +274,20 @@ def get_all_version_ocp_update_tickets_summaries(jira_client):
     return set(issues)
 
 
-def clone_assisted_service(user_password):
+def clone_assisted_service(user_login):
+    username, _password = get_login(user_login)
+
     cmd(["rm", "-rf", ASSISTED_SERVICE_CLONE_DIR])
 
-    cmd(["git", "clone", ASSISTED_SERVICE_CLONE_URL.format(user_password=user_password),
-         "--depth=1", ASSISTED_SERVICE_CLONE_DIR])
+    cmd(["git", "clone",
+         ASSISTED_SERVICE_CLONE_URL.format(user_login=user_login, github_user=username), ASSISTED_SERVICE_CLONE_DIR])
 
     def git_cmd(*args: str):
         return cmd(("git", "-C", ASSISTED_SERVICE_CLONE_DIR) + args)
 
-    git_cmd(["remote", "add", "upstream", ASSISTED_SERVICE_UPSTREAM_URL])
-    git_cmd(["fetch", "upstream"])
-    git_cmd(["reset", "upstream/master", "--hard"])
-
+    git_cmd("remote", "add", "upstream", ASSISTED_SERVICE_UPSTREAM_URL)
+    git_cmd("fetch", "upstream")
+    git_cmd("reset", "upstream/master", "--hard")
 
 
 def clone_app_interface(gitlab_key_file):
@@ -371,7 +372,7 @@ def commit_and_push_version_update_changes(new_version, message_prefix):
 
         git_cmd("commit", "-a", "-m", f"{message_prefix} Updating OCP latest onprem-config to {new_version}")
 
-    git_cmd("git", "push", "origin", f"HEAD:{branch}")
+    git_cmd("push", "origin", f"HEAD:{branch}")
     return branch
 
 
@@ -449,21 +450,21 @@ def update_ai_app_sre_repo_to_new_ocp_version(fork, args, new_ocp_version, opens
 def open_pr(args, current_version, new_version, task):
     branch = BRANCH_NAME.format(version=new_version)
 
-    github_client = github.Github(*get_login(args.git_user_password))
+    github_client = github.Github(*get_login(args.github_user_password))
     repo = github_client.get_repo(ASSISTED_SERVICE_GITHUB_REPO)
     body = " ".join([f"@{user}" for user in PR_MENTION])
     pr = repo.create_pull(
         title=PR_MESSAGE.format(current_version=current_version, target_version=new_version, task=task),
         body=body,
-        head=branch,
+        head=f"{github_client.get_user().login}:{branch}",
         base="master"
     )
-    pr.add_to_labels(HOLD_LABEL)
+    hold_pr(pr)
     logging.info(f"new PR opened {pr.url}")
     return pr
 
 
-def hold_pr(pr):    
+def hold_pr(pr):
     pr.create_issue_comment('/hold')
 
 
@@ -476,15 +477,13 @@ def open_app_interface_pr(fork, branch, current_version, new_version, task):
     body = f"{body}\nSee ticket {JIRA_BROWSE_TICKET.format(ticket_id=task)}"
 
     pr = fork.mergerequests.create({
-        'title': PR_MESSAGE.format(current_version=current_version, target_version=new_version, ticket_id=task),
+        'title': PR_MESSAGE.format(current_version=current_version, target_version=new_version, task=task),
         'description': body,
         'source_branch': branch,
         'target_branch': 'master',
         'target_project_id': fork.forked_from_project["id"],
         'source_project_id': fork.id
     })
-
-    hold_pr(pr)
 
     logging.info(f"New PR opened {pr.web_url}")
 
