@@ -6,3 +6,4 @@ PyGithub>=1.54
 python-gitlab>=2.6.0
 jira>=2.0.0
 python-jenkins>=1.7.0
+packaging>=20.7

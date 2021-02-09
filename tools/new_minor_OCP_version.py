@@ -1,31 +1,34 @@
-import argparse
-import functools
-import json
-import logging
 import os
 import re
-import subprocess
+import json
+import yaml
 import time
+import logging
+import argparse
+import functools
+import subprocess
 
+from packaging import version
+
+import jira
 import github
 import gitlab
 import jenkins
-import jira
 import requests
 import ruamel.yaml
-import yaml
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 
-##############################################
+####################################################
 # Updates OCP version by:
 #  * check if new version is available
 #  * open OCP version JIRA ticket
 #  * create a update branch
 #  * open a GitHub PR for the changes
 #  * test test-infra
-#  * open an app-sre GitLab PR for the changes (integration environment only, for now)
-###############################################
+#  * open an app-sre GitLab PR for the changes
+#           (integration environment only, for now)
+#####################################################
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)-10s %(filename)s:%(lineno)d %(message)s')
 logger = logging.getLogger(__name__)
@@ -42,6 +45,7 @@ TICKET_DESCRIPTION = "OCP version update required, Latest version {latest_versio
 
 # Minor version detection
 OCP_LATEST_RELEASE_URL = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/latest/release.txt"
+OCP_FUTURE_RELEASE_URL = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp-dev-preview/{future_version}/release.txt"
 
 # app-interface PR related constants
 APP_INTERFACE_CLONE_DIR = "app-interface"
@@ -62,7 +66,7 @@ ASSISTED_SERVICE_UPSTREAM_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_RE
 ASSISTED_SERVICE_MASTER_DEFAULT_OCP_VERSIONS_JSON_URL = \
     f"https://raw.githubusercontent.com/{ASSISTED_SERVICE_GITHUB_REPO}/master/default_ocp_versions.json"
 UPDATED_FILES = ["default_ocp_versions.json", "config/onprem-iso-fcc.yaml", "onprem-environment"]
-HOLD_LABEL = "do-not-merge/hold"
+
 REPLACE_CONTEXT = ['"{ocp_version}"', "ocp-release:{ocp_version}"]
 OCP_VERSION_REGEX = re.compile(r"quay\.io/openshift-release-dev/ocp-release:(.*)-x86_64")
 OPENSHIFT_TEMPLATE_YAML = f"{ASSISTED_SERVICE_CLONE_DIR}/openshift/template.yaml"
@@ -83,14 +87,11 @@ JIRA_BROWSE_TICKET = f"{JIRA_SERVER}/browse/{{ticket_id}}"
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--jira-user-password", help="JIRA Username and password in the format of user:pass",
-                        required=True)
-    parser.add_argument("--github-user-password",
-                        help="GITHUB Username and password in the format of user:pass", required=True)
-    parser.add_argument("--gitlab-key-file", help="GITLAB key file", required=True)
-    parser.add_argument("--gitlab-token", help="GITLAB user token", required=True)
-    parser.add_argument("--jenkins-user-password",
-                        help="JENKINS Username and password in the format of user:pass", required=True)
+    parser.add_argument("-jup",  "--jira-user-password",    help="JIRA Username and password in the format of user:pass", required=True)
+    parser.add_argument("-gup",  "--github-user-password",  help="GITHUB Username and password in the format of user:pass", required=True)
+    parser.add_argument("-gkf",  "--gitlab-key-file",       help="GITLAB key file", required=True)
+    parser.add_argument("-gt",   "--gitlab-token",          help="GITLAB user token", required=True)
+    parser.add_argument("-jkup", "--jenkins-user-password", help="JENKINS Username and password in the format of user:pass", required=True)
     return parser.parse_args()
 
 
@@ -116,11 +117,46 @@ def cmd_with_git_ssh_key(key_file):
         "GIT_SSH_COMMAND": GIT_SSH_COMMAND_WITH_KEY.format(key=key_file)
     })
 
-
 def main(args):
-    latest_ocp_version = get_latest_ocp_version()
-    logging.info(f"Found latest version {latest_ocp_version}")
-    current_assisted_service_ocp_version = get_default_ocp_version(latest_ocp_version)
+    ocp_version_update(args)
+    ocp_future_version_update(args)
+
+def ocp_future_version_update(args):
+    logger.info("Searching and updating future OCP version")
+    latest_ocp_version = version.parse(get_latest_ocp_version())
+    future_version = "{major}.{minor}".format(major=latest_ocp_version.major, minor=latest_ocp_version.minor+1, micro=latest_ocp_version.micro)
+    current_assisted_service_ocp_future_version = get_default_ocp_version(future_version)
+
+    current_assisted_service_ocp_future_version_split = current_assisted_service_ocp_future_version.rsplit(".", 1)
+    next_version = "{}.{}".format(current_assisted_service_ocp_future_version_split[0], str(int(current_assisted_service_ocp_future_version_split[1]) + 1))
+    res = requests.get(OCP_FUTURE_RELEASE_URL.format(future_version=next_version))
+    if res.ok:
+        logger.info("New future ocp version available")
+    else:
+        logger.info("No new ocp version")
+        return
+
+    jira_client, task = create_task(args, current_assisted_service_ocp_future_version, next_version)
+
+    if task is None:
+        logging.info("Not creating PR because ticket already exists")
+        return
+
+    branch, openshift_versions_json = update_ai_repo_to_new_ocp_version(args,
+                                                                        current_assisted_service_ocp_future_version,
+                                                                        next_version, task)
+
+    logging.info(f"Using versions JSON {openshift_versions_json}")
+    github_pr = open_pr(args, current_assisted_service_ocp_future_version, next_version, task)
+    unhold_pr(github_pr)
+
+
+def ocp_version_update(args):
+    logger.info("Searching and updating OCP version")
+    latest_ocp_version = version.parse(get_latest_ocp_version())
+
+    ocp_version_major = "{major}.{minor}".format(major=latest_ocp_version.major, minor=latest_ocp_version.minor, micro=latest_ocp_version.micro)
+    current_assisted_service_ocp_version = get_default_ocp_version(ocp_version_major)
 
     if latest_ocp_version == current_assisted_service_ocp_version:
         logging.info(f"OCP version {latest_ocp_version} is up to date")
@@ -205,9 +241,7 @@ def get_latest_ocp_version():
     ocp_latest_release_data = yaml.load(version_yaml)
     return ocp_latest_release_data['Name']
 
-
-def get_default_ocp_version(latest_ocp_version):
-    ocp_version_major, *_ = latest_ocp_version.rsplit('.', 1)
+def get_default_ocp_version(ocp_version_major):
 
     res = requests.get(ASSISTED_SERVICE_MASTER_DEFAULT_OCP_VERSIONS_JSON_URL)
     if not res.ok:
