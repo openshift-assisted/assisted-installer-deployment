@@ -230,9 +230,10 @@ def get_rchos_default_release(ocp_version_major, release_json):
 
 
 def get_rchos_latest_release(ocp_version_major):
-    res = requests.get(RCHOS_LATEST_RELEASE_URL.format(version=ocp_version_major))
+    rchos_latest_release_url = RCHOS_LATEST_RELEASE_URL.format(version=ocp_version_major)
+    res = requests.get(rchos_latest_release_url)
     if not res.ok:
-        raise RuntimeError(f"GET {RCHOS_LATEST_RELEASE_URL} failed status {res.status_code}")
+        raise RuntimeError(f"GET {rchos_latest_release_url} failed status {res.status_code}")
     result = RHCOS_LIVE_ISO_REGEX.search(res.text)
     rhcos_latest_release = result.group(1)
     return rhcos_latest_release
