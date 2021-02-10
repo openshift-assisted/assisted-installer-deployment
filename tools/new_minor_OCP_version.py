@@ -51,7 +51,9 @@ OCP_FUTURE_RELEASE_URL = "https://mirror.openshift.com/pub/openshift-v4/x86_64/c
 
 # RCHOS version
 RCHOS_LATEST_RELEASE_URL = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/{version}/latest/sha256sum.txt"
+RCHOS_FUTURE_LATEST_RELEASE_URL = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/pre-release/latest/sha256sum.txt"
 RCHOS_LATEST_LIVE_ISO_URL = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/latest/{version}/rhcos-{version}-x86_64-live.x86_64.iso"
+
 RCHOS_VERSION_FROM_ISO_REGEX = re.compile("coreos.liveiso=rhcos-(.*) ")
 RCHOS_VERSION_FROM_DEFAULT_REGEX = re.compile("coreos.liveiso=rhcos-(.*) ")
 DOWNLOAD_LIVE_ISO_CMD = "curl {live_iso_url} -o {out_file}"
@@ -145,7 +147,7 @@ def rhcos_future_version_update(args):
     release_json = get_default_release_json()
 
     rhcos_future_default_release = get_rchos_default_release(future_version, release_json)
-    rhcos_future_latest_release = get_rchos_latest_release(future_version)
+    rhcos_future_latest_release = get_rchos_latest_release(RCHOS_FUTURE_LATEST_RELEASE_URL)
 
     if rhcos_future_default_release == rhcos_future_latest_release:
         logging.info(f"RCHOS version {rhcos_future_latest_release} is up to date")
@@ -179,7 +181,7 @@ def rhcos_version_update(args):
                                                  micro=latest_ocp_version.micro)
     release_json = get_default_release_json()
     rhcos_default_release = get_rchos_default_release(ocp_version_major, release_json)
-    rhcos_latest_release = get_rchos_latest_release(ocp_version_major)
+    rhcos_latest_release = get_rchos_latest_release(RCHOS_LATEST_RELEASE_URL.format(version=ocp_version_major))
 
     if rhcos_latest_release == rhcos_default_release:
         logging.info(f"RCHOS version {rhcos_latest_release} is up to date")
@@ -229,8 +231,7 @@ def get_rchos_default_release(ocp_version_major, release_json):
     return rhcos_default_version
 
 
-def get_rchos_latest_release(ocp_version_major):
-    rchos_latest_release_url = RCHOS_LATEST_RELEASE_URL.format(version=ocp_version_major)
+def get_rchos_latest_release(rchos_latest_release_url):
     res = requests.get(rchos_latest_release_url)
     if not res.ok:
         raise RuntimeError(f"GET {rchos_latest_release_url} failed status {res.status_code}")
