@@ -533,13 +533,13 @@ def commit_and_push_version_update_changes(new_version, message_prefix):
 
     branch = BRANCH_NAME.format(prefix=message_prefix, version=new_version)
 
-    verify_latest_onprem_config()
+    verify_latest_config()
     status_stdout, _ = git_cmd("status", "--porcelain", stdout=subprocess.PIPE)
     if len(status_stdout) != 0:
         for line in status_stdout.splitlines():
             logging.info(f"Found on-prem change in file {line}")
 
-        git_cmd("commit", "-a", "-m", f"{message_prefix} Updating OCP latest onprem-config to {new_version}")
+        git_cmd("commit", "-a", "-m", f"{message_prefix} Updating OCP latest config to {new_version}")
 
     git_cmd("push", "origin", f"HEAD:{branch}")
     return branch
@@ -581,9 +581,9 @@ def create_app_interface_fork(args):
             raise
     return fork
 
-def verify_latest_onprem_config():
+def verify_latest_config():
     try:
-        cmd(["make", "verify-latest-onprem-config"], cwd=ASSISTED_SERVICE_CLONE_DIR)
+        cmd(["make", "generate-ocp-version"], cwd=ASSISTED_SERVICE_CLONE_DIR)
     except subprocess.CalledProcessError as e:
         if e.returncode == 2:
             # We run the command just for its side-effects, we don't care if it fails
