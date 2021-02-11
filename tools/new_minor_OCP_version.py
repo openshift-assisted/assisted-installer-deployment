@@ -107,6 +107,7 @@ def parse_args():
     parser.add_argument("-gkf",  "--gitlab-key-file",       help="GITLAB key file", required=True)
     parser.add_argument("-gt",   "--gitlab-token",          help="GITLAB user token", required=True)
     parser.add_argument("-jkup", "--jenkins-user-password", help="JENKINS Username and password in the format of user:pass", required=True)
+    parser.add_argument("--dry-run",                        help="test run")
     return parser.parse_args()
 
 
@@ -132,11 +133,27 @@ def cmd_with_git_ssh_key(key_file):
         "GIT_SSH_COMMAND": GIT_SSH_COMMAND_WITH_KEY.format(key=key_file)
     })
 
-def main(args):
-    ocp_version_update(args)
-    ocp_future_version_update(args)
-    rhcos_version_update(args)
-    rhcos_future_version_update(args)
+def rhcos_version_update(args):
+    logger.info("Searching and updating RHCOS version")
+    latest_ocp_version = version.parse(get_latest_ocp_version())
+
+    ocp_version_major = "{major}.{minor}".format(major=latest_ocp_version.major, minor=latest_ocp_version.minor,
+                                                 micro=latest_ocp_version.micro)
+    release_json = get_default_release_json()
+    rhcos_default_release = get_rchos_default_release(ocp_version_major, release_json)
+    rhcos_latest_release = get_rchos_latest_release(RCHOS_LATEST_RELEASE_URL.format(version=ocp_version_major))
+
+    if rhcos_latest_release == rhcos_default_release:
+        logging.info(f"RCHOS version {rhcos_latest_release} is up to date")
+        return
+
+    jira_client, task = create_task(args, RCHOS_TICKET_DESCRIPTION, rhcos_default_release, rhcos_latest_release)
+    if task is None:
+        logging.info("Not creating PR because ticket already exists")
+        return
+
+    create_updated_rhcos_pr(args, ocp_version_major, release_json, rhcos_default_release, rhcos_latest_release, task)
+
 
 def rhcos_future_version_update(args):
     logger.info("Searching and updating RHCOS future version")
@@ -157,53 +174,25 @@ def rhcos_future_version_update(args):
         logging.info("Not creating PR because ticket already exists")
         return
 
-    clone_assisted_service(args.github_user_password)
+    create_updated_rhcos_pr(args, future_version, release_json, rhcos_future_default_release, rhcos_future_latest_release, task)
 
-    change_version_in_files(rhcos_future_default_release, rhcos_future_latest_release, RCHOS_RELEASE_REPLACE_CONTEXT)
-
-    rchos_version_from_iso = get_rchos_version_from_iso(rhcos_future_latest_release)
-    rhcos_version_from_default = release_json[future_version]['rhcos_version']
-
-    change_version_in_files(rhcos_version_from_default, rchos_version_from_iso, RCHOS_VERSION_REPLACE_CONTEXT)
-    cmd(["make", "update-ocp-version"], cwd=ASSISTED_SERVICE_CLONE_DIR)
-    branch = commit_and_push_version_update_changes(rhcos_future_latest_release, task)
-
-    github_pr = open_pr(args, rhcos_future_default_release, rhcos_future_latest_release, task)
-    unhold_pr(github_pr)
-
-
-def rhcos_version_update(args):
-    logger.info("Searching and updating RHCOS version")
-    latest_ocp_version = version.parse(get_latest_ocp_version())
-
-    ocp_version_major = "{major}.{minor}".format(major=latest_ocp_version.major, minor=latest_ocp_version.minor,
-                                                 micro=latest_ocp_version.micro)
-    release_json = get_default_release_json()
-    rhcos_default_release = get_rchos_default_release(ocp_version_major, release_json)
-    rhcos_latest_release = get_rchos_latest_release(RCHOS_LATEST_RELEASE_URL.format(version=ocp_version_major))
-
-    if rhcos_latest_release == rhcos_default_release:
-        logging.info(f"RCHOS version {rhcos_latest_release} is up to date")
-        return
-
-    jira_client, task = create_task(args, RCHOS_TICKET_DESCRIPTION, rhcos_default_release, rhcos_latest_release)
-    if task is None:
-        logging.info("Not creating PR because ticket already exists")
-        return
+def create_updated_rhcos_pr(args, ocp_version_major, release_json, rhcos_default_release, rhcos_latest_release, task):
 
     clone_assisted_service(args.github_user_password)
-
     change_version_in_files(rhcos_default_release, rhcos_latest_release, RCHOS_RELEASE_REPLACE_CONTEXT)
 
     rchos_version_from_iso = get_rchos_version_from_iso(rhcos_latest_release)
     rhcos_version_from_default = release_json[ocp_version_major]['rhcos_version']
 
     change_version_in_files(rhcos_version_from_default, rchos_version_from_iso, RCHOS_VERSION_REPLACE_CONTEXT)
-    cmd(["make", "update-ocp-version"], cwd=ASSISTED_SERVICE_CLONE_DIR)
+
+    cmd(["make", "generate-ocp-version"], cwd=ASSISTED_SERVICE_CLONE_DIR)
+
     branch = commit_and_push_version_update_changes(rhcos_latest_release, task)
 
     github_pr = open_pr(args, rhcos_default_release, rhcos_latest_release, task)
     unhold_pr(github_pr)
+
 
 def get_rchos_version_from_iso(rhcos_latest_release):
     live_iso_url = RCHOS_LATEST_LIVE_ISO_URL.format(version=rhcos_latest_release)
@@ -381,7 +370,6 @@ def get_default_ocp_version(ocp_version_major):
     ai_latest_ocp_version = result.group(1)
     return ai_latest_ocp_version
 
-0
 def get_default_release_json():
     res = requests.get(ASSISTED_SERVICE_MASTER_DEFAULT_OCP_VERSIONS_JSON_URL)
     if not res.ok:
@@ -593,7 +581,7 @@ def verify_latest_config():
 def update_ai_repo_to_new_version(args, old_version, new_version, replace_context, ticket_id):
     clone_assisted_service(args.github_user_password)
     change_version_in_files(old_version, new_version, replace_context)
-    cmd(["make", "update-ocp-version"], cwd=ASSISTED_SERVICE_CLONE_DIR)
+    cmd(["make", "generate-ocp-version"], cwd=ASSISTED_SERVICE_CLONE_DIR)
 
     with open(OPENSHIFT_TEMPLATE_YAML) as f:
         openshift_versions_json = next(param["value"] for param in
@@ -654,6 +642,11 @@ def open_app_interface_pr(fork, branch, current_version, new_version, task):
 
     return pr
 
+def main(args):
+    ocp_version_update(args)
+    ocp_future_version_update(args)
+    rhcos_version_update(args)
+    rhcos_future_version_update(args)
 
 if __name__ == "__main__":
     main(parse_args())
