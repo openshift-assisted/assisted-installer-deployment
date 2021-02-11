@@ -18,8 +18,6 @@ import jenkins
 import requests
 import ruamel.yaml
 
-script_dir = os.path.dirname(os.path.realpath(__file__))
-
 ####################################################
 # Updates OCP version by:
 #  * check if new version is available
@@ -65,7 +63,6 @@ APP_INTERFACE_GITLAB_REPO = f"service/{APP_INTERFACE_GITLAB_PROJECT}"
 APP_INTERFACE_GITLAB = "gitlab.cee.redhat.com"
 APP_INTERFACE_GITLAB_API = f'https://{APP_INTERFACE_GITLAB}'
 APP_INTERFACE_SAAS_YAML = f"{APP_INTERFACE_CLONE_DIR}/data/services/assisted-installer/cicd/saas.yaml"
-CUSTOM_OPENSHIFT_IMAGES = os.path.join(script_dir, "custom_openshift_images.json")
 EXCLUDED_ENVIRONMENTS = {"integration-v3", "staging", "production"}  # Don't update OPENSHIFT_VERSIONS in these envs
 
 # assisted-service PR related constants
@@ -100,6 +97,8 @@ TEST_INFRA_JOB = "assisted-test-infra/master"
 JIRA_SERVER = "https://issues.redhat.com"
 JIRA_BROWSE_TICKET = f"{JIRA_SERVER}/browse/{{ticket_id}}"
 
+script_dir = os.path.dirname(os.path.realpath(__file__))
+CUSTOM_OPENSHIFT_IMAGES = os.path.join(script_dir, "custom_openshift_images.json")
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -335,8 +334,14 @@ def test_test_infra_passes(args, branch):
     jenkins_client = jenkins.Jenkins(JENKINS_URL, username=username, password=password)
     next_build_number = jenkins_client.get_job_info(TEST_INFRA_JOB)['nextBuildNumber']
     logger.info("Test-infra build number: {}".format(next_build_number))
+
+    username, *_ = get_login(args.github_user_password)
     jenkins_client.build_job(TEST_INFRA_JOB,
-                             parameters={"SERVICE_BRANCH": branch, "NOTIFY": False, "JOB_NAME": "Update_ocp_version"})
+                             parameters={"SERVICE_BRANCH": branch,
+                                         "NOTIFY": False,
+                                         "JOB_NAME": "Update_ocp_version",
+                                         "SERVICE_REPO":ASSISTED_SERVICE_CLONE_URL.format(user_login=args.github_user_password, github_user=username)}
+                             )
     time.sleep(10)
     url = jenkins_client.get_build_info(TEST_INFRA_JOB, next_build_number)["url"]
     logger.info("Test-infra build url: {}".format(url))
