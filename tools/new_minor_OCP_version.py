@@ -100,6 +100,9 @@ JIRA_BROWSE_TICKET = f"{JIRA_SERVER}/browse/{{ticket_id}}"
 script_dir = os.path.dirname(os.path.realpath(__file__))
 CUSTOM_OPENSHIFT_IMAGES = os.path.join(script_dir, "custom_openshift_images.json")
 
+# Dry run params
+DRY_RUN_VERSION = "1.2.3"
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-jup",  "--jira-user-password",    help="JIRA Username and password in the format of user:pass", required=True)
@@ -110,28 +113,81 @@ def parse_args():
     parser.add_argument("--dry-run",                        help="test run")
     return parser.parse_args()
 
+def ocp_version_update(args):
+    logger.info("Searching and updating OCP version")
+    latest_ocp_version = version.parse(get_latest_ocp_version())
 
-def cmd(command, env=None, **kwargs):
-    logging.info(f"Running command {command} with env {env} kwargs {kwargs}")
+    ocp_version_major = "{major}.{minor}".format(major=latest_ocp_version.major, minor=latest_ocp_version.minor, micro=latest_ocp_version.micro)
+    current_assisted_service_ocp_version = get_default_ocp_version(ocp_version_major)
 
-    if env is None:
-        env = os.environ
+    if args.dry_run:
+        latest_ocp_version = DRY_RUN_VERSION
+
+    if latest_ocp_version == current_assisted_service_ocp_version:
+        logging.info(f"OCP version {latest_ocp_version} is up to date")
+        return
+
+    logging.info(
+        f"""OCP version mismatch,
+    latest version: {latest_ocp_version}
+    current version {current_assisted_service_ocp_version}""")
+
+    jira_client, task = create_task(args, OCP_TICKET_DESCRIPTION, current_assisted_service_ocp_version, latest_ocp_version)
+
+    if task is None:
+        logging.info("Not creating PR because ticket already exists")
+        return
+
+    branch, openshift_versions_json = update_ai_repo_to_new_version(args,
+                                                                        current_assisted_service_ocp_version,
+                                                                        latest_ocp_version,
+                                                                        OCP_REPLACE_CONTEXT,
+                                                                        task)
+    logging.info(f"Using versions JSON {openshift_versions_json}")
+    github_pr = open_pr(args, current_assisted_service_ocp_version, latest_ocp_version, task)
+    test_success = test_changes(args, branch, github_pr)
+
+    if test_success:
+        fork = create_app_interface_fork(args)
+        app_interface_branch = update_ai_app_sre_repo_to_new_ocp_version(fork, args, latest_ocp_version,
+                                                                         openshift_versions_json, task)
+        gitlab_pr = open_app_interface_pr(fork, app_interface_branch, current_assisted_service_ocp_version,
+                                   latest_ocp_version,
+                                   task)
+
+        jira_client.add_comment(task, f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
+        github_pr.create_issue_comment(f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
+
+def ocp_future_version_update(args):
+    logger.info("Searching and updating future OCP version")
+    latest_ocp_version = version.parse(get_latest_ocp_version())
+    future_version = "{major}.{minor}".format(major=latest_ocp_version.major, minor=latest_ocp_version.minor+1, micro=latest_ocp_version.micro)
+    current_assisted_service_ocp_future_version = get_default_ocp_version(future_version)
+
+    current_assisted_service_ocp_future_version_split = current_assisted_service_ocp_future_version.rsplit(".", 1)
+    next_version = "{}.{}".format(current_assisted_service_ocp_future_version_split[0], str(int(current_assisted_service_ocp_future_version_split[1]) + 1))
+    res = requests.get(OCP_FUTURE_RELEASE_URL.format(future_version=next_version))
+    if res.ok:
+        logger.info("New future ocp version available")
     else:
-        env = {**os.environ, **env}
+        logger.info("No new ocp version")
+        return
 
-    popen = subprocess.Popen(command, env=env, **kwargs)
-    stdout, stderr = popen.communicate()
+    jira_client, task = create_task(args, OCP_TICKET_DESCRIPTION, current_assisted_service_ocp_future_version, next_version)
 
-    if popen.returncode != 0:
-        raise subprocess.CalledProcessError(returncode=popen.returncode, cmd=command, output=stdout, stderr=stderr)
+    if task is None:
+        logging.info("Not creating PR because ticket already exists")
+        return
 
-    return stdout, stderr
+    branch, openshift_versions_json = update_ai_repo_to_new_version(args,
+                                                                        current_assisted_service_ocp_future_version,
+                                                                        next_version,
+                                                                        OCP_REPLACE_CONTEXT,
+                                                                        task)
 
-
-def cmd_with_git_ssh_key(key_file):
-    return functools.partial(cmd, env={
-        "GIT_SSH_COMMAND": GIT_SSH_COMMAND_WITH_KEY.format(key=key_file)
-    })
+    logging.info(f"Using versions JSON {openshift_versions_json}")
+    github_pr = open_pr(args, current_assisted_service_ocp_future_version, next_version, task)
+    unhold_pr(github_pr)
 
 def rhcos_version_update(args):
     logger.info("Searching and updating RHCOS version")
@@ -175,6 +231,28 @@ def rhcos_future_version_update(args):
         return
 
     create_updated_rhcos_pr(args, future_version, release_json, rhcos_future_default_release, rhcos_future_latest_release, task)
+
+def cmd(command, env=None, **kwargs):
+    logging.info(f"Running command {command} with env {env} kwargs {kwargs}")
+
+    if env is None:
+        env = os.environ
+    else:
+        env = {**os.environ, **env}
+
+    popen = subprocess.Popen(command, env=env, **kwargs)
+    stdout, stderr = popen.communicate()
+
+    if popen.returncode != 0:
+        raise subprocess.CalledProcessError(returncode=popen.returncode, cmd=command, output=stdout, stderr=stderr)
+
+    return stdout, stderr
+
+
+def cmd_with_git_ssh_key(key_file):
+    return functools.partial(cmd, env={
+        "GIT_SSH_COMMAND": GIT_SSH_COMMAND_WITH_KEY.format(key=key_file)
+    })
 
 def create_updated_rhcos_pr(args, ocp_version_major, release_json, rhcos_default_release, rhcos_latest_release, task):
 
@@ -226,83 +304,6 @@ def get_rchos_latest_release(rchos_latest_release_url):
     result = RHCOS_LIVE_ISO_REGEX.search(res.text)
     rhcos_latest_release = result.group(1)
     return rhcos_latest_release
-
-
-def ocp_future_version_update(args):
-    logger.info("Searching and updating future OCP version")
-    latest_ocp_version = version.parse(get_latest_ocp_version())
-    future_version = "{major}.{minor}".format(major=latest_ocp_version.major, minor=latest_ocp_version.minor+1, micro=latest_ocp_version.micro)
-    current_assisted_service_ocp_future_version = get_default_ocp_version(future_version)
-
-    current_assisted_service_ocp_future_version_split = current_assisted_service_ocp_future_version.rsplit(".", 1)
-    next_version = "{}.{}".format(current_assisted_service_ocp_future_version_split[0], str(int(current_assisted_service_ocp_future_version_split[1]) + 1))
-    res = requests.get(OCP_FUTURE_RELEASE_URL.format(future_version=next_version))
-    if res.ok:
-        logger.info("New future ocp version available")
-    else:
-        logger.info("No new ocp version")
-        return
-
-    jira_client, task = create_task(args, OCP_TICKET_DESCRIPTION, current_assisted_service_ocp_future_version, next_version)
-
-    if task is None:
-        logging.info("Not creating PR because ticket already exists")
-        return
-
-    branch, openshift_versions_json = update_ai_repo_to_new_version(args,
-                                                                        current_assisted_service_ocp_future_version,
-                                                                        next_version,
-                                                                        OCP_REPLACE_CONTEXT,
-                                                                        task)
-
-    logging.info(f"Using versions JSON {openshift_versions_json}")
-    github_pr = open_pr(args, current_assisted_service_ocp_future_version, next_version, task)
-    unhold_pr(github_pr)
-
-
-def ocp_version_update(args):
-    logger.info("Searching and updating OCP version")
-    latest_ocp_version = version.parse(get_latest_ocp_version())
-
-    ocp_version_major = "{major}.{minor}".format(major=latest_ocp_version.major, minor=latest_ocp_version.minor, micro=latest_ocp_version.micro)
-    current_assisted_service_ocp_version = get_default_ocp_version(ocp_version_major)
-
-    if latest_ocp_version == current_assisted_service_ocp_version:
-        logging.info(f"OCP version {latest_ocp_version} is up to date")
-        return
-
-    logging.info(
-        f"""OCP version mismatch,
-    latest version: {latest_ocp_version}
-    current version {current_assisted_service_ocp_version}""")
-
-    jira_client, task = create_task(args, OCP_TICKET_DESCRIPTION, current_assisted_service_ocp_version, latest_ocp_version)
-
-    if task is None:
-        logging.info("Not creating PR because ticket already exists")
-        return
-
-    branch, openshift_versions_json = update_ai_repo_to_new_version(args,
-                                                                        current_assisted_service_ocp_version,
-                                                                        latest_ocp_version,
-                                                                        OCP_REPLACE_CONTEXT,
-                                                                        task)
-    logging.info(f"Using versions JSON {openshift_versions_json}")
-    github_pr = open_pr(args, current_assisted_service_ocp_version, latest_ocp_version, task)
-    test_success = test_changes(args, branch, github_pr)
-
-    if test_success:
-        fork = create_app_interface_fork(args)
-        app_interface_branch = update_ai_app_sre_repo_to_new_ocp_version(fork, args, latest_ocp_version,
-                                                                         openshift_versions_json, task)
-        gitlab_pr = open_app_interface_pr(fork, app_interface_branch, current_assisted_service_ocp_version,
-                                   latest_ocp_version,
-                                   task)
-
-        jira_client.add_comment(task, f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
-        github_pr.create_issue_comment(f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
-
-
 
 def test_changes(args, branch, pr):
     logging.info("testing changes")
