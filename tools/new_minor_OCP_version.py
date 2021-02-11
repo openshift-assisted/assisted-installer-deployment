@@ -102,6 +102,16 @@ CUSTOM_OPENSHIFT_IMAGES = os.path.join(script_dir, "custom_openshift_images.json
 
 # Dry run params
 DRY_RUN_VERSION = "1.2.3"
+DRY_RUN_TASK = "TEAST-TEST"
+OCP_DR_TASK = "TEST-OCP-TASK"
+OCP_DR_FUTURE_TASK = "TEST-OCP-FUTURE-TASK"
+RHCOS_DR_TASK = "TEST-RHCOS-TASK"
+RHCOS_DR_FUTURE_TASK = "TEST-FUTURE-RHCOS-TASK"
+DRY_RUN_BRANCHES = ["TEST-OCP-TASK_update_ocp_version_to_1.2.3",
+                    "TEST-OCP-FUTURE-TASK_update_ocp_version_to_latest",
+                    "TEST-RHCOS-TASK_update_ocp_version_to_1.2.3",
+                    "TEST-FUTURE-RHCOS-TASK_update_ocp_version_to_1.2.3",
+                    ]
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -110,7 +120,7 @@ def parse_args():
     parser.add_argument("-gkf",  "--gitlab-key-file",       help="GITLAB key file", required=True)
     parser.add_argument("-gt",   "--gitlab-token",          help="GITLAB user token", required=True)
     parser.add_argument("-jkup", "--jenkins-user-password", help="JENKINS Username and password in the format of user:pass", required=True)
-    parser.add_argument("--dry-run",                        help="test run")
+    parser.add_argument("--dry-run", action='store_true',   help="test run")
     return parser.parse_args()
 
 def ocp_version_update(args):
@@ -134,16 +144,24 @@ def ocp_version_update(args):
 
     jira_client, task = create_task(args, OCP_TICKET_DESCRIPTION, current_assisted_service_ocp_version, latest_ocp_version)
 
+    if args.dry_run:
+        task = OCP_DR_TASK
+
     if task is None:
         logging.info("Not creating PR because ticket already exists")
         return
 
     branch, openshift_versions_json = update_ai_repo_to_new_version(args,
-                                                                        current_assisted_service_ocp_version,
-                                                                        latest_ocp_version,
-                                                                        OCP_REPLACE_CONTEXT,
-                                                                        task)
+                                                                    current_assisted_service_ocp_version,
+                                                                    latest_ocp_version,
+                                                                    OCP_REPLACE_CONTEXT,
+                                                                    task)
+
     logging.info(f"Using versions JSON {openshift_versions_json}")
+
+    if args.dry_run:
+        return
+
     github_pr = open_pr(args, current_assisted_service_ocp_version, latest_ocp_version, task)
     test_success = test_changes(args, branch, github_pr)
 
@@ -166,6 +184,10 @@ def ocp_future_version_update(args):
 
     current_assisted_service_ocp_future_version_split = current_assisted_service_ocp_future_version.rsplit(".", 1)
     next_version = "{}.{}".format(current_assisted_service_ocp_future_version_split[0], str(int(current_assisted_service_ocp_future_version_split[1]) + 1))
+
+    if args.dry_run:
+        next_version = "latest"
+
     res = requests.get(OCP_FUTURE_RELEASE_URL.format(future_version=next_version))
     if res.ok:
         logger.info("New future ocp version available")
@@ -175,17 +197,24 @@ def ocp_future_version_update(args):
 
     jira_client, task = create_task(args, OCP_TICKET_DESCRIPTION, current_assisted_service_ocp_future_version, next_version)
 
+    if args.dry_run:
+        task = OCP_DR_FUTURE_TASK
+
     if task is None:
         logging.info("Not creating PR because ticket already exists")
         return
 
     branch, openshift_versions_json = update_ai_repo_to_new_version(args,
-                                                                        current_assisted_service_ocp_future_version,
-                                                                        next_version,
-                                                                        OCP_REPLACE_CONTEXT,
-                                                                        task)
+                                                                    current_assisted_service_ocp_future_version,
+                                                                    next_version,
+                                                                    OCP_REPLACE_CONTEXT,
+                                                                    task)
 
     logging.info(f"Using versions JSON {openshift_versions_json}")
+
+    if args.dry_run:
+        return
+
     github_pr = open_pr(args, current_assisted_service_ocp_future_version, next_version, task)
     unhold_pr(github_pr)
 
@@ -199,11 +228,19 @@ def rhcos_version_update(args):
     rhcos_default_release = get_rchos_default_release(ocp_version_major, release_json)
     rhcos_latest_release = get_rchos_latest_release(RCHOS_LATEST_RELEASE_URL.format(version=ocp_version_major))
 
+    if args.dry_run:
+        rhcos_latest_release = DRY_RUN_VERSION
+
     if rhcos_latest_release == rhcos_default_release:
         logging.info(f"RCHOS version {rhcos_latest_release} is up to date")
         return
 
     jira_client, task = create_task(args, RCHOS_TICKET_DESCRIPTION, rhcos_default_release, rhcos_latest_release)
+
+    if args.dry_run:
+        task = RHCOS_DR_TASK
+        rhcos_latest_release = rhcos_default_release
+
     if task is None:
         logging.info("Not creating PR because ticket already exists")
         return
@@ -221,11 +258,19 @@ def rhcos_future_version_update(args):
     rhcos_future_default_release = get_rchos_default_release(future_version, release_json)
     rhcos_future_latest_release = get_rchos_latest_release(RCHOS_FUTURE_LATEST_RELEASE_URL)
 
+    if args.dry_run:
+        rhcos_future_latest_release = DRY_RUN_VERSION
+
     if rhcos_future_default_release == rhcos_future_latest_release:
         logging.info(f"RCHOS version {rhcos_future_latest_release} is up to date")
         return
 
     jira_client, task = create_task(args, RCHOS_TICKET_DESCRIPTION, rhcos_future_default_release, rhcos_future_latest_release)
+
+    if args.dry_run:
+        task = RHCOS_DR_FUTURE_TASK
+        rhcos_future_latest_release = rhcos_future_latest_release
+
     if task is None:
         logging.info("Not creating PR because ticket already exists")
         return
@@ -259,7 +304,12 @@ def create_updated_rhcos_pr(args, ocp_version_major, release_json, rhcos_default
     clone_assisted_service(args.github_user_password)
     change_version_in_files(rhcos_default_release, rhcos_latest_release, RCHOS_RELEASE_REPLACE_CONTEXT)
 
-    rchos_version_from_iso = get_rchos_version_from_iso(rhcos_latest_release)
+    if args.dry_run:
+        rchos_version_from_iso = "123456"
+        rhcos_latest_release = DRY_RUN_VERSION
+    else:
+        rchos_version_from_iso = get_rchos_version_from_iso(rhcos_latest_release)
+
     rhcos_version_from_default = release_json[ocp_version_major]['rhcos_version']
 
     change_version_in_files(rhcos_version_from_default, rchos_version_from_iso, RCHOS_VERSION_REPLACE_CONTEXT)
@@ -267,6 +317,9 @@ def create_updated_rhcos_pr(args, ocp_version_major, release_json, rhcos_default
     cmd(["make", "generate-ocp-version"], cwd=ASSISTED_SERVICE_CLONE_DIR)
 
     branch = commit_and_push_version_update_changes(rhcos_latest_release, task)
+
+    if args.dry_run:
+        return
 
     github_pr = open_pr(args, rhcos_default_release, rhcos_latest_release, task)
     unhold_pr(github_pr)
@@ -347,7 +400,7 @@ def test_test_infra_passes(args, branch):
 
 def create_task(args, description,  current_assisted_service_ocp_version, latest_ocp_version):
     jira_client = get_jira_client(*get_login(args.jira_user_password))
-    task = create_jira_ticket(jira_client, description, latest_ocp_version, current_assisted_service_ocp_version)
+    task = create_jira_ticket(jira_client, description, latest_ocp_version, current_assisted_service_ocp_version, args.dry_run)
     return jira_client, task
 
 
@@ -389,7 +442,7 @@ def get_login(user_password):
     return username, password
 
 
-def create_jira_ticket(jira_client, description, latest_version, current_version):
+def create_jira_ticket(jira_client, description, latest_version, current_version, dry_run):
     ticket_text = description.format(latest_version=latest_version, current_version=current_version)
 
     summaries = get_all_version_ocp_update_tickets_summaries(jira_client)
@@ -401,6 +454,9 @@ def create_jira_ticket(jira_client, description, latest_version, current_version
     except StopIteration:
         # No ticket found, we can create one
         pass
+
+    if dry_run:
+        return DRY_RUN_TASK
 
     new_task = jira_client.create_issue(project="MGMT",
                                         summary=ticket_text,
@@ -644,10 +700,23 @@ def open_app_interface_pr(fork, branch, current_version, new_version, task):
     return pr
 
 def main(args):
+
+    if args.dry_run:
+        delete_test_branches(args)
+
     ocp_version_update(args)
     ocp_future_version_update(args)
     rhcos_version_update(args)
     rhcos_future_version_update(args)
+
+
+def delete_test_branches(args):
+    clone_assisted_service(args.github_user_password)
+    for branch in DRY_RUN_BRANCHES:
+        try:
+            subprocess.check_output(f"git push origin --delete {branch}", shell=True, cwd=ASSISTED_SERVICE_CLONE_DIR)
+        except:
+                logger.info(f"Branch {branch} was not deleted on dry run cleanuo")
 
 if __name__ == "__main__":
     main(parse_args())
