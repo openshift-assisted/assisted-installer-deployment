@@ -21,7 +21,7 @@ DEFAULT_DAYS_TO_HANDLE = 30
 logger = logging.getLogger(__name__)
 
 JIRA_DESCRIPTION = """
-{color:red}Do not manually edit this description, it will get automatically over-written{color}
+{{color:red}}Do not manually edit this description, it will get automatically over-written{{color}}
 h1. Cluster Info
 
 *Cluster ID:* [{cluster_id}|https://cloud.redhat.com/openshift/assisted-installer/clusters/{cluster_id}]
