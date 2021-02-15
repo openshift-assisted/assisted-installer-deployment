@@ -21,6 +21,7 @@ DEFAULT_DAYS_TO_HANDLE = 30
 logger = logging.getLogger(__name__)
 
 JIRA_DESCRIPTION = """
+{color:red}Do not manually edit this description, it will get automatically over-written{color}
 h1. Cluster Info
 
 *Cluster ID:* [{cluster_id}|https://cloud.redhat.com/openshift/assisted-installer/clusters/{cluster_id}]
@@ -39,12 +40,6 @@ h1. Cluster Info
 * [Kibana|https://kibana-openshift-logging.apps.app-sre-prod-04.i5h0.p1.openshiftapps.com/app/kibana#/discover?_g=(refreshInterval:(pause:!t,value:0),time:(from:now-24h,mode:quick,to:now))&_a=(columns:!(_source),interval:auto,query:'{cluster_id}',sort:!('@timestamp',desc))]
 * [DM Elastic|http://assisted-elastic.usersys.redhat.com:5601/app/discover#/?_g=(filters:!(),query:(language:kuery,query:''),refreshInterval:(pause:!t,value:0),time:(from:now-2w,to:now))&_a=(columns:!(message,cluster_id),filters:!(),index:'2d6517b0-5432-11eb-8ff7-115676c7222d',interval:auto,query:(language:kuery,query:'cluster_id:%20%22{cluster_id}%22%20'),sort:!())]
 * [DM Elastic Dashboard|http://assisted-elastic.usersys.redhat.com:5601/app/dashboards#/view/500e1d40-58d6-11eb-8ff7-115676c7222d?_g=(filters:!(),query:(language:kuery,query:'cluster_id:%20%22{cluster_id}%22'),refreshInterval:(pause:!t,value:0),time:(from:now-2w,to:now))&_a=(description:'',filters:!(),fullScreenMode:!f,options:(hidePanelTitles:!f,useMargins:!t),query:(language:kuery,query:'cluster_id:%20%22{cluster_id}%22%20'),timeRestore:!f,title:'cluster%20overview',viewMode:view)]
-
-h1. Triage Results
-h2. Failure Reason:
-
-h2. Comments:
-
 """
 
 
