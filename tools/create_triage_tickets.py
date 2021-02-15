@@ -42,7 +42,8 @@ def format_labels(failure_data):
     return ["no-qe",
             "AI_CLOUD_TRIAGE",
             "AI_CLUSTER_{cluster_id}".format(**failure_data),
-            "AI_USER_{username}".format(**failure_data)]
+            "AI_USER_{username}".format(**failure_data),
+            "AI_DOMAIN_{domain}".format(**failure_data)]
 
 
 def get_all_triage_tickets(jclient):
@@ -80,6 +81,7 @@ def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
                                      priority={'name': 'Blocker'},
                                      issuetype={'name': 'Bug'},
                                      labels=format_labels({"username":cluster_md["user_name"],
+                                                           "domain":cluster_md["email_domain"],
                                                            "cluster_id":cluster_md["id"]}),
                                      description=ats.FailureDescription(jclient).build_description(url,
                                                                                                    cluster_md))

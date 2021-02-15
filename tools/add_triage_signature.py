@@ -25,6 +25,7 @@ h1. Cluster Info
 
 *Cluster ID:* [{cluster_id}|https://cloud.redhat.com/openshift/assisted-installer/clusters/{cluster_id}]
 *Username:* {username}
+*Email domain:* {domain}
 *Created_at:* {created_at}
 *Installation started at:* {installation_started_at}
 *Failed on:* {failed_on}
@@ -193,6 +194,7 @@ class FailureDescription(Signature):
     def build_description(self, url, cluster_md):
         cluster_data = {"cluster_id": cluster_md['id'],
                         "logs_url": self._logs_url_to_ui(url),
+                        "domain": cluster_md['email_domain'],
                         "openshift_version": cluster_md['openshift_version'],
                         "created_at": format_time(cluster_md['created_at']),
                         "installation_started_at": format_time(cluster_md['install_started_at']),
