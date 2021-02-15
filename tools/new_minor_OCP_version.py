@@ -69,6 +69,7 @@ EXCLUDED_ENVIRONMENTS = {"integration-v3", "staging", "production"}  # Don't upd
 ASSISTED_SERVICE_CLONE_DIR = "assisted-service"
 ASSISTED_SERVICE_GITHUB_REPO = "openshift/assisted-service"
 ASSISTED_SERVICE_GITHUB_FORK_REPO = "{github_user}/assisted-service"
+ASSISTED_SERVICE_FORKED_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_FORK_REPO}"
 ASSISTED_SERVICE_CLONE_URL = f"https://{{user_login}}@github.com/{ASSISTED_SERVICE_GITHUB_FORK_REPO}.git"
 ASSISTED_SERVICE_UPSTREAM_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_REPO}.git"
 ASSISTED_SERVICE_MASTER_DEFAULT_OCP_VERSIONS_JSON_URL = \
@@ -378,12 +379,12 @@ def test_test_infra_passes(args, branch):
     next_build_number = jenkins_client.get_job_info(TEST_INFRA_JOB)['nextBuildNumber']
     logger.info("Test-infra build number: {}".format(next_build_number))
 
-    username, *_ = get_login(args.github_user_password)
+    github_username, *_ = get_login(args.github_user_password)
     jenkins_client.build_job(TEST_INFRA_JOB,
                              parameters={"SERVICE_BRANCH": branch,
                                          "NOTIFY": False,
                                          "JOB_NAME": "Update_ocp_version",
-                                         "SERVICE_REPO":ASSISTED_SERVICE_CLONE_URL.format(user_login=args.github_user_password, github_user=username)}
+                                         "SERVICE_REPO":ASSISTED_SERVICE_FORKED_URL.format(github_user=github_username)}
                              )
     time.sleep(10)
     url = jenkins_client.get_build_info(TEST_INFRA_JOB, next_build_number)["url"]
