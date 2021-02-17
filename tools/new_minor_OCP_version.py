@@ -51,6 +51,7 @@ OCP_FUTURE_RELEASE_URL = "https://mirror.openshift.com/pub/openshift-v4/x86_64/c
 RCHOS_LATEST_RELEASE_URL = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/{version}/latest/sha256sum.txt"
 RCHOS_FUTURE_LATEST_RELEASE_URL = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/pre-release/latest/sha256sum.txt"
 RCHOS_LATEST_LIVE_ISO_URL = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/latest/{version}/rhcos-{version}-x86_64-live.x86_64.iso"
+RCHOS_FUTURE_LATEST_LIVE_ISO_URL = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/pre-release/latest/rhcos-{version}-x86_64-live.x86_64.iso"
 
 RCHOS_VERSION_FROM_ISO_REGEX = re.compile("coreos.liveiso=rhcos-(.*) ")
 RCHOS_VERSION_FROM_DEFAULT_REGEX = re.compile("coreos.liveiso=rhcos-(.*) ")
@@ -246,7 +247,7 @@ def rhcos_version_update(args):
         logging.info("Not creating PR because ticket already exists")
         return
 
-    create_updated_rhcos_pr(args, ocp_version_major, release_json, rhcos_default_release, rhcos_latest_release, task)
+    create_updated_rhcos_pr(args, ocp_version_major, release_json, rhcos_default_release, rhcos_latest_release, task, RCHOS_LATEST_LIVE_ISO_URL)
 
 
 def rhcos_future_version_update(args):
@@ -276,7 +277,7 @@ def rhcos_future_version_update(args):
         logging.info("Not creating PR because ticket already exists")
         return
 
-    create_updated_rhcos_pr(args, future_version, release_json, rhcos_future_default_release, rhcos_future_latest_release, task)
+    create_updated_rhcos_pr(args, future_version, release_json, rhcos_future_default_release, rhcos_future_latest_release, task, RCHOS_FUTURE_LATEST_LIVE_ISO_URL)
 
 def cmd(command, env=None, **kwargs):
     logging.info(f"Running command {command} with env {env} kwargs {kwargs}")
@@ -300,7 +301,7 @@ def cmd_with_git_ssh_key(key_file):
         "GIT_SSH_COMMAND": GIT_SSH_COMMAND_WITH_KEY.format(key=key_file)
     })
 
-def create_updated_rhcos_pr(args, ocp_version_major, release_json, rhcos_default_release, rhcos_latest_release, task):
+def create_updated_rhcos_pr(args, ocp_version_major, release_json, rhcos_default_release, rhcos_latest_release, task, iso_url):
 
     clone_assisted_service(args.github_user_password)
     change_version_in_files(rhcos_default_release, rhcos_latest_release, RCHOS_RELEASE_REPLACE_CONTEXT)
@@ -309,7 +310,7 @@ def create_updated_rhcos_pr(args, ocp_version_major, release_json, rhcos_default
         rchos_version_from_iso = "123456"
         rhcos_latest_release = DRY_RUN_VERSION
     else:
-        rchos_version_from_iso = get_rchos_version_from_iso(rhcos_latest_release)
+        rchos_version_from_iso = get_rchos_version_from_iso(rhcos_latest_release, iso_url)
 
     rhcos_version_from_default = release_json[ocp_version_major]['rhcos_version']
 
@@ -326,8 +327,8 @@ def create_updated_rhcos_pr(args, ocp_version_major, release_json, rhcos_default
     unhold_pr(github_pr)
 
 
-def get_rchos_version_from_iso(rhcos_latest_release):
-    live_iso_url = RCHOS_LATEST_LIVE_ISO_URL.format(version=rhcos_latest_release)
+def get_rchos_version_from_iso(rhcos_latest_release, iso_url):
+    live_iso_url = iso_url.format(version=rhcos_latest_release)
     with tempfile.NamedTemporaryFile() as tmp_live_iso_file:
         subprocess.check_output(
             DOWNLOAD_LIVE_ISO_CMD.format(live_iso_url=live_iso_url, out_file=tmp_live_iso_file.name), shell=True)
