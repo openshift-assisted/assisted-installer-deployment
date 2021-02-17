@@ -64,7 +64,7 @@ APP_INTERFACE_GITLAB_REPO = f"service/{APP_INTERFACE_GITLAB_PROJECT}"
 APP_INTERFACE_GITLAB = "gitlab.cee.redhat.com"
 APP_INTERFACE_GITLAB_API = f'https://{APP_INTERFACE_GITLAB}'
 APP_INTERFACE_SAAS_YAML = f"{APP_INTERFACE_CLONE_DIR}/data/services/assisted-installer/cicd/saas.yaml"
-EXCLUDED_ENVIRONMENTS = {"integration-v3", "staging", "production"}  # Don't update OPENSHIFT_VERSIONS in these envs
+EXCLUDED_ENVIRONMENTS = {"staging", "production"}  # Don't update OPENSHIFT_VERSIONS in these envs
 
 # assisted-service PR related constants
 ASSISTED_SERVICE_CLONE_DIR = "assisted-service"
@@ -548,7 +548,6 @@ def change_version_in_files_app_interface(openshift_versions_json):
 
     target_environments = {
         "integration": "/services/assisted-installer/namespaces/assisted-installer-integration.yml",
-        "integration-v3": "/services/assisted-installer/namespaces/assisted-installer-integration-v3.yml",
         "staging": "/services/assisted-installer/namespaces/assisted-installer-stage.yml",
         "production": "/services/assisted-installer/namespaces/assisted-installer-production.yml",
     }
@@ -654,7 +653,7 @@ def update_ai_repo_to_new_version(args, old_version, new_version, replace_contex
 def update_ai_app_sre_repo_to_new_ocp_version(fork, args, new_ocp_version, openshift_versions_json, ticket_id):
     clone_app_interface(args.gitlab_key_file)
 
-    change_version_in_files_app_interface(openshift_versions_json, OCP_REPLACE_CONTEXT)
+    change_version_in_files_app_interface(openshift_versions_json)
 
     return commit_and_push_version_update_changes_app_interface(args.gitlab_key_file, fork, new_ocp_version, ticket_id)
 
