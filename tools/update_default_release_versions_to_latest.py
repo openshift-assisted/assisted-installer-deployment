@@ -29,10 +29,10 @@ PR_MENTION = ["romfreiman", "ronniel1", "gamli75", "oshercc"]
 PR_MESSAGE = "{task}, Bump OCP versions"
 
 OCP_RELEASES = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/"
-RHCOS_RELEASES = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/{major}"
+RHCOS_RELEASES = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/{minor}"
 
 # RCHOS version
-RCHOS_LIVE_ISO_URL = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/{major}/{version}/rhcos-{version}-x86_64-live.x86_64.iso"
+RCHOS_LIVE_ISO_URL = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/{minor}/{version}/rhcos-{version}-x86_64-live.x86_64.iso"
 
 RCHOS_VERSION_FROM_ISO_REGEX = re.compile("coreos.liveiso=rhcos-(.*) ")
 DOWNLOAD_LIVE_ISO_CMD = "curl {live_iso_url} -o {out_file}"
@@ -287,8 +287,16 @@ def open_app_interface_pr(fork, branch, current_version, new_version, task):
     logging.info(f"New PR opened {pr.web_url}")
     return pr
 
-def get_latest_release_from_major(major_release: str, all_releases: list):
-    all_relevant_releases = [r for r in all_releases if r.startswith(major_release)]
+def get_latest_release_from_minor(minor_release: str, all_releases: list):
+    def is_pre_release(release):
+        return "-fc" in release or "-rc" in release
+
+    all_relevant_releases = [r for r in all_releases if r.startswith(minor_release) and not is_pre_release(r)]
+
+    if not all_relevant_releases:
+        all_relevant_releases = [r for r in all_releases if r.startswith(minor_release)]
+
+
     return sorted(all_relevant_releases, key=LooseVersion)[-1]
 
 def get_all_releases(path: str):
@@ -300,14 +308,14 @@ def get_all_releases(path: str):
     soup = BeautifulSoup(page, 'html.parser')
     return [node.get('href').replace("/", "") for node in soup.find_all('a')]
 
-def get_rchos_release_from_default_version_json(ocp_version_major, release_json):
-    rchos_release_image = release_json[ocp_version_major]['rhcos_image']
+def get_rchos_release_from_default_version_json(ocp_version_minor, release_json):
+    rchos_release_image = release_json[ocp_version_minor]['rhcos_image']
     result = RHCOS_LIVE_ISO_REGEX.search(rchos_release_image)
     rhcos_default_version = result.group(1)
     return rhcos_default_version
 
 def is_open_update_version_ticket(args):
-    jira_client, task = create_task(args, TICKET_DESCRIPTION)
+    jira_client = get_jira_client(*get_login(args.jira_user_password))
     open_tickets = jira_client.search_issues(f'component = "Assisted-Installer CI" AND status="TO DO" AND Summary~"{TICKET_DESCRIPTION}"', maxResults=False, fields=['summary', 'key'])
     if open_tickets:
         open_ticket_id = open_tickets[0].key
@@ -316,8 +324,9 @@ def is_open_update_version_ticket(args):
     return False
 
 def main(args):
+    dry_run = args.dry_run
 
-    if is_open_update_version_ticket(args):
+    if is_open_update_version_ticket(args) and not dry_run:
         logger.info("No updates today since there is a update waiting to bemergeed")
         return
 
@@ -328,37 +337,46 @@ def main(args):
     updates_made = set()
 
     for release in default_version_json:
-        latest_ocp_release = get_latest_release_from_major(release, all_ocp_releases)
+        latest_ocp_release = get_latest_release_from_minor(release, all_ocp_releases)
         current_default_ocp_release = default_version_json.get(release).get("display_name")
 
-        if current_default_ocp_release != latest_ocp_release:
+        if current_default_ocp_release != latest_ocp_release or dry_run:
             updates_made.add(release)
             logger.info(f"New latest ocp release available for {release}, {current_default_ocp_release} -> {latest_ocp_release}")
             updated_version_json[release]["display_name"] = latest_ocp_release
             updated_version_json[release]["release_image"] = updated_version_json[release]["release_image"].replace(current_default_ocp_release, latest_ocp_release)
 
         rhcos_default_release = get_rchos_release_from_default_version_json(release, default_version_json)
-        rhcos_latest_of_releases = get_all_releases(RHCOS_RELEASES.format(major=release))
-        rhcos_latest_release = get_latest_release_from_major(release, rhcos_latest_of_releases)
+        rhcos_latest_of_releases = get_all_releases(RHCOS_RELEASES.format(minor=release))
+        rhcos_latest_release = get_latest_release_from_minor(release, rhcos_latest_of_releases)
 
-        if rhcos_default_release != rhcos_latest_release:
+        if rhcos_default_release != rhcos_latest_release or dry_run:
             updates_made.add(release)
             logger.info(f"New latest rhcos release available, {rhcos_default_release} -> {rhcos_latest_release}")
             updated_version_json[release]["rhcos_image"] = updated_version_json[release]["rhcos_image"].replace(rhcos_default_release, rhcos_latest_release)
 
-            rchos_version_from_iso = get_rchos_version_from_iso(rhcos_latest_release, RCHOS_LIVE_ISO_URL.format(
-                major=release, version=rhcos_latest_release))
+            if dry_run:
+                rchos_version_from_iso = "8888888"
+            else:
+                rchos_version_from_iso = get_rchos_version_from_iso(rhcos_latest_release, RCHOS_LIVE_ISO_URL.format(minor=release, version=rhcos_latest_release))
             updated_version_json[release]["rhcos_version"] = rchos_version_from_iso
 
     if updates_made:
         logger.info(f"changes were made on the fallowing versions: {updates_made}")
-        jira_client, task = create_task(args, TICKET_DESCRIPTION)
+
+        if dry_run:
+            task = "TEST-8888"
+        else:
+            jira_client, task = create_task(args, TICKET_DESCRIPTION)
 
         clone_assisted_service(args.github_user_password)
 
         with open(os.path.join(ASSISTED_SERVICE_CLONE_DIR, DEFAULT_VERSIONS_FILES), 'w') as outfile:
             json.dump(updated_version_json, outfile, indent=8)
         verify_latest_config()
+
+        if dry_run:
+            return
 
         branch = commit_and_push_version_update_changes(task)
         github_pr = open_pr(args, task)
