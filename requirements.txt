@@ -7,3 +7,4 @@ python-gitlab>=2.6.0
 jira>=2.0.0
 python-jenkins>=1.7.0
 packaging>=20.7
+beautifulsoup4>=4.9.3
