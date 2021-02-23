@@ -190,7 +190,8 @@ def create_jira_ticket(jira_client, description):
                                         description=ticket_text)
     jira_client.assign_issue(new_task, DEFAULT_ASSIGN)
     logger.info(f"Task created: {new_task} - {JIRA_BROWSE_TICKET.format(ticket_id=new_task)}")
-    add_watchers(jira_client, new_task)
+    # TODO debug watcherrs call
+    # add_watchers(jira_client, new_task)
     return new_task
 
 
@@ -327,7 +328,7 @@ def main(args):
     dry_run = args.dry_run
 
     if is_open_update_version_ticket(args) and not dry_run:
-        logger.info("No updates today since there is a update waiting to bemergeed")
+        logger.info("No updates today since there is a update waiting to be merged")
         return
 
     default_version_json = get_default_release_json()
