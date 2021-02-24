@@ -21,7 +21,7 @@ pipeline {
             steps {
                 sh '''pip3 install -r requirements.txt'''
                 sh '''git clean -fdx'''
-                sh '''python3 tools/commit_and_push_version_update_changes.py\
+                sh '''python3 tools/update_default_release_versions_to_latest.py\
                  --jira-user-password "${JIRA_CREDS}"\
                  --github-user-password "${GITHUB_CREDS}"\
                  --gitlab-key-file "${GITLAB_PRIVKEY}"\
