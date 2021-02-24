@@ -118,7 +118,7 @@ def get_rchos_version_from_iso(rhcos_latest_release, iso_url):
         subprocess.check_output(
             DOWNLOAD_LIVE_ISO_CMD.format(live_iso_url=live_iso_url, out_file=tmp_live_iso_file.name), shell=True)
         try:
-            os.remove("tmp/zipl.prm")
+            os.remove("/tmp/zipl.prm")
         except:
             pass
         subprocess.check_output(f"7z x {tmp_live_iso_file.name} zipl.prm", shell=True, cwd="/tmp")
