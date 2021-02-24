@@ -124,8 +124,9 @@ def get_rchos_version_from_iso(rhcos_latest_release, iso_url):
             DOWNLOAD_LIVE_ISO_CMD.format(live_iso_url=live_iso_url, out_file=tmp_live_iso_file.name), shell=True)
         try:
             os.remove("/tmp/zipl.prm")
-        except:
+        except FileNotFoundError:
             pass
+
         subprocess.check_output(f"7z x {tmp_live_iso_file.name} zipl.prm", shell=True, cwd="/tmp")
         with open("/tmp/zipl.prm", 'r') as f:
             zipl_info = f.read()
@@ -499,7 +500,6 @@ def main(args):
         #     succeeded, url = test_test_infra_passes(args, branch, changed_release)
         #     if succeeded:
         #         logging.info(f"Test-infra for {changed_release} test passed, removing hold branch")
-        #         unhold_pr(github_pr)
         #         github_pr.create_issue_comment(f"test-infra test passed for release {changed_release}, see {url}")
         #     else:
         #         release_hold_label = False
