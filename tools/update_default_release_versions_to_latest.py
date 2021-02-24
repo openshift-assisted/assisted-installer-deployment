@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import yaml
 import time
 import copy
 import logging
@@ -14,8 +15,10 @@ from distutils.version import LooseVersion
 
 import jira
 import github
+import gitlab
 import jenkins
 import requests
+import ruamel.yaml
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)-10s %(filename)s:%(lineno)d %(message)s')
 logger = logging.getLogger(__name__)
@@ -46,17 +49,19 @@ APP_INTERFACE_GITLAB_REPO = f"service/{APP_INTERFACE_GITLAB_PROJECT}"
 APP_INTERFACE_GITLAB = "gitlab.cee.redhat.com"
 APP_INTERFACE_GITLAB_API = f'https://{APP_INTERFACE_GITLAB}'
 APP_INTERFACE_SAAS_YAML = f"{APP_INTERFACE_CLONE_DIR}/data/services/assisted-installer/cicd/saas.yaml"
-EXCLUDED_ENVIRONMENTS = {"integration-v3", "staging", "production"}  # Don't update OPENSHIFT_VERSIONS in these envs
+EXCLUDED_ENVIRONMENTS = {"staging", "production"}  # Don't update OPENSHIFT_VERSIONS in these envs
 
 # assisted-service PR related constants
 ASSISTED_SERVICE_CLONE_DIR = "assisted-service"
-ASSISTED_SERVICE_GITHUB_REPO = "openshift/assisted-service"
+ASSISTED_SERVICE_GITHUB_REPO_ORGANIZATION = "openshift"
+ASSISTED_SERVICE_GITHUB_REPO = f"{ASSISTED_SERVICE_GITHUB_REPO_ORGANIZATION}/assisted-service"
 ASSISTED_SERVICE_GITHUB_FORK_REPO = "{github_user}/assisted-service"
 ASSISTED_SERVICE_FORKED_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_FORK_REPO}"
-ASSISTED_SERVICE_CLONE_URL = f"https://{{user_login}}@github.com/{ASSISTED_SERVICE_GITHUB_FORK_REPO}.git"
+ASSISTED_SERVICE_CLONE_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_FORK_REPO}.git"
 ASSISTED_SERVICE_UPSTREAM_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_REPO}.git"
 ASSISTED_SERVICE_MASTER_DEFAULT_OCP_VERSIONS_JSON_URL = \
     f"https://raw.githubusercontent.com/{ASSISTED_SERVICE_GITHUB_REPO}/master/default_ocp_versions.json"
+ASSISTED_SERVICE_OPENSHIFT_TEMPLATE_YAML = f"{ASSISTED_SERVICE_CLONE_DIR}/openshift/template.yaml"
 
 OCP_REPLACE_CONTEXT = ['"{version}"', "ocp-release:{version}"]
 
@@ -204,13 +209,10 @@ def get_jira_client(username, password):
     logger.info("log-in with username: %s", username)
     return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
 
-def clone_assisted_service(user_login):
-    username, _password = get_login(user_login)
-
+def clone_assisted_service(github_user):
     cmd(["rm", "-rf", ASSISTED_SERVICE_CLONE_DIR])
 
-    cmd(["git", "clone",
-         ASSISTED_SERVICE_CLONE_URL.format(user_login=user_login, github_user=username), ASSISTED_SERVICE_CLONE_DIR])
+    cmd(["git", "clone", ASSISTED_SERVICE_CLONE_URL.format(github_user=github_user), ASSISTED_SERVICE_CLONE_DIR])
 
     def git_cmd(*args: str):
         return cmd(("git", "-C", ASSISTED_SERVICE_CLONE_DIR) + args)
@@ -272,12 +274,12 @@ def unhold_pr(pr):
     pr.create_issue_comment('/unhold')
 
 
-def open_app_interface_pr(fork, branch, current_version, new_version, task):
+def open_app_interface_pr(fork, branch, task):
     body = " ".join([f"@{user}" for user in PR_MENTION])
     body = f"{body}\nSee ticket {JIRA_BROWSE_TICKET.format(ticket_id=task)}"
 
     pr = fork.mergerequests.create({
-        'title': PR_MESSAGE.format(current_version=current_version, target_version=new_version, task=task),
+        'title': PR_MESSAGE.format(task=task),
         'description': body,
         'source_branch': branch,
         'target_branch': 'master',
@@ -324,12 +326,99 @@ def is_open_update_version_ticket(args):
         return True
     return False
 
+
+def create_app_interface_fork(args):
+    with open(REDHAT_CERT_LOCATION, "w") as f:
+        f.write(requests.get(REDHAT_CERT_URL).text)
+
+    os.environ["REQUESTS_CA_BUNDLE"] = REDHAT_CERT_LOCATION
+
+    gl = gitlab.Gitlab(APP_INTERFACE_GITLAB_API, private_token=args.gitlab_token)
+    gl.auth()
+
+    forks = gl.projects.get(APP_INTERFACE_GITLAB_REPO).forks
+    try:
+        fork = forks.create({})
+    except gitlab.GitlabCreateError as e:
+        if e.error_message['name'] != "has already been taken":
+            fork = gl.projects.get(f'{gl.user.username}/{APP_INTERFACE_GITLAB_PROJECT}')
+        else:
+            raise
+    return fork
+
+
+def clone_app_interface(gitlab_key_file):
+    cmd(["rm", "-rf", APP_INTERFACE_CLONE_DIR])
+
+    cmd_with_git_ssh_key(gitlab_key_file)(
+        ["git", "clone", f"git@{APP_INTERFACE_GITLAB}:{APP_INTERFACE_GITLAB_REPO}.git", "--depth=1",
+         APP_INTERFACE_CLONE_DIR]
+    )
+
+
+def commit_and_push_version_update_changes_app_interface(key_file, fork, message_prefix):
+    branch = BRANCH_NAME.format(prefix=message_prefix)
+
+    def git_cmd(*args: str):
+        cmd_with_git_ssh_key(key_file)(("git", "-C", APP_INTERFACE_CLONE_DIR) + args)
+
+    fork_remote_name = "fork"
+
+    git_cmd("fetch", "--unshallow", "origin")
+    git_cmd("remote", "add", fork_remote_name, fork.ssh_url_to_repo)
+    git_cmd("checkout", "-b", branch)
+    git_cmd("commit", "-a", "-m", f"{message_prefix} Updating versions to latest releases")
+    git_cmd("push", "--set-upstream", fork_remote_name)
+
+    return branch
+
+
+def add_single_node_fake_4_8_release_image(openshift_versions_json):
+    with open(CUSTOM_OPENSHIFT_IMAGES) as f:
+        custom_images = json.load(f)
+
+    versions = json.loads(openshift_versions_json)
+    versions["4.8"] = custom_images["single-node-alpha"]
+    return json.dumps(versions)
+
+
+def change_version_in_files_app_interface(openshift_versions_json):
+    # Use a round trip loader to preserve the file as much as possible
+    with open(APP_INTERFACE_SAAS_YAML) as f:
+        saas = ruamel.yaml.round_trip_load(f, preserve_quotes=True)
+
+    target_environments = {
+        "integration": "/services/assisted-installer/namespaces/assisted-installer-integration.yml",
+        "staging": "/services/assisted-installer/namespaces/assisted-installer-stage.yml",
+        "production": "/services/assisted-installer/namespaces/assisted-installer-production.yml",
+    }
+
+    # TODO: This line needs to be removed once 4.8 is actually released
+    openshift_versions_json = add_single_node_fake_4_8_release_image(openshift_versions_json)
+
+    # Ref is used to identify the environment inside the JSON
+    for environment, ref in target_environments.items():
+        if environment in EXCLUDED_ENVIRONMENTS:
+            continue
+
+        environment_conf = next(target for target in saas["resourceTemplates"][0]["targets"]
+                                if target["namespace"] == {"$ref": ref})
+
+        environment_conf["parameters"]["OPENSHIFT_VERSIONS"] = openshift_versions_json
+
+    with open(APP_INTERFACE_SAAS_YAML, "w") as f:
+        # Dump with a round-trip dumper to preserve the file as much as possible.
+        # Use arbitrarily high width to prevent diff caused by line wrapping
+        ruamel.yaml.round_trip_dump(saas, f, width=2 ** 16)
+
+
 def main(args):
     dry_run = args.dry_run
 
-    if is_open_update_version_ticket(args) and not dry_run:
-        logger.info("No updates today since there is a update waiting to be merged")
-        return
+    if not dry_run:
+        if is_open_update_version_ticket(args) and not dry_run:
+            logger.info("No updates today since there is a update waiting to be merged")
+            return
 
     default_version_json = get_default_release_json()
     updated_version_json = copy.deepcopy(default_version_json)
@@ -366,15 +455,23 @@ def main(args):
         logger.info(f"changes were made on the fallowing versions: {updates_made}")
 
         if dry_run:
-            task = "TEST-8888"
+            jira_client, task = None, "TEST-8888"
         else:
             jira_client, task = create_task(args, TICKET_DESCRIPTION)
 
-        clone_assisted_service(args.github_user_password)
+        clone_assisted_service(ASSISTED_SERVICE_GITHUB_REPO_ORGANIZATION if dry_run else get_login(args.github_user_password)[0])
 
         with open(os.path.join(ASSISTED_SERVICE_CLONE_DIR, DEFAULT_VERSIONS_FILES), 'w') as outfile:
             json.dump(updated_version_json, outfile, indent=8)
         verify_latest_config()
+
+        clone_app_interface(args.gitlab_key_file)
+        with open(ASSISTED_SERVICE_OPENSHIFT_TEMPLATE_YAML) as f:
+            openshift_versions_json = next(
+                param["value"] for param in yaml.safe_load(f)["parameters"] if param["name"] == "OPENSHIFT_VERSIONS"
+            )
+
+        change_version_in_files_app_interface(openshift_versions_json)
 
         if dry_run:
             return
@@ -382,6 +479,12 @@ def main(args):
         branch = commit_and_push_version_update_changes(task)
         github_pr = open_pr(args, task)
 
+        app_interface_fork = create_app_interface_fork(args)
+        app_interface_branch = commit_and_push_version_update_changes_app_interface(args.gitlab_key_file, app_interface_fork, task)
+        gitlab_pr = open_app_interface_pr(app_interface_fork, app_interface_branch, task)
+
+        jira_client.add_comment(task, f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
+        github_pr.create_issue_comment(f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
         # test changes
         release_hold_label = True
         for changed_release in updates_made:
@@ -402,6 +505,7 @@ def main(args):
         else:
             logger.info("Some or all of the test-infra tests failed, need to be checked before removing hold label")
             github_pr.create_issue_comment("Some or all of the test-infra tests failed, need to be checked before removing hold label")
+
 
 if __name__ == "__main__":
     main(parse_args())
