@@ -26,7 +26,7 @@ logging.getLogger("__main__").setLevel(logging.INFO)
 
 # Users / branch names / messages
 BRANCH_NAME = "{prefix}_update_assisted_service_versions"
-DEFAULT_ASSIGN = "lgamliel"
+DEFAULT_ASSIGN = "oscohen"
 DEFAULT_WATCHERS = ["ronniela", "romfreiman", "lgamliel", "oscohen"]
 PR_MENTION = ["romfreiman", "ronniel1", "gamli75", "oshercc"]
 PR_MESSAGE = "{task}, Bump OCP versions"
@@ -229,7 +229,6 @@ def commit_and_push_version_update_changes(message_prefix):
 
     branch = BRANCH_NAME.format(prefix=message_prefix)
 
-    verify_latest_config()
     status_stdout, _ = git_cmd("status", "--porcelain", stdout=subprocess.PIPE)
     if len(status_stdout) != 0:
         for line in status_stdout.splitlines():
@@ -414,6 +413,8 @@ def change_version_in_files_app_interface(openshift_versions_json):
 
 def main(args):
     dry_run = args.dry_run
+    if dry_run:
+        logger.info("Running dry-run")
 
     if not dry_run:
         if is_open_update_version_ticket(args) and not dry_run:
@@ -465,6 +466,9 @@ def main(args):
             json.dump(updated_version_json, outfile, indent=8)
         verify_latest_config()
 
+        if dry_run:
+            return
+
         clone_app_interface(args.gitlab_key_file)
         with open(ASSISTED_SERVICE_OPENSHIFT_TEMPLATE_YAML) as f:
             openshift_versions_json = next(
@@ -473,8 +477,6 @@ def main(args):
 
         change_version_in_files_app_interface(openshift_versions_json)
 
-        if dry_run:
-            return
 
         branch = commit_and_push_version_update_changes(task)
         github_pr = open_pr(args, task)
@@ -485,26 +487,32 @@ def main(args):
 
         jira_client.add_comment(task, f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
         github_pr.create_issue_comment(f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
-        # test changes
-        release_hold_label = True
-        for changed_release in updates_made:
-            succeeded, url = test_test_infra_passes(args, branch, changed_release)
-            if succeeded:
-                logging.info(f"Test-infra for {changed_release} test passed, removing hold branch")
-                unhold_pr(github_pr)
-                github_pr.create_issue_comment(f"test-infra test passed for release {changed_release}, see {url}")
-            else:
-                release_hold_label = False
-                logging.warning(f"Test-infra test failed for release {changed_release}")
-                github_pr.create_issue_comment(f"test-infra test failed for release {changed_release}, see {url}")
 
-        if release_hold_label:
-            logger.info(f"All tests infra tests passed, releasing HOLD label")
-            github_pr.create_issue_comment(f"All tests infra tests passed, releasing HOLD label")
-            unhold_pr(github_pr)
-        else:
-            logger.info("Some or all of the test-infra tests failed, need to be checked before removing hold label")
-            github_pr.create_issue_comment("Some or all of the test-infra tests failed, need to be checked before removing hold label")
+        github_pr.create_issue_comment(f"Currently no test platform is available, un-holding")
+        unhold_pr(github_pr)
+
+
+        # test changes,
+        # TODO add a testing platform for this section
+        # release_hold_label = True
+        # for changed_release in updates_made:
+        #     succeeded, url = test_test_infra_passes(args, branch, changed_release)
+        #     if succeeded:
+        #         logging.info(f"Test-infra for {changed_release} test passed, removing hold branch")
+        #         unhold_pr(github_pr)
+        #         github_pr.create_issue_comment(f"test-infra test passed for release {changed_release}, see {url}")
+        #     else:
+        #         release_hold_label = False
+        #         logging.warning(f"Test-infra test failed for release {changed_release}")
+        #         github_pr.create_issue_comment(f"test-infra test failed for release {changed_release}, see {url}")
+        #
+        # if release_hold_label:
+        #     logger.info(f"All tests infra tests passed, releasing HOLD label")
+        #     github_pr.create_issue_comment(f"All tests infra tests passed, releasing HOLD label")
+        #     unhold_pr(github_pr)
+        # else:
+        #     logger.info("Some or all of the test-infra tests failed, need to be checked before removing hold label")
+        #     github_pr.create_issue_comment("Some or all of the test-infra tests failed, need to be checked before removing hold label")
 
 
 if __name__ == "__main__":
