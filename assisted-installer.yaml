@@ -5,7 +5,7 @@ openshift/assisted-installer:
   - assisted-installer-controller-ocp
   - assisted-installer
 openshift/assisted-service:
-  revision: 1478f67a797f5413eccf04491517cb9840c15c7d
+  revision: dfc6374988fc7c683d4dec2994a46c9852f53b54
   images:
   - assisted-service
 openshift-assisted/assisted-ui:
@@ -34,6 +34,6 @@ openshift/assisted-installer-agent:
 #     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-agent-rhel8:v1.0.0-19
 #     production image name: registry.redhat.io/openshift4/assisted-installer-agent-rhel8:v1.0.0-19
 # - OPENSHIFT_INSTALL_RELEASE_IMAGE:
-#     quay.io/openshift-release-dev/ocp-release:4.6.18-x86_64
+#     quay.io/openshift-release-dev/ocp-release:4.6.16-x86_64
 #     quay.io/openshift-release-dev/ocp-release:4.7.0-x86_64
 #
