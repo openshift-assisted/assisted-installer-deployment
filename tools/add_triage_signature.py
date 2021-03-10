@@ -35,7 +35,8 @@ h1. Cluster Info
 *OpenShift version:* {openshift_version}
 
 *links:*
-* [logs|{logs_url}/]
+* [Logs|{logs_url}/]
+* [Kraken|https://kraken.psi.redhat.com/clusters/{OCP_cluster_id}]
 * [Metrics|https://grafana.app-sre.devshift.net/d/assisted-installer-cluster-overview/cluster-overview?orgId=1&from=now-1h&to=now&var-datasource=app-sre-prod-04-prometheus&var-clusterId={cluster_id}]
 * [Kibana|https://kibana-openshift-logging.apps.app-sre-prod-04.i5h0.p1.openshiftapps.com/app/kibana#/discover?_g=(refreshInterval:(pause:!t,value:0),time:(from:now-24h,mode:quick,to:now))&_a=(columns:!(_source),interval:auto,query:'"{cluster_id}"',sort:!('@timestamp',desc))]
 * [DM Elastic|http://assisted-elastic.usersys.redhat.com:5601/app/discover#/?_g=(filters:!(),query:(language:kuery,query:''),refreshInterval:(pause:!t,value:0),time:(from:now-2w,to:now))&_a=(columns:!(message,cluster_id),filters:!(),index:'2d6517b0-5432-11eb-8ff7-115676c7222d',interval:auto,query:(language:kuery,query:'cluster_id:%20%22{cluster_id}%22%20'),sort:!())]
@@ -196,6 +197,7 @@ class FailureDescription(Signature):
                         "failed_on": format_time(cluster_md['status_updated_at']),
                         "status": cluster_md['status'],
                         "status_info": cluster_md['status_info'],
+                        "OCP_cluster_id": cluster_md['openshift_cluster_id'],
                         "username": cluster_md['user_name']}
 
         return format_description(cluster_data)
@@ -382,7 +384,7 @@ def get_jira_client(username, password):
 # Signature runner functionality
 ############################
 LOGS_URL_FROM_DESCRIPTION_OLD = re.compile(r".*logs:\* \[(http.*)\]")
-LOGS_URL_FROM_DESCRIPTION_NEW = re.compile(r".*\* \[logs\|(http.*)\]")
+LOGS_URL_FROM_DESCRIPTION_NEW = re.compile(r".*\* \[[lL]ogs\|(http.*)\]")
 
 def get_issue(jclient, issue_key):
     issue = None
