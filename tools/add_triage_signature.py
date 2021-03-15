@@ -13,8 +13,10 @@ from collections import defaultdict
 from datetime import datetime
 import jira
 import requests
+import tqdm
 from tabulate import tabulate
 import dateutil.parser
+import tempfile
 
 DEFAULT_DAYS_TO_HANDLE = 30
 
@@ -58,7 +60,7 @@ def days_ago(datestr):
 # Common functionality
 ############################
 class Signature(abc.ABC):
-    is_dry_run = False
+    dry_run_file = None
     def __init__(self, jira_client, comment_identifying_string, old_comment_string=None):
         self._jclient = jira_client
         self._identifing_string = comment_identifying_string
@@ -95,8 +97,8 @@ class Signature(abc.ABC):
         report += comment
         jira_comment = self._find_signature_comment(key)
         signature_name = type(self).__name__
-        if self.is_dry_run:
-            print(report)
+        if self.dry_run_file is not None:
+            self.dry_run_file.write(report)
             return
 
         if jira_comment is None:
@@ -417,36 +419,54 @@ def get_all_triage_tickets(jclient, only_recent=False):
     return jclient.search_issues(query, maxResults=None)
 
 
-def main(args):
-    if args.user_password is None:
-        username, password = get_credentials_from_netrc(urlparse(JIRA_SERVER).hostname, args.netrc)
+def get_issues(jclient, issue, recent_issues):
+    if issue is None:
+        logger.info(f"Fetching {['all', 'recent'][recent_issues]} issues, this may take a while")
+        issues = get_all_triage_tickets(jclient, only_recent=recent_issues)
     else:
-        try:
-            [username, password] = args.user_password.split(":", 1)
-        except Exception:
-            logger.error("Failed to parse user:password")
-            raise
+        logger.info(f"Fetching just {issue}")
+        issues = [get_issue(jclient, issue)]
 
-    jclient = get_jira_client(username, password)
+    return issues
 
-    if args.dry_run:
-        Signature.is_dry_run = True
-
-    if not args.issue:
-        logger.info(f"Fetching {['all', 'recent'][args.recent_issues]} issues, this may take a while")
-        issues = get_all_triage_tickets(jclient, only_recent=args.recent_issues)
-    else:
-        logger.info(f"Fetching just {args.issue}")
-        issues = [get_issue(jclient, args.issue)]
-
+def process_issues(jclient, issues, update, update_signature):
     logger.info(f"Found {len(issues)} tickets, processing...")
-    for issue in issues:
+    for issue in tqdm.tqdm(issues):
         url = get_logs_url_from_issue(issue)
         if not url:
             logger.warning("Could not get URL from issue %s. Skipping", issue.key)
         else:
-            add_signatures(jclient, url, issue.key, should_update=args.update,
-                           signatures=args.update_signature)
+            add_signatures(jclient, url, issue.key, should_update=update,
+                           signatures=update_signature)
+
+def get_credentials(user_password, use_netrc):
+    if user_password is None:
+        username, password = get_credentials_from_netrc(urlparse(JIRA_SERVER).hostname, use_netrc)
+    else:
+        try:
+            [username, password] = user_password.split(":", 1)
+        except Exception:
+            logger.error("Failed to parse user:password")
+            raise
+
+    return username, password
+
+def main(args):
+    username, password = get_credentials(args.user_password, args.netrc)
+
+    jclient = get_jira_client(username, password)
+
+    issues = get_issues(jclient, args.issue, args.recent_issues)
+
+    if not args.dry_run:
+        process_issues(jclient, issues, args.update, args.update_signature)
+    else:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as dry_run_file:
+            logger.info(f"Dry run output will be written to {dry_run_file.name}")
+            logger.info(f"Run `tail -f {dry_run_file.name}` to view dry run output in real time")
+            Signature.dry_run_file = dry_run_file
+            process_issues(jclient, issues, args.update, args.update_signature)
+            logger.info(f"Dry run output written to {dry_run_file.name}")
 
 
 def format_time(time_str):
