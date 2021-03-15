@@ -413,17 +413,8 @@ def get_logs_url_from_issue(issue):
 def get_all_triage_tickets(jclient, only_recent=False):
     recent_filter = "" if not only_recent else 'and created >= -31d'
     query = 'project = MGMT AND component = "Assisted-installer Triage" {}'.format(recent_filter)
-    idx = 0
-    block_size = 100
-    issues = []
-    while True:
-        i = jclient.search_issues(query, maxResults=block_size, startAt=idx)
-        if len(i) == 0:
-            break
-        issues.extend(i)
-        idx += block_size
 
-    return issues
+    return jclient.search_issues(query, maxResults=None)
 
 
 def main(args):
