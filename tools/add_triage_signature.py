@@ -433,6 +433,7 @@ def main(args):
             [username, password] = args.user_password.split(":", 1)
         except Exception:
             logger.error("Failed to parse user:password")
+            raise
 
     jclient = get_jira_client(username, password)
 
