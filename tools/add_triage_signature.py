@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # pylint: disable=invalid-name,bare-except,missing-function-docstring,too-few-public-methods,missing-class-docstring,missing-module-docstring,line-too-long
-
+import abc
 import argparse
 import logging
 import netrc
@@ -57,7 +57,7 @@ def days_ago(datestr):
 ############################
 # Common functionality
 ############################
-class Signature:
+class Signature(abc.ABC):
     is_dry_run = False
     def __init__(self, jira_client, comment_identifying_string, old_comment_string=None):
         self._jclient = jira_client
@@ -70,8 +70,9 @@ class Signature:
         except Exception:
             logger.exception("error updating ticket %s", issue_key)
 
+    @abc.abstractmethod
     def _update_ticket(self, url, issue_key, should_update=False):
-        raise NotImplementedError
+        pass
 
     @staticmethod
     def _get_metadata_json(cluster_url):
