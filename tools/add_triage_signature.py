@@ -17,6 +17,7 @@ import tqdm
 from tabulate import tabulate
 import dateutil.parser
 import tempfile
+import functools
 
 DEFAULT_DAYS_TO_HANDLE = 30
 
@@ -56,6 +57,18 @@ def days_ago(datestr):
         logger.debug("Cannot parse date: %s", datestr)
         return 9999
 
+@functools.lru_cache(maxsize=None)
+def get_metadata_json(cluster_url):
+    res = requests.get("{}/metdata.json".format(cluster_url))
+    res.raise_for_status()
+    return res.json()
+
+@functools.lru_cache(maxsize=None)
+def get_events_json(cluster_url, cluster_id):
+    res = requests.get(f"{cluster_url}/cluster_{cluster_id}_events.json")
+    res.raise_for_status()
+    return res.json()
+
 ############################
 # Common functionality
 ############################
@@ -76,11 +89,6 @@ class Signature(abc.ABC):
     def _update_ticket(self, url, issue_key, should_update=False):
         pass
 
-    @staticmethod
-    def _get_metadata_json(cluster_url):
-        res = requests.get("{}/metdata.json".format(cluster_url))
-        res.raise_for_status()
-        return res.json()
 
     def _find_signature_comment(self, key):
         comments = self._jclient.comments(key)
@@ -157,7 +165,7 @@ class HostsStatusSignature(Signature):
 
         url = self._logs_url_to_api(url)
         try:
-            md = self._get_metadata_json(url)
+            md = get_metadata_json(url)
         except Exception as e:
             logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
@@ -213,7 +221,7 @@ class FailureDescription(Signature):
 
         url = self._logs_url_to_api(url)
         try:
-            md = self._get_metadata_json(url)
+            md = get_metadata_json(url)
         except Exception as e:
             logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
@@ -234,7 +242,7 @@ class HostsExtraDetailSignature(Signature):
 
         url = self._logs_url_to_api(url)
         try:
-            md = self._get_metadata_json(url)
+            md = get_metadata_json(url)
         except Exception as e:
             logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
@@ -268,7 +276,7 @@ class StorageDetailSignature(Signature):
 
         url = self._logs_url_to_api(url)
         try:
-            md = self._get_metadata_json(url)
+            md = get_metadata_json(url)
         except Exception as e:
             logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
@@ -308,7 +316,7 @@ class ComponentsVersionSignature(Signature):
 
         url = self._logs_url_to_api(url)
         try:
-            md = self._get_metadata_json(url)
+            md = get_metadata_json(url)
         except Exception as e:
             logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
@@ -336,7 +344,7 @@ class LibvirtRebootFlagSignature(Signature):
 
         url = self._logs_url_to_api(url)
         try:
-            md = self._get_metadata_json(url)
+            md = get_metadata_json(url)
         except Exception as e:
             logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
