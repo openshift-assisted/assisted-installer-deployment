@@ -484,9 +484,31 @@ def add_signatures(jclient, url, issue_key, should_update=False, signatures=None
         s = sig(jclient)
         s.update_ticket(url, issue_key, should_update=should_update)
 
+description = f"""
+This utility updates existing triage tickets with signatures.
+Signatures perform automatic analysis of ticket log files to extract
+information that is crucial to help kickstart a ticket triage. Each
+signature typically outputs its information in the form of a ticket
+comment.
+
+
+Before running this please make sure you have -
+
+1. A jira username and password -
+    Username: You can find it in {JIRA_SERVER}/secure/ViewProfile.jspa
+    Password: Simply your sso.redhat.com password
+
+2. A RedHat VPN connection - this is required to access ticket log files
+
+3. A Python virtualenv with all the requirements.txt installed
+   (you can also install them without a virtualenv if you wish).
+
+You can run this script without affecting the tickets by using the --dry-run flag
+""".strip()
+
 def parse_args():
     signature_names = [s.__name__ for s in SIGNATURES]
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
     login_group = parser.add_argument_group(title="login options")
     login_args = login_group.add_mutually_exclusive_group()
     login_args.add_argument("--netrc", default="~/.netrc", required=False, help="netrc file")
