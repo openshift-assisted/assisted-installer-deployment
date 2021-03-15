@@ -268,6 +268,60 @@ class HostsExtraDetailSignature(Signature):
         self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
+class InstallationDiskFIOSignature(Signature):
+    def __init__(self, jira_client):
+        super().__init__(jira_client, comment_identifying_string="h1. Host installation disk fio:")
+
+    @staticmethod
+    def _get_fio_events(events):
+        fio_regex = re.compile(r'\(fdatasync duration:\s(\d+)\sms\)')
+        fio_duration_events = ((event, next(map(int, fio_regex.findall(event["message"])), None))
+                               for event in events)
+        fio_duration_events = [(event, fio_duration) for event, fio_duration in fio_duration_events
+                               if fio_duration is not None]
+
+        return fio_duration_events
+
+    def _update_ticket(self, url, issue_key, should_update=False):
+
+        url = self._logs_url_to_api(url)
+        try:
+            md = get_metadata_json(url)
+        except Exception as e:
+            logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            return
+
+        cluster = md['cluster']
+
+        cluster_id = cluster['id']
+        events = get_events_json(cluster_url=url, cluster_id=cluster_id)
+        fio_events = self._get_fio_events(events)
+
+        fio_events_by_host = defaultdict(list)
+        for event, fio_duration in fio_events:
+            fio_events_by_host[event["host_id"]].append((event, fio_duration))
+
+        hosts = []
+        for host in cluster['hosts']:
+            host_fio_events = fio_events_by_host[host["id"]]
+            fio_message = "Under threshold"
+            if len(host_fio_events) != 0:
+                _events, host_fio_events_durations = zip(*fio_events_by_host[host["id"]])
+                fio_message = (
+                    f"Installation disk is too slow, fio durations: " +
+                    ", ".join(f"{duration}ms" for duration in host_fio_events_durations)
+                )
+
+            hosts.append(OrderedDict(
+                id=host['id'],
+                hostname=self._get_hostname(host),
+                fio=fio_message,
+                installation_disk=host.get('installation_disk_path', ""),
+            ))
+
+        report = self._generate_table_for_report(hosts)
+        self._update_triaging_ticket(issue_key, report, should_update=should_update)
+
 class StorageDetailSignature(Signature):
     def __init__(self, jira_client):
         super().__init__(jira_client, comment_identifying_string="h1. Host storage details:")
@@ -378,8 +432,9 @@ class LibvirtRebootFlagSignature(Signature):
 # Common functionality
 ############################
 DEFAULT_NETRC_FILE = "~/.netrc"
-JIRA_SERVER = "https://issues.redhat.com/"
-SIGNATURES = [FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature, StorageDetailSignature, LibvirtRebootFlagSignature]
+JIRA_SERVER = "https://issues.redhat.com"
+SIGNATURES = [FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
+              StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature]
 
 def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
     cred = netrc.netrc(os.path.expanduser(netrc_file))
