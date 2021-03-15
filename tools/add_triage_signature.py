@@ -433,10 +433,13 @@ def main(args):
         Signature.is_dry_run = True
 
     if not args.issue:
+        logger.info(f"Fetching {['all', 'recent'][args.recent_issues]} issues, this may take a while")
         issues = get_all_triage_tickets(jclient, only_recent=args.recent_issues)
     else:
+        logger.info(f"Fetching just {args.issue}")
         issues = [get_issue(jclient, args.issue)]
 
+    logger.info(f"Found {len(issues)} tickets, processing...")
     for issue in issues:
         url = get_logs_url_from_issue(issue)
         if not url:
