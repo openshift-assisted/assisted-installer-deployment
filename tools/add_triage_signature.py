@@ -50,7 +50,7 @@ def format_description(failure_data):
 def days_ago(datestr):
     try:
         return (datetime.now() - dateutil.parser.isoparse(datestr)).days
-    except:
+    except Exception:
         logger.debug("Cannot parse date: %s", datestr)
         return 9999
 
@@ -67,7 +67,7 @@ class Signature:
     def update_ticket(self, url, issue_key, should_update=False):
         try:
             self._update_ticket(url, issue_key, should_update=should_update)
-        except:
+        except Exception:
             logger.exception("error updating ticket %s", issue_key)
 
     def _update_ticket(self, url, issue_key, should_update=False):
@@ -155,7 +155,7 @@ class HostsStatusSignature(Signature):
         url = self._logs_url_to_api(url)
         try:
             md = self._get_metadata_json(url)
-        except:
+        except Exception:
             logger.exception("Error getting logs for %s at %s", issue_key, url)
             return
 
@@ -211,7 +211,7 @@ class FailureDescription(Signature):
         url = self._logs_url_to_api(url)
         try:
             md = self._get_metadata_json(url)
-        except:
+        except Exception:
             logger.exception("Error getting logs for %s at %s", issue_key, url)
             return
 
@@ -232,7 +232,7 @@ class HostsExtraDetailSignature(Signature):
         url = self._logs_url_to_api(url)
         try:
             md = self._get_metadata_json(url)
-        except:
+        except Exception:
             logger.exception("Error getting logs for %s at %s", issue_key, url)
             return
 
@@ -266,7 +266,7 @@ class StorageDetailSignature(Signature):
         url = self._logs_url_to_api(url)
         try:
             md = self._get_metadata_json(url)
-        except:
+        except Exception:
             logger.exception("Error getting logs for %s at %s", issue_key, url)
             return
 
@@ -306,7 +306,7 @@ class ComponentsVersionSignature(Signature):
         url = self._logs_url_to_api(url)
         try:
             md = self._get_metadata_json(url)
-        except:
+        except Exception:
             logger.exception("Error getting logs for %s at %s", issue_key, url)
             return
 
@@ -334,7 +334,7 @@ class LibvirtRebootFlagSignature(Signature):
         url = self._logs_url_to_api(url)
         try:
             md = self._get_metadata_json(url)
-        except:
+        except Exception:
             logger.exception("Error getting logs for %s at %s", issue_key, url)
             return
 
@@ -431,7 +431,7 @@ def main(args):
     else:
         try:
             [username, password] = args.user_password.split(":", 1)
-        except:
+        except Exception:
             logger.error("Failed to parse user:password")
 
     jclient = get_jira_client(username, password)
