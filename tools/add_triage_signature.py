@@ -248,8 +248,8 @@ class HostsExtraDetailSignature(Signature):
                 requested_hostname=host.get('requested_hostname', ""),
                 last_contacted=format_time(host['checked_in_at']),
                 installation_disk=host.get('installation_disk_path', ""),
-                product_name=inventory['system_vendor']['product_name'],
-                manufacturer=inventory['system_vendor']['manufacturer'],
+                product_name=inventory['system_vendor'].get('product_name', "Unavailable"),
+                manufacturer=inventory['system_vendor'].get('manufacturer', "Unavailable"),
                 virtual_host=inventory['system_vendor'].get('virtual', False),
                 disks_count=len(inventory['disks'])
             ))
