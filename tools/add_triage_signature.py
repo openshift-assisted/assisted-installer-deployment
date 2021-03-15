@@ -156,8 +156,8 @@ class HostsStatusSignature(Signature):
         url = self._logs_url_to_api(url)
         try:
             md = self._get_metadata_json(url)
-        except Exception:
-            logger.exception("Error getting logs for %s at %s", issue_key, url)
+        except Exception as e:
+            logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -212,8 +212,8 @@ class FailureDescription(Signature):
         url = self._logs_url_to_api(url)
         try:
             md = self._get_metadata_json(url)
-        except Exception:
-            logger.exception("Error getting logs for %s at %s", issue_key, url)
+        except Exception as e:
+            logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -233,8 +233,8 @@ class HostsExtraDetailSignature(Signature):
         url = self._logs_url_to_api(url)
         try:
             md = self._get_metadata_json(url)
-        except Exception:
-            logger.exception("Error getting logs for %s at %s", issue_key, url)
+        except Exception as e:
+            logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -267,8 +267,8 @@ class StorageDetailSignature(Signature):
         url = self._logs_url_to_api(url)
         try:
             md = self._get_metadata_json(url)
-        except Exception:
-            logger.exception("Error getting logs for %s at %s", issue_key, url)
+        except Exception as e:
+            logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -307,8 +307,8 @@ class ComponentsVersionSignature(Signature):
         url = self._logs_url_to_api(url)
         try:
             md = self._get_metadata_json(url)
-        except Exception:
-            logger.exception("Error getting logs for %s at %s", issue_key, url)
+        except Exception as e:
+            logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
 
         report = ""
@@ -335,8 +335,8 @@ class LibvirtRebootFlagSignature(Signature):
         url = self._logs_url_to_api(url)
         try:
             md = self._get_metadata_json(url)
-        except Exception:
-            logger.exception("Error getting logs for %s at %s", issue_key, url)
+        except Exception as e:
+            logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
