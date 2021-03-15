@@ -468,16 +468,15 @@ def add_signatures(jclient, url, issue_key, should_update=False, signatures=None
         s = sig(jclient)
         s.update_ticket(url, issue_key, should_update=should_update)
 
-
-if __name__ == "__main__":
+def parse_args():
     signature_names = [s.__name__ for s in SIGNATURES]
     parser = argparse.ArgumentParser()
-    loginGroup = parser.add_argument_group(title="login options")
-    loginArgs = loginGroup.add_mutually_exclusive_group()
-    loginArgs.add_argument("--netrc", default="~/.netrc", required=False, help="netrc file")
-    loginArgs.add_argument("-up", "--user-password", required=False, help="Username and password in the format of user:pass")
-    selectorsGroup = parser.add_argument_group(title="Issues selection")
-    selectors = selectorsGroup.add_mutually_exclusive_group(required=True)
+    login_group = parser.add_argument_group(title="login options")
+    login_args = login_group.add_mutually_exclusive_group()
+    login_args.add_argument("--netrc", default="~/.netrc", required=False, help="netrc file")
+    login_args.add_argument("-up", "--user-password", required=False, help="Username and password in the format of user:pass")
+    selectors_group = parser.add_argument_group(title="Issues selection")
+    selectors = selectors_group.add_mutually_exclusive_group(required=True)
     selectors.add_argument("-r", "--recent-issues", action='store_true', help="Handle recent (30 days) Triaging Tickets")
     selectors.add_argument("-a", "--all-issues", action='store_true', help="Handle all Triaging Tickets")
     selectors.add_argument("-i", "--issue", required=False, help="Triage issue key")
@@ -485,7 +484,7 @@ if __name__ == "__main__":
     parser.add_argument("-v", "--verbose", action="store_true", help="Output verbose logging")
     parser.add_argument("-d", "--dry-run", action="store_true", help="Dry run. Don't update tickets")
     parser.add_argument("-us", "--update-signature", action='append', choices=signature_names,
-                          help="Update tickets with only the signatures specified")
+                        help="Update tickets with only the signatures specified")
 
     args = parser.parse_args()
 
@@ -495,5 +494,8 @@ if __name__ == "__main__":
     if args.verbose:
         logging.getLogger("__main__").setLevel(logging.DEBUG)
 
+    return args
 
-    main(args)
+
+if __name__ == "__main__":
+    main(parse_args())
