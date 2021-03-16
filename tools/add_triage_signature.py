@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-# pylint: disable=invalid-name,bare-except,missing-function-docstring,too-few-public-methods,missing-class-docstring,missing-module-docstring,line-too-long
+# pylint: disable=invalid-name,broad-except,missing-function-docstring,too-few-public-methods,missing-class-docstring,missing-module-docstring,line-too-long,too-many-locals,logging-fstring-interpolation
 import abc
 import argparse
+import functools
+import json
 import logging
 import netrc
 import os
-import json
-from urllib.parse import urlparse
 import re
-from collections import OrderedDict
-from collections import defaultdict
+import tempfile
+from collections import OrderedDict, defaultdict
 from datetime import datetime
+from urllib.parse import urlparse
+
+import dateutil.parser
 import jira
 import requests
 import tqdm
 from tabulate import tabulate
-import dateutil.parser
-import tempfile
-import functools
 
 DEFAULT_DAYS_TO_HANDLE = 30
 
@@ -89,13 +89,13 @@ class Signature(abc.ABC):
     def _update_ticket(self, url, issue_key, should_update=False):
         pass
 
-
     def _find_signature_comment(self, key):
         comments = self._jclient.comments(key)
         for comment in comments:
             if self._identifing_string in comment.body:
                 return comment
-            elif self._old_identifing_string and self._old_identifing_string in comment.body:
+
+            if self._old_identifing_string and self._old_identifing_string in comment.body:
                 return comment
         return None
 
@@ -308,7 +308,7 @@ class InstallationDiskFIOSignature(Signature):
             if len(host_fio_events) != 0:
                 _events, host_fio_events_durations = zip(*fio_events_by_host[host["id"]])
                 fio_message = (
-                    f"Installation disk is too slow, fio durations: " +
+                    "Installation disk is too slow, fio durations: " +
                     ", ".join(f"{duration}ms" for duration in host_fio_events_durations)
                 )
 
@@ -547,7 +547,9 @@ def add_signatures(jclient, url, issue_key, should_update=False, signatures=None
         s = sig(jclient)
         s.update_ticket(url, issue_key, should_update=should_update)
 
-description = f"""
+
+def parse_args():
+    description = f"""
 This utility updates existing triage tickets with signatures.
 Signatures perform automatic analysis of ticket log files to extract
 information that is crucial to help kickstart a ticket triage. Each
@@ -569,7 +571,6 @@ Before running this please make sure you have -
 You can run this script without affecting the tickets by using the --dry-run flag
 """.strip()
 
-def parse_args():
     signature_names = [s.__name__ for s in SIGNATURES]
     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
     login_group = parser.add_argument_group(title="login options")
