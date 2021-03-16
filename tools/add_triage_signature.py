@@ -276,12 +276,19 @@ class InstallationDiskFIOSignature(Signature):
     @staticmethod
     def _get_fio_events(events):
         fio_regex = re.compile(r'\(fdatasync duration:\s(\d+)\sms\)')
-        fio_duration_events = ((event, next(map(int, fio_regex.findall(event["message"])), None))
-                               for event in events)
-        fio_duration_events = [(event, fio_duration) for event, fio_duration in fio_duration_events
-                               if fio_duration is not None]
 
-        return fio_duration_events
+        def get_duration(event):
+            matches = fio_regex.findall(event["message"])
+            if len(matches) == 0:
+                return None
+
+            return int(matches[0])
+
+        return (
+            (event, get_duration(event))
+            for event in events
+            if get_duration(event) is not None
+        )
 
     def _update_ticket(self, url, issue_key, should_update=False):
 
