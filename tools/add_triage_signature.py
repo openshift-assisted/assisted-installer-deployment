@@ -57,13 +57,13 @@ def days_ago(datestr):
         logger.debug("Cannot parse date: %s", datestr)
         return 9999
 
-@functools.lru_cache(maxsize=None)
+@functools.lru_cache(maxsize=1000)
 def get_metadata_json(cluster_url):
     res = requests.get("{}/metdata.json".format(cluster_url))
     res.raise_for_status()
     return res.json()
 
-@functools.lru_cache(maxsize=None)
+@functools.lru_cache(maxsize=1000)
 def get_events_json(cluster_url, cluster_id):
     res = requests.get(f"{cluster_url}/cluster_{cluster_id}_events.json")
     res.raise_for_status()
