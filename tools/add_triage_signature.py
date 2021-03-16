@@ -8,6 +8,7 @@ import logging
 import netrc
 import os
 import re
+import sys
 import tempfile
 from collections import OrderedDict, defaultdict
 from datetime import datetime
@@ -521,15 +522,19 @@ def main(args):
 
     issues = get_issues(jclient, args.issue, args.recent_issues)
 
-    if not args.dry_run:
-        process_issues(jclient, issues, args.update, args.update_signature)
-    else:
+    if args.dry_run_temp:
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as dry_run_file:
             logger.info(f"Dry run output will be written to {dry_run_file.name}")
             logger.info(f"Run `tail -f {dry_run_file.name}` to view dry run output in real time")
             Signature.dry_run_file = dry_run_file
             process_issues(jclient, issues, args.update, args.update_signature)
             logger.info(f"Dry run output written to {dry_run_file.name}")
+        return
+
+    if args.dry_run:
+        Signature.dry_run_file = sys.stdout
+
+    process_issues(jclient, issues, args.update, args.update_signature)
 
 
 def format_time(time_str):
@@ -573,18 +578,27 @@ You can run this script without affecting the tickets by using the --dry-run fla
 
     signature_names = [s.__name__ for s in SIGNATURES]
     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
-    login_group = parser.add_argument_group(title="login options")
+
+    login_group = parser.add_argument_group(title="Login options")
     login_args = login_group.add_mutually_exclusive_group()
     login_args.add_argument("--netrc", default="~/.netrc", required=False, help="netrc file")
     login_args.add_argument("-up", "--user-password", required=False, help="Username and password in the format of user:pass")
+
     selectors_group = parser.add_argument_group(title="Issues selection")
     selectors = selectors_group.add_mutually_exclusive_group(required=True)
     selectors.add_argument("-r", "--recent-issues", action='store_true', help="Handle recent (30 days) Triaging Tickets")
     selectors.add_argument("-a", "--all-issues", action='store_true', help="Handle all Triaging Tickets")
     selectors.add_argument("-i", "--issue", required=False, help="Triage issue key")
+
     parser.add_argument("-u", "--update", action="store_true", help="Update ticket even if signature already exist")
     parser.add_argument("-v", "--verbose", action="store_true", help="Output verbose logging")
-    parser.add_argument("-d", "--dry-run", action="store_true", help="Dry run. Don't update tickets")
+
+    dry_run_group = parser.add_argument_group(title="Dry run options")
+    dry_run_args = dry_run_group.add_mutually_exclusive_group()
+    dry_run_msg = "Dry run. Don't update tickets. Write output to"
+    dry_run_args.add_argument("-d", "--dry-run", action="store_true", help=f"{dry_run_msg} stdout")
+    dry_run_args.add_argument("-t", "--dry-run-temp", action="store_true", help=f"{dry_run_msg} a temp file")
+
     parser.add_argument("-us", "--update-signature", action='append', choices=signature_names,
                         help="Update tickets with only the signatures specified")
 
