@@ -489,13 +489,13 @@ def get_all_triage_tickets(jclient, only_recent=False):
 
     return jclient.search_issues(query, maxResults=None)
 
-def get_issues(jclient, issue, recent_issues):
+def get_issues(jclient, issue, only_recent):
     if issue is not None:
         logger.info(f"Fetching just {issue}")
         return [get_issue(jclient, issue)]
 
-    logger.info(f"Fetching {['all', 'recent'][recent_issues]} issues, this may take a while")
-    return get_all_triage_tickets(jclient, only_recent=recent_issues)
+    logger.info(f"Fetching {'recent' if only_recent else 'all'} issues")
+    return get_all_triage_tickets(jclient, only_recent=only_recent)
 
 def process_issues(jclient, issues, update, update_signature):
     logger.info(f"Found {len(issues)} tickets, processing...")
