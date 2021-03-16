@@ -499,13 +499,17 @@ def get_issues(jclient, issue, only_recent):
 
 def process_issues(jclient, issues, update, update_signature):
     logger.info(f"Found {len(issues)} tickets, processing...")
-    for issue in tqdm.tqdm(issues):
+
+    should_progress_bar = sys.stderr.isatty()
+    for issue in tqdm.tqdm(issues, disable=not should_progress_bar, file=sys.stderr):
         url = get_logs_url_from_issue(issue)
-        if not url:
-            logger.warning("Could not get URL from issue %s. Skipping", issue.key)
-        else:
-            add_signatures(jclient, url, issue.key, should_update=update,
-                           signatures=update_signature)
+
+        if url is None:
+            logger.warning(f"Could not get URL from issue {JIRA_SERVER}/browse/{issue.key}. Skipping")
+            continue
+
+        add_signatures(jclient, url, issue.key, should_update=update,
+                       signatures=update_signature)
 
 def get_credentials(user_password, use_netrc):
     if user_password is None:
