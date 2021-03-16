@@ -168,7 +168,7 @@ class HostsStatusSignature(Signature):
         try:
             md = get_metadata_json(url)
         except Exception as e:
-            logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -224,7 +224,7 @@ class FailureDescription(Signature):
         try:
             md = get_metadata_json(url)
         except Exception as e:
-            logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -245,7 +245,7 @@ class HostsExtraDetailSignature(Signature):
         try:
             md = get_metadata_json(url)
         except Exception as e:
-            logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -289,7 +289,7 @@ class InstallationDiskFIOSignature(Signature):
         try:
             md = get_metadata_json(url)
         except Exception as e:
-            logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -333,7 +333,7 @@ class StorageDetailSignature(Signature):
         try:
             md = get_metadata_json(url)
         except Exception as e:
-            logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -373,7 +373,7 @@ class ComponentsVersionSignature(Signature):
         try:
             md = get_metadata_json(url)
         except Exception as e:
-            logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
 
         report = ""
@@ -401,7 +401,7 @@ class LibvirtRebootFlagSignature(Signature):
         try:
             md = get_metadata_json(url)
         except Exception as e:
-            logger.info("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
