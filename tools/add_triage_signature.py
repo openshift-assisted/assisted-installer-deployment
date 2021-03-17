@@ -486,7 +486,7 @@ def get_logs_url_from_issue(issue):
 
 def get_all_triage_tickets(jclient, only_recent=False):
     recent_filter = "" if not only_recent else 'and created >= -31d'
-    query = 'project = MGMT AND component = "Assisted-installer Triage" {}'.format(recent_filter)
+    query = 'project = MGMT AND component = "Assisted-installer Triage" AND labels in (AI_CLOUD_TRIAGE) {}'.format(recent_filter)
 
     return jclient.search_issues(query, maxResults=None)
 
