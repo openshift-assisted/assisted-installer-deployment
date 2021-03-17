@@ -320,6 +320,19 @@ class JiraTool():
             logger.info("remove_labels: updating %s with labels: %s", issue.key, new_labels)
             self.update_issue_fields(issue, {"labels": new_labels})
 
+    def remove_comment(self, issue, identifying_string):
+        was_found = False
+        comments = self._jira.comments(issue.key)
+        for comment in comments:
+            if identifying_string in comment.body:
+                was_found = True
+                comment.delete()
+                logger.info("remove_comment: removing comment '%s' from %s", identifying_string, issue.key)
+                print("Removing comment: {}".format(comment.body))
+
+        if not was_found:
+            logger.debug("remove_comment: comment '%s' not found in %s", identifying_string, issue.key)
+
     def get_selected_linked_issues(self, issues):
         linked_issue_keys = []
         linked_issues = []
@@ -449,6 +462,9 @@ def handle_labels_update(args, jiraTool, issues):
         for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
             jiraTool.remove_labels(i, args.remove_labels)
 
+def handle_remove_comment(args, jiraTool, issues):
+    for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
+        jiraTool.remove_comment(i, args.remove_comment)
 
 def handle_watchers_update(args, jiraTool, issues):
     if args.add_watchers is not None:
@@ -530,6 +546,9 @@ def main(args):
     if args.add_labels is not None or args.remove_labels is not None:
         handle_labels_update(args, jiraTool, issues)
         sys.exit()
+
+    if args.remove_comment is not None:
+        handle_remove_comment(args, jiraTool, issues)
 
     if args.add_component is not None or args.remove_component is not None:
         handle_component_update(args, jiraTool, issues)
@@ -650,6 +669,7 @@ if __name__ == "__main__":
     ops.add_argument("-rc", "--remove-component", default=None, help="Remove the component from the selected tickets")
     ops.add_argument("-ala", "--add-labels", default=None, nargs="+", help="Add the label to the selected tickets")
     ops.add_argument("-rla", "--remove-labels", nargs="+", default=None, help="Remove the label from the selected tickets")
+    ops.add_argument("--remove-comment", help="Remove comments that have the provided text")
     ops.add_argument("-f", "--fix-version", help="Set the fixVersion of selected tickets")
     ops.add_argument("-uc", "--update-contributors", action="store_true", help="Add assignee to contributors")
     ops.add_argument("-ef", "--epic-fixup", action="store_true", help=textwrap.dedent("""
