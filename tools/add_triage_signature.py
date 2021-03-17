@@ -271,7 +271,7 @@ class HostsExtraDetailSignature(Signature):
 
 class InstallationDiskFIOSignature(Signature):
     def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Host installation disk fio:")
+        super().__init__(jira_client, comment_identifying_string="h1. Host slow installation disks:")
 
     @staticmethod
     def _get_fio_events(events):
