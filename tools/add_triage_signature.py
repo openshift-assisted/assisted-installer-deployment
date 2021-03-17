@@ -312,7 +312,6 @@ class InstallationDiskFIOSignature(Signature):
         hosts = []
         for host in cluster['hosts']:
             host_fio_events = fio_events_by_host[host["id"]]
-            fio_message = "{color:green}Installation disk passed fio checks{color}"
             if len(host_fio_events) != 0:
                 _events, host_fio_events_durations = zip(*fio_events_by_host[host["id"]])
                 fio_message = (
@@ -321,15 +320,16 @@ class InstallationDiskFIOSignature(Signature):
                     "{color}"
                 )
 
-            hosts.append(OrderedDict(
-                id=host['id'],
-                hostname=self._get_hostname(host),
-                fio=fio_message,
-                installation_disk=host.get('installation_disk_path', ""),
-            ))
+                hosts.append(OrderedDict(
+                    id=host['id'],
+                    hostname=self._get_hostname(host),
+                    fio=fio_message,
+                    installation_disk=host.get('installation_disk_path', ""),
+                ))
 
-        report = self._generate_table_for_report(hosts)
-        self._update_triaging_ticket(issue_key, report, should_update=should_update)
+        if len(hosts) > 0:
+            report = self._generate_table_for_report(hosts)
+            self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 class StorageDetailSignature(Signature):
     def __init__(self, jira_client):
