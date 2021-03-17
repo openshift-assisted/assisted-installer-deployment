@@ -312,12 +312,13 @@ class InstallationDiskFIOSignature(Signature):
         hosts = []
         for host in cluster['hosts']:
             host_fio_events = fio_events_by_host[host["id"]]
-            fio_message = "Under threshold"
+            fio_message = "{color:green}Installation disk passed fio checks{color}"
             if len(host_fio_events) != 0:
                 _events, host_fio_events_durations = zip(*fio_events_by_host[host["id"]])
                 fio_message = (
-                    "Installation disk is too slow, fio durations: " +
-                    ", ".join(f"{duration}ms" for duration in host_fio_events_durations)
+                    "{color:red}Installation disk is too slow, fio durations: " +
+                    ", ".join(f"{duration}ms" for duration in host_fio_events_durations) +
+                    "{color}"
                 )
 
             hosts.append(OrderedDict(
