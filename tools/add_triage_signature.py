@@ -9,15 +9,20 @@ import netrc
 import os
 import re
 import sys
+import tarfile
 import tempfile
 from collections import OrderedDict, defaultdict
 from datetime import datetime
+from tempfile import NamedTemporaryFile, TemporaryDirectory
+from typing import List
 from urllib.parse import urlparse
 
+import colorlog
 import dateutil.parser
 import jira
 import requests
 import tqdm
+from fuzzywuzzy import fuzz
 from tabulate import tabulate
 
 DEFAULT_DAYS_TO_HANDLE = 30
@@ -48,8 +53,21 @@ h1. Cluster Info
 """
 
 
+def config_logger(verbose: bool):
+    handler = colorlog.StreamHandler()
+    handler.setFormatter(colorlog.ColoredFormatter('%(log_color)s%(levelname)-10s %(message)s'))
+
+    logger = logging.getLogger("__main__")
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+
+    if verbose:
+        logger.setLevel(logging.DEBUG)
+
+
 def format_description(failure_data):
     return JIRA_DESCRIPTION.format(**failure_data)
+
 
 def days_ago(datestr):
     try:
@@ -58,11 +76,13 @@ def days_ago(datestr):
         logger.debug("Cannot parse date: %s", datestr)
         return 9999
 
+
 @functools.lru_cache(maxsize=1000)
 def get_metadata_json(cluster_url):
     res = requests.get("{}/metdata.json".format(cluster_url))
     res.raise_for_status()
     return res.json()
+
 
 @functools.lru_cache(maxsize=1000)
 def get_events_json(cluster_url, cluster_id):
@@ -70,11 +90,21 @@ def get_events_json(cluster_url, cluster_id):
     res.raise_for_status()
     return res.json()
 
+
+def get_cluster_logs(cluster_url: str, cluster_id: str, output_file: str):
+    res = requests.get(f"{cluster_url}/cluster_{cluster_id}_logs.tar")
+    res.raise_for_status()
+
+    with open(output_file, "wb") as f:
+        f.write(res.content)
+
+
 ############################
 # Common functionality
 ############################
 class Signature(abc.ABC):
     dry_run_file = None
+
     def __init__(self, jira_client, comment_identifying_string, old_comment_string=None):
         self._jclient = jira_client
         self._identifing_string = comment_identifying_string
@@ -151,7 +181,7 @@ class Signature(abc.ABC):
     def _get_hostname(host):
         hostname = host.get('requested_hostname')
         if hostname:
-            return  hostname
+            return hostname
 
         inventory = json.loads(host['inventory'])
         return inventory['hostname']
@@ -168,7 +198,7 @@ class HostsStatusSignature(Signature):
         try:
             md = get_metadata_json(url)
         except Exception as e:
-            logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -224,7 +254,7 @@ class FailureDescription(Signature):
         try:
             md = get_metadata_json(url)
         except Exception as e:
-            logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -245,7 +275,7 @@ class HostsExtraDetailSignature(Signature):
         try:
             md = get_metadata_json(url)
         except Exception as e:
-            logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -291,12 +321,11 @@ class InstallationDiskFIOSignature(Signature):
         )
 
     def _update_ticket(self, url, issue_key, should_update=False):
-
         url = self._logs_url_to_api(url)
         try:
             md = get_metadata_json(url)
         except Exception as e:
-            logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -331,6 +360,7 @@ class InstallationDiskFIOSignature(Signature):
             report = self._generate_table_for_report(hosts)
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
+
 class StorageDetailSignature(Signature):
     def __init__(self, jira_client):
         super().__init__(jira_client, comment_identifying_string="h1. Host storage details:")
@@ -341,7 +371,7 @@ class StorageDetailSignature(Signature):
         try:
             md = get_metadata_json(url)
         except Exception as e:
-            logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -381,7 +411,7 @@ class ComponentsVersionSignature(Signature):
         try:
             md = get_metadata_json(url)
         except Exception as e:
-            logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
             return
 
         report = ""
@@ -409,7 +439,7 @@ class LibvirtRebootFlagSignature(Signature):
         try:
             md = get_metadata_json(url)
         except Exception as e:
-            logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
             return
 
         cluster = md['cluster']
@@ -437,13 +467,79 @@ class LibvirtRebootFlagSignature(Signature):
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
+class IOErrorsSignature(Signature):
+    '''
+    The signature downloads cluster logs, and go over all the hosts logs files searching for a 'dmesg' file
+    Then, it looks for i/o errors (disks, media) patterns and groups them per host
+    Eventually, the signature will include common i/o errors and the number of times they appeared
+    '''
+
+    ERRORS_PATTERNS = [
+        'I/O error',
+        'disconnect',
+    ]
+
+    def __init__(self, jira_client):
+        super().__init__(jira_client, comment_identifying_string="h1. I/O errors")
+
+    def _update_ticket(self, url, issue_key, should_update=False):
+        url = self._logs_url_to_api(url)
+
+        try:
+            md = get_metadata_json(url)
+        except Exception as e:
+            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
+            return
+
+        cluster = md['cluster']
+        cluster_id = cluster['id']
+
+        with TemporaryDirectory() as tempdir:
+            cluster_logs_file = os.path.join(tempdir, "cluster_logs.tar")
+            try:
+                get_cluster_logs(url, cluster_id, cluster_logs_file)
+            except Exception as e:
+                logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+                return
+
+            with tarfile.open(cluster_logs_file) as tar:
+                tar.extractall(tempdir)
+
+            hosts = []
+
+            for tar_file in os.listdir(tempdir):
+                tar_file = os.path.join(tempdir, tar_file)
+                try:
+                    dmesg_file = extract_file_from_tar(tar_file, file_substring="dmesg", output_dir=tempdir)
+                except FileNotFoundError:
+                    continue
+
+                host_id = get_host_id_for_host_tar(tar_file)
+                host = list(filter(lambda host: host['id'] == host_id, cluster['hosts']))[0]
+
+                logs = search_patterns_in_file(dmesg_file, self.ERRORS_PATTERNS)
+                logs = [(group[0], len(group)) for group in group_similar_strings(logs, ratio=80)]
+
+                for log in logs:
+                    hosts.append(OrderedDict(
+                        id=host['id'],
+                        hostname=self._get_hostname(host),
+                        log=log[0],
+                        similar_logs=log[1]))
+
+            if hosts:
+                report = self._generate_table_for_report(hosts)
+                self._update_triaging_ticket(issue_key, report, should_update=should_update)
+
+
 ############################
 # Common functionality
 ############################
 DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SERVER = "https://issues.redhat.com"
 SIGNATURES = [FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
-              StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature]
+              StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature, IOErrorsSignature]
+
 
 def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
     cred = netrc.netrc(os.path.expanduser(netrc_file))
@@ -455,11 +551,59 @@ def get_jira_client(username, password):
     logger.info("log-in with username: %s", username)
     return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
 
+
 ############################
 # Signature runner functionality
 ############################
 LOGS_URL_FROM_DESCRIPTION_OLD = re.compile(r".*logs:\* \[(http.*)\]")
 LOGS_URL_FROM_DESCRIPTION_NEW = re.compile(r".*\* \[[lL]ogs\|(http.*)\]")
+
+
+def search_patterns_in_file(file_name: str, patterns: List[str]) -> List[str]:
+    combined_regex = re.compile(f'({"|".join(r".*%s.*" % pattern for pattern in patterns)})')
+    with open(file_name, "r") as f:
+        return combined_regex.findall(f.read())
+
+
+def group_similar_strings(ls: List[str], ratio: int) -> List[str]:
+    '''
+    Uses Levenshtein Distance Algorithm to calculate the differences between strings
+    Then, groups similar strings that matches according to the ratio.
+    The higher the ratio -> The more identical strings
+
+    Example:
+    input: ['rakesh', 'zakesh', 'goldman LLC', 'oldman LLC', 'bakesh']
+    output groups: [['rakesh', 'zakesh', 'bakesh'], ['goldman LLC', 'oldman LLC']]
+    '''
+
+    groups = []
+    for item in ls:
+        for group in groups:
+            if all(fuzz.ratio(item, w) > ratio for w in group):
+                group.append(item)
+                break
+        else:
+            groups.append([item, ])
+
+    return groups
+
+
+def get_host_id_for_host_tar(tar_path: str) -> str:
+    with TemporaryDirectory() as tempdir:
+        prefix = "logs_host_"
+        file_name = extract_file_from_tar(tar_path=tar_path, file_substring=prefix, output_dir=tempdir)
+        return file_name[file_name.find(prefix):].strip(prefix)
+
+
+def extract_file_from_tar(tar_path: str, file_substring: str, output_dir: str) -> str:
+    with tarfile.open(tar_path) as tar:
+        for member in tar.getnames():
+            if file_substring in member:
+                tar.extract(member, output_dir)
+                return os.path.join(output_dir, member)
+        else:
+            raise FileNotFoundError(f"{file_substring} file couldn't be found in tar {tar_path}")
+
 
 def get_issue(jclient, issue_key):
     issue = None
@@ -484,11 +628,13 @@ def get_logs_url_from_issue(issue):
             return None
     return m.groups()[0]
 
+
 def get_all_triage_tickets(jclient, only_recent=False):
     recent_filter = "" if not only_recent else 'and created >= -31d'
     query = 'project = MGMT AND component = "Assisted-installer Triage" AND labels in (AI_CLOUD_TRIAGE) {}'.format(recent_filter)
 
     return jclient.search_issues(query, maxResults=None)
+
 
 def get_issues(jclient, issue, only_recent):
     if issue is not None:
@@ -498,11 +644,13 @@ def get_issues(jclient, issue, only_recent):
     logger.info(f"Fetching {'recent' if only_recent else 'all'} issues")
     return get_all_triage_tickets(jclient, only_recent=only_recent)
 
+
 def process_issues(jclient, issues, update, update_signature):
     logger.info(f"Found {len(issues)} tickets, processing...")
 
     should_progress_bar = sys.stderr.isatty()
     for issue in tqdm.tqdm(issues, disable=not should_progress_bar, file=sys.stderr):
+        logger.debug(f"Issue {issue}")
         url = get_logs_url_from_issue(issue)
 
         if url is None:
@@ -511,6 +659,7 @@ def process_issues(jclient, issues, update, update_signature):
 
         add_signatures(jclient, url, issue.key, should_update=update,
                        signatures=update_signature)
+
 
 def get_credentials(user_password, use_netrc):
     if user_password is None:
@@ -523,6 +672,7 @@ def get_credentials(user_password, use_netrc):
             raise
 
     return username, password
+
 
 def main(args):
     username, password = get_credentials(args.user_password, args.netrc)
@@ -547,7 +697,7 @@ def main(args):
 
 
 def format_time(time_str):
-    return  dateutil.parser.isoparse(time_str).strftime("%Y-%m-%d %H:%M:%S")
+    return dateutil.parser.isoparse(time_str).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def add_signatures(jclient, url, issue_key, should_update=False, signatures=None):
@@ -558,6 +708,7 @@ def add_signatures(jclient, url, issue_key, should_update=False, signatures=None
         signatures_to_add = [v for k, v in name_to_signature.items() if k in signatures]
 
     for sig in signatures_to_add:
+        logger.debug(f"Running signature {sig.__name__}")
         s = sig(jclient)
         s.update_ticket(url, issue_key, should_update=should_update)
 
@@ -613,11 +764,7 @@ You can run this script without affecting the tickets by using the --dry-run fla
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
-    logging.getLogger("__main__").setLevel(logging.INFO)
-
-    if args.verbose:
-        logging.getLogger("__main__").setLevel(logging.DEBUG)
+    config_logger(args.verbose)
 
     return args
 
