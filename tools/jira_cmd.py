@@ -4,6 +4,7 @@
 # A tool to perform various operations on Jira
 
 import os
+import io
 import sys
 import re
 import csv
@@ -16,6 +17,7 @@ from urllib.parse import urlparse
 from collections import Counter
 from tabulate import tabulate
 import jira
+import json
 
 
 JIRA_SERVER = "https://issues.redhat.com/"
@@ -24,6 +26,7 @@ FIELD_SPRINT = 'customfield_12310940'
 FIELD_CONTRIBUTORS = 'customfield_12315950'
 
 MAX_RESULTS = 100
+TRIAGE_MAX_RESULTS = 300
 
 SEARCH_QUERY_EPICS = 'project = MGMT AND component = "MGMT OCP Metal" AND type = Epic AND filter = '
 CURRENT_VERSION_FILTER = '12347072'
@@ -118,9 +121,12 @@ def get_data_for_print(issues, issues_count=None, print_fields=None):
         if 'component' in headers:
             row['component'] = [c.name for c in i.fields.components]
         if 'priority' in headers:
-            row['priority'] = i.fields.priority.name
+            try:
+                row['priority'] = i.fields.priority.name
+            except Exception:
+                row['priority'] = i.fields.priority
         if 'status' in headers:
-            row['status'] = i.fields.status
+            row['status'] = str(i.fields.status)
         if 'fixVersion' in headers:
             row['fixVersion'] = "" if len(i.fields.fixVersions) == 0 else i.fields.fixVersions[0].name
         if 'assignee' in headers:
@@ -142,17 +148,26 @@ def get_data_for_print(issues, issues_count=None, print_fields=None):
 def print_report_csv(issues, issues_count=None, print_fields=None):
     headers, data = get_data_for_print(issues, issues_count=issues_count,
                                        print_fields=print_fields)
-    csvout = csv.DictWriter(sys.stdout, delimiter='|', fieldnames=headers)
+    output = io.StringIO()
+    csvout = csv.DictWriter(output, delimiter='|', fieldnames=headers)
     csvout.writeheader()
     for row in data:
         csvout.writerow(row)
+
+    return output.getvalue()
+
+
+def print_report_json(issues, issues_count=None, print_fields=None):
+    _, data = get_data_for_print(issues, issues_count=issues_count,
+                                 print_fields=print_fields)
+    return json.dumps(data)
 
 
 def print_report_table(issues, isMarkdown=False, issues_count=None, print_fields=None):
     _, data = get_data_for_print(issues, issues_count=issues_count,
                                  print_fields=print_fields)
     fmt = "github" if isMarkdown else "psql"
-    print(tabulate(data, headers="keys", tablefmt=fmt))
+    return tabulate(data, headers="keys", tablefmt=fmt)
 
 
 def print_raw(issues):
@@ -521,6 +536,10 @@ def handle_sprint_update(args, jiraTool, issues):
 
 def main(args):
     j = jira_netrc_login(args.netrc)
+    max_results = args.max_results
+    if args.max_results == MAX_RESULTS and args.linked_issues:
+        logger.debug("Increasing the Jira maxResults param to %s", TRIAGE_MAX_RESULTS)
+        max_results = TRIAGE_MAX_RESULTS
     jiraTool = JiraTool(j, maxResults=args.max_results)
 
     if args.issue is not None:
@@ -575,18 +594,23 @@ def main(args):
     if args.print_raw:
         print_raw(issues)
     if args.print_report:
-        print_report_table(filter_issue_status(issues, args.include_status), issues_count=issues_count,
-                           print_fields=args.print_field)
+        return print_report_table(filter_issue_status(issues, args.include_status), issues_count=issues_count,
+                                  print_fields=args.print_field)
     elif args.print_markdown_report:
-        print_report_table(filter_issue_status(issues, args.include_status),
-                           isMarkdown=True, issues_count=issues_count,
-                           print_fields=args.print_field)
+        return print_report_table(filter_issue_status(issues, args.include_status),
+                                  isMarkdown=True, issues_count=issues_count,
+                                  print_fields=args.print_field)
+    elif args.print_json:
+        return print_report_json(filter_issue_status(issues, args.include_status),
+                                 issues_count=issues_count,
+                                 print_fields=args.print_field)
     elif args.print_csv_report:
-        print_report_csv(filter_issue_status(issues, args.include_status), issues_count=issues_count,
-                         print_fields=args.print_field)
+        return print_report_csv(filter_issue_status(issues, args.include_status), issues_count=issues_count,
+                                print_fields=args.print_field)
+    return ""
 
 
-if __name__ == "__main__":
+def build_parser():
     VALID_STATUS = ['QE Review', 'To Do', 'Done', 'Obsolete', 'Code Review', 'In Progress']
     helpDescription = textwrap.dedent("""
     Tool to help perform common operations on Jira tickets
@@ -630,12 +654,12 @@ if __name__ == "__main__":
     selectors.add_argument("-eff", "--epics-for-fixup", action='store_const',
                            dest="search_query", const='filter = "AI epics for fixup"',
                            help="Search for epics for fixup operation")
-    selectors.add_argument("-tt", "--triaging-tickets", action='store_const',
-                           dest="search_query", const='project = MGMT AND component = "Assisted-installer Triage"',
+    selectors.add_argument("-tt", "--triaging-tickets", action='store_const', dest="search_query",
+                           const='project = MGMT AND component = "Assisted-installer Triage" AND labels in (AI_CLOUD_TRIAGE) ORDER BY key DESC',
                            help="Search for Assisted Installer triaging tickets")
     selectors.add_argument("-rtt", "--recent-triaging-tickets", action='store_const',
                            dest="search_query",
-                           const='project = MGMT AND component = "Assisted-installer Triage" and created > -7d',
+                           const='project = MGMT AND component = "Assisted-installer Triage" AND labels in (AI_CLOUD_TRIAGE) AND created > -7d',
                            help="Search for Assisted Installer triaging tickets")
     selectors.add_argument("-ce", "--current-version-epics", action='store_const',
                            dest="search_query", const=SEARCH_QUERY_EPICS + CURRENT_VERSION_FILTER,
@@ -658,6 +682,7 @@ if __name__ == "__main__":
     ops.add_argument("-p", "--print-report", action="store_true", help="Print issues details")
     ops.add_argument("-pr", "--print-raw", action="store_true", help="Print raw issues details")
     ops.add_argument("-pc", "--print-csv-report", action="store_true", help="Print issues details")
+    ops.add_argument("-pj", "--print-json", action="store_true", help="Print issues details")
     ops.add_argument("-pmd", "--print-markdown-report", action="store_true", help="Print issues details")
     ops.add_argument("-al", "--link-to", default=None, help="Link tickets from search result to provided ticket")
     ops.add_argument("-rl", "--remove-link", default=None, help="Remove the provided ticket tickets in search results")
@@ -678,12 +703,18 @@ if __name__ == "__main__":
                                                                  add epic's Team component to all tasks.
                                                                  if epic has a project-related label, will add it to all tasks
                                                                  """))
-    cmdline_args = parser.parse_args()
+    return parser
 
+
+if __name__ == "__main__":
+    cmdline_args = build_parser().parse_args()
+
+    if cmdline_args.print_json:
+        logging.getLogger("__main__").setLevel(logging.WARN)
     if cmdline_args.verbose:
         isVerbose = True
         logging.getLogger("__main__").setLevel(logging.DEBUG)
     if cmdline_args.dry_run:
         isDryRun = True
 
-    main(cmdline_args)
+    print(main(cmdline_args))
