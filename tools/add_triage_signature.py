@@ -532,13 +532,51 @@ class IOErrorsSignature(Signature):
                 self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
+class ConsoleTimeoutSignature(Signature):
+    """
+    This signature looks for 'waiting for console' error in cluster's status_info.
+    If OpenShift version is 4.7 and hosts are VMware vms, outputs a warning.
+    Due to: https://bugzilla.redhat.com/1926345
+    """
+
+    def __init__(self, jira_client):
+        super().__init__(jira_client, comment_identifying_string="h1. Console timeout - VMware hosts / OCP 4.7")
+
+    def _update_ticket(self, url, issue_key, should_update=False):
+        url = self._logs_url_to_api(url)
+
+        try:
+            md = get_metadata_json(url)
+        except Exception as e:
+            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
+            return
+
+        def isVMware(host):
+            inventory = json.loads(host['inventory'])
+            product_name = inventory['system_vendor'].get('product_name')
+            return "VMware" in product_name
+
+        cluster = md['cluster']
+        status_info = cluster['status_info']
+        openshift_version = cluster['openshift_version']
+        report = ""
+        if "waiting for console" in status_info and "4.7" in openshift_version:
+            if any(isVMware(host) for host in cluster['hosts']):
+                report = "h2. Waiting for console timeout probably due to VMware hosts on OCP 4.7\n"
+                report += "See: https://bugzilla.redhat.com/1926345\n"
+
+        if report != "":
+            self._update_triaging_ticket(issue_key, report, should_update=should_update)
+
+
 ############################
 # Common functionality
 ############################
 DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SERVER = "https://issues.redhat.com"
 SIGNATURES = [FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
-              StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature, IOErrorsSignature]
+              StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature, IOErrorsSignature,
+              ConsoleTimeoutSignature]
 
 
 def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
