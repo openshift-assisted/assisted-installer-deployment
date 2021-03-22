@@ -15,7 +15,7 @@ class TriageStats:
         def my_exit(msg):
             pass
         parser.error = my_exit
-        self.args = parser.parse_args()
+        self.args = parser.parse_args([])
         self.args.print_json = True
         self.args.linked_issues = True
         self.stats = {}
