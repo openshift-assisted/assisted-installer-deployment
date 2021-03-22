@@ -1,0 +1,53 @@
+targets:
+  - namespace:
+      $ref: /services/assisted-installer/namespaces/assisted-installer-integration.yml
+    ref: master
+    upstream: openshift-assisted-service-gh-build-master
+    parameters:
+      INSTALL_RH_CA: true
+      INSTALLER_IMAGE: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-rhel8:v4.6.0-19
+      CONTROLLER_IMAGE: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-reporter-rhel8:v4.6.0-15
+      AGENT_DOCKER_IMAGE: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v4.6.0-15
+      CONNECTIVITY_CHECK_IMAGE: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v4.6.0-15
+      INVENTORY_IMAGE: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v4.6.0-15
+      FREE_ADDRESSES_IMAGE: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v4.6.0-15
+      DHCP_LEASE_ALLOCATOR_IMAGE: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v4.6.0-15
+      OPENSHIFT_INSTALL_RELEASE_IMAGE: quay.io/ocpmetal/ocp-release:4.6.0-0.nightly-2020-08-31-220837
+      IGNITION_GENERATE_IMAGE: quay.io/ocpmetal/assisted-ignition-generator:v1.0.9.4
+      RELEASE_TAG: v1.0.9.4-ds
+      REGISTRY_CREDS: qa@redhat.com:redhatqa
+      OCM_LOG_LEVEL: debug
+  - namespace:
+      $ref: /services/assisted-installer/namespaces/assisted-installer-stage.yml
+    ref: b793c526a1687a3181d657d8feb0196a414ed48d
+    parameters:
+      INSTALL_RH_CA: true
+      INSTALLER_IMAGE: registry.stage.redhat.io/openshift4/assisted-installer-rhel8:v4.6.0-19
+      CONTROLLER_IMAGE: registry.stage.redhat.io/openshift4/assisted-installer-reporter-rhel8:v4.6.0-15
+      AGENT_DOCKER_IMAGE: registry.stage.redhat.io/openshift4/assisted-installer-agent-rhel8:v4.6.0-15
+      CONNECTIVITY_CHECK_IMAGE: registry.stage.redhat.io/openshift4/assisted-installer-agent-rhel8:v4.6.0-15
+      INVENTORY_IMAGE: registry.stage.redhat.io/openshift4/assisted-installer-agent-rhel8:v4.6.0-15
+      FREE_ADDRESSES_IMAGE: registry.stage.redhat.io/openshift4/assisted-installer-agent-rhel8:v4.6.0-15
+      DHCP_LEASE_ALLOCATOR_IMAGE: registry.stage.redhat.io/openshift4/assisted-installer-agent-rhel8:v4.6.0-15
+      OPENSHIFT_INSTALL_RELEASE_IMAGE: quay.io/ocpmetal/ocp-release:4.6.0-0.nightly-2020-08-31-220837
+      IGNITION_GENERATE_IMAGE: quay.io/ocpmetal/assisted-ignition-generator:v1.0.9.4
+      RELEASE_TAG: v1.0.9.4-ds
+      REGISTRY_CREDS: qa@redhat.com:redhatqa
+      OCM_LOG_LEVEL: debug
+  - namespace:
+      $ref: /services/assisted-installer/namespaces/assisted-installer-production.yml
+    ref: b2bb4401c6256c6f59557919074f3c2d6e8a0e9b
+    parameters:
+      INSTALL_RH_CA: true
+      INSTALLER_IMAGE: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-rhel8:v4.6.0-16
+      CONTROLLER_IMAGE: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-reporter-rhel8:v4.6.0-12
+      AGENT_DOCKER_IMAGE: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v4.6.0-12
+      CONNECTIVITY_CHECK_IMAGE: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v4.6.0-12
+      INVENTORY_IMAGE: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v4.6.0-12
+      FREE_ADDRESSES_IMAGE: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v4.6.0-12
+      DHCP_LEASE_ALLOCATOR_IMAGE: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v4.6.0-12
+      OPENSHIFT_INSTALL_RELEASE_IMAGE: quay.io/ocpmetal/ocp-release:v1.0.9.2
+      IGNITION_GENERATE_IMAGE: quay.io/ocpmetal/assisted-ignition-generator:v1.0.9.2
+      RELEASE_TAG: v1.0.9.2-ds
+      REGISTRY_CREDS: qa@redhat.com:redhatqa
+      BASE_DNS_DOMAINS: "" # Emphasize the fact that route53 is disabled on prod.
