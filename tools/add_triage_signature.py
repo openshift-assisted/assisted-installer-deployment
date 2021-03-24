@@ -53,7 +53,7 @@ h1. Cluster Info
 """
 
 
-def config_logger(verbose: bool):
+def config_logger(verbose):
     handler = colorlog.StreamHandler()
     handler.setFormatter(colorlog.ColoredFormatter('%(log_color)s%(levelname)-10s %(message)s'))
 
@@ -92,17 +92,16 @@ def get_events_json(cluster_url, cluster_id):
 
 
 @functools.lru_cache(maxsize=100)
-def get_remote_archive(tar_url: str) -> nestedarchive.RemoteNestedArchive:
+def get_remote_archive(tar_url):
     return nestedarchive.RemoteNestedArchive(tar_url, init_download=True)
 
 
-def get_triage_logs_tar(triage_url: str, cluster_id: str) -> nestedarchive.RemoteNestedArchive:
+def get_triage_logs_tar(triage_url, cluster_id):
     tar_url = f"{triage_url}/cluster_{cluster_id}_logs.tar"
     return get_remote_archive(tar_url)
 
 
-def get_host_log_file(triage_logs_tar: nestedarchive.RemoteNestedArchive,
-                      host_id: str, filename: str):
+def get_host_log_file(triage_logs_tar, host_id, filename):
     # The file is already uniquely determined by the host_id, we can omit the hostname
     hostname = "*"
 
@@ -607,12 +606,12 @@ LOGS_URL_FROM_DESCRIPTION_OLD = re.compile(r".*logs:\* \[(http.*)\]")
 LOGS_URL_FROM_DESCRIPTION_NEW = re.compile(r".*\* \[[lL]ogs\|(http.*)\]")
 
 
-def search_patterns_in_string(string: str, patterns: List[str]) -> List[str]:
+def search_patterns_in_string(string, patterns):
     combined_regex = re.compile(f'({"|".join(r".*%s.*" % pattern for pattern in patterns)})')
     return combined_regex.findall(string)
 
 
-def group_similar_strings(ls: List[str], ratio: int) -> List[str]:
+def group_similar_strings(ls, ratio):
     '''
     Uses Levenshtein Distance Algorithm to calculate the differences between strings
     Then, groups similar strings that matches according to the ratio.
@@ -675,7 +674,7 @@ def get_issues(jclient, issue, only_recent):
     return get_all_triage_tickets(jclient, only_recent=only_recent)
 
 
-def get_ticket_browse_url(issue_key: str):
+def get_ticket_browse_url(issue_key):
     return f"{JIRA_SERVER}/browse/{issue_key}"
 
 
