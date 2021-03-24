@@ -14,6 +14,7 @@ import tempfile
 from collections import OrderedDict, defaultdict
 from datetime import datetime
 from tempfile import NamedTemporaryFile, TemporaryDirectory
+from textwrap import dedent
 from typing import List
 from urllib.parse import urlparse
 
@@ -480,7 +481,7 @@ class IOErrorsSignature(Signature):
     ]
 
     def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. I/O errors")
+        super().__init__(jira_client, comment_identifying_string="h1. Virtual media disconnection")
 
     def _update_ticket(self, url, issue_key, should_update=False):
         url = self._logs_url_to_api(url)
@@ -524,11 +525,16 @@ class IOErrorsSignature(Signature):
                     hosts.append(OrderedDict(
                         id=host['id'],
                         hostname=self._get_hostname(host),
-                        log=log[0],
+                        log=f"{{color:red}}{log[0]}{{color}}",
                         similar_logs=log[1]))
 
             if hosts:
-                report = self._generate_table_for_report(hosts)
+                report = dedent("""
+                Media disconnection events were found.
+                It usually indicates that reading data from media disk cannot be made due to a network problem on PXE setup,
+                bad contact with the media disk, or actual hardware disconnection.
+                """)
+                report += self._generate_table_for_report(hosts)
                 self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
