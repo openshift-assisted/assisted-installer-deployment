@@ -9,11 +9,9 @@ import netrc
 import os
 import re
 import sys
-import tarfile
 import tempfile
 from collections import OrderedDict, defaultdict
 from datetime import datetime
-from tempfile import NamedTemporaryFile, TemporaryDirectory
 from textwrap import dedent
 from typing import List
 from urllib.parse import urlparse
@@ -21,6 +19,7 @@ from urllib.parse import urlparse
 import colorlog
 import dateutil.parser
 import jira
+import nestedarchive
 import requests
 import tqdm
 from fuzzywuzzy import fuzz
@@ -54,7 +53,7 @@ h1. Cluster Info
 """
 
 
-def config_logger(verbose: bool):
+def config_logger(verbose):
     handler = colorlog.StreamHandler()
     handler.setFormatter(colorlog.ColoredFormatter('%(log_color)s%(levelname)-10s %(message)s'))
 
@@ -92,12 +91,21 @@ def get_events_json(cluster_url, cluster_id):
     return res.json()
 
 
-def get_cluster_logs(cluster_url: str, cluster_id: str, output_file: str):
-    res = requests.get(f"{cluster_url}/cluster_{cluster_id}_logs.tar")
-    res.raise_for_status()
+@functools.lru_cache(maxsize=100)
+def get_remote_archive(tar_url):
+    return nestedarchive.RemoteNestedArchive(tar_url, init_download=True)
 
-    with open(output_file, "wb") as f:
-        f.write(res.content)
+
+def get_triage_logs_tar(triage_url, cluster_id):
+    tar_url = f"{triage_url}/cluster_{cluster_id}_logs.tar"
+    return get_remote_archive(tar_url)
+
+
+def get_host_log_file(triage_logs_tar, host_id, filename):
+    # The file is already uniquely determined by the host_id, we can omit the hostname
+    hostname = "*"
+
+    return triage_logs_tar.get(f"{hostname}.tar.gz/logs_host_{host_id}/{filename}")
 
 
 ############################
@@ -495,47 +503,42 @@ class IOErrorsSignature(Signature):
         cluster = md['cluster']
         cluster_id = cluster['id']
 
-        with TemporaryDirectory() as tempdir:
-            cluster_logs_file = os.path.join(tempdir, "cluster_logs.tar")
-            try:
-                get_cluster_logs(url, cluster_id, cluster_logs_file)
-            except Exception as e:
-                logger.error("Error getting logs for %s at %s: %s, they may have been deleted", issue_key, url, e)
+        hosts = []
+
+        try:
+            triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                logger.warning(f"{get_ticket_browse_url(issue_key)} doesn't have a log tar, skipping {type(self).__name__}")
                 return
+            raise
 
-            with tarfile.open(cluster_logs_file) as tar:
-                tar.extractall(tempdir)
+        for host in cluster["hosts"]:
+            host_id = host["id"]
 
-            hosts = []
+            try:
+                dmesg_file = get_host_log_file(triage_logs_tar, host_id, "dmesg.logs")
+            except FileNotFoundError:
+                continue
 
-            for tar_file in os.listdir(tempdir):
-                tar_file = os.path.join(tempdir, tar_file)
-                try:
-                    dmesg_file = extract_file_from_tar(tar_file, file_substring="dmesg", output_dir=tempdir)
-                except FileNotFoundError:
-                    continue
+            logs = search_patterns_in_string(dmesg_file, self.ERRORS_PATTERNS)
+            logs = [(group[0], len(group)) for group in group_similar_strings(logs, ratio=80)]
 
-                host_id = get_host_id_for_host_tar(tar_file)
-                host = list(filter(lambda host: host['id'] == host_id, cluster['hosts']))[0]
+            for log in logs:
+                hosts.append(OrderedDict(
+                    id=host_id,
+                    hostname=self._get_hostname(host),
+                    log=f"{{color:red}}{log[0]}{{color}}",
+                    similar_logs=log[1]))
 
-                logs = search_patterns_in_file(dmesg_file, self.ERRORS_PATTERNS)
-                logs = [(group[0], len(group)) for group in group_similar_strings(logs, ratio=80)]
-
-                for log in logs:
-                    hosts.append(OrderedDict(
-                        id=host['id'],
-                        hostname=self._get_hostname(host),
-                        log=f"{{color:red}}{log[0]}{{color}}",
-                        similar_logs=log[1]))
-
-            if hosts:
-                report = dedent("""
-                Media disconnection events were found.
-                It usually indicates that reading data from media disk cannot be made due to a network problem on PXE setup,
-                bad contact with the media disk, or actual hardware disconnection.
-                """)
-                report += self._generate_table_for_report(hosts)
-                self._update_triaging_ticket(issue_key, report, should_update=should_update)
+        if len(hosts) != 0:
+            report = dedent("""
+            Media disconnection events were found.
+            It usually indicates that reading data from media disk cannot be made due to a network problem on PXE setup,
+            bad contact with the media disk, or actual hardware disconnection.
+            """)
+            report += self._generate_table_for_report(hosts)
+            self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
 class ConsoleTimeoutSignature(Signature):
@@ -603,13 +606,12 @@ LOGS_URL_FROM_DESCRIPTION_OLD = re.compile(r".*logs:\* \[(http.*)\]")
 LOGS_URL_FROM_DESCRIPTION_NEW = re.compile(r".*\* \[[lL]ogs\|(http.*)\]")
 
 
-def search_patterns_in_file(file_name: str, patterns: List[str]) -> List[str]:
+def search_patterns_in_string(string, patterns):
     combined_regex = re.compile(f'({"|".join(r".*%s.*" % pattern for pattern in patterns)})')
-    with open(file_name, "r") as f:
-        return combined_regex.findall(f.read())
+    return combined_regex.findall(string)
 
 
-def group_similar_strings(ls: List[str], ratio: int) -> List[str]:
+def group_similar_strings(ls, ratio):
     '''
     Uses Levenshtein Distance Algorithm to calculate the differences between strings
     Then, groups similar strings that matches according to the ratio.
@@ -630,23 +632,6 @@ def group_similar_strings(ls: List[str], ratio: int) -> List[str]:
             groups.append([item, ])
 
     return groups
-
-
-def get_host_id_for_host_tar(tar_path: str) -> str:
-    with TemporaryDirectory() as tempdir:
-        prefix = "logs_host_"
-        file_name = extract_file_from_tar(tar_path=tar_path, file_substring=prefix, output_dir=tempdir)
-        return file_name[file_name.find(prefix):].strip(prefix)
-
-
-def extract_file_from_tar(tar_path: str, file_substring: str, output_dir: str) -> str:
-    with tarfile.open(tar_path) as tar:
-        for member in tar.getnames():
-            if file_substring in member:
-                tar.extract(member, output_dir)
-                return os.path.join(output_dir, member)
-        else:
-            raise FileNotFoundError(f"{file_substring} file couldn't be found in tar {tar_path}")
 
 
 def get_issue(jclient, issue_key):
@@ -689,6 +674,10 @@ def get_issues(jclient, issue, only_recent):
     return get_all_triage_tickets(jclient, only_recent=only_recent)
 
 
+def get_ticket_browse_url(issue_key):
+    return f"{JIRA_SERVER}/browse/{issue_key}"
+
+
 def process_issues(jclient, issues, update, update_signature):
     logger.info(f"Found {len(issues)} tickets, processing...")
 
@@ -698,7 +687,7 @@ def process_issues(jclient, issues, update, update_signature):
         url = get_logs_url_from_issue(issue)
 
         if url is None:
-            logger.warning(f"Could not get URL from issue {JIRA_SERVER}/browse/{issue.key}. Skipping")
+            logger.warning(f"Could not get URL from issue {get_ticket_browse_url(issue.key)}. Skipping")
             continue
 
         add_signatures(jclient, url, issue.key, should_update=update,
