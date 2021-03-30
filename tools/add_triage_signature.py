@@ -476,7 +476,7 @@ class LibvirtRebootFlagSignature(Signature):
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
-class IOErrorsSignature(Signature):
+class MediaDisconnectionSignature(Signature):
     '''
     The signature downloads cluster logs, and go over all the hosts logs files searching for a 'dmesg' file
     Then, it looks for i/o errors (disks, media) patterns and groups them per host
@@ -569,10 +569,14 @@ class ConsoleTimeoutSignature(Signature):
         status_info = cluster['status_info']
         openshift_version = cluster['openshift_version']
         report = ""
-        if "waiting for console" in status_info and "4.7" in openshift_version:
-            if any(isVMware(host) for host in cluster['hosts']):
-                report = "h2. Waiting for console timeout probably due to VMware hosts on OCP 4.7\n"
-                report += "See: https://bugzilla.redhat.com/1926345\n"
+        if ("waiting for console" in status_info and
+                "4.7" in openshift_version and
+                any(isVMware(host) for host in cluster['hosts'])):
+            report = "\n".join([
+                "h2. Waiting for console timeout probably due to VMware hosts on OCP 4.7",
+                "You can mark it as caused by issue [MGMT-4454|https://issues.redhat.com/browse/MGMT-4454]",
+                "Solution will be provided via [bugzilla|https://bugzilla.redhat.com/1935539] ticket",
+            ])
 
         if report != "":
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
@@ -584,8 +588,8 @@ class ConsoleTimeoutSignature(Signature):
 DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SERVER = "https://issues.redhat.com"
 SIGNATURES = [FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
-              StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature, IOErrorsSignature,
-              ConsoleTimeoutSignature]
+              StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature,
+              MediaDisconnectionSignature, ConsoleTimeoutSignature]
 
 
 def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
