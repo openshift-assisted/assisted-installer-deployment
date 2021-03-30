@@ -19,20 +19,20 @@ openshift/assisted-installer-agent:
 
 # Downstream images:
 # - assisted-installer:
-#     hash: 9b21fb43cca684ff4de4c8ef9682e1c0f36133c0
-#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-rhel8:v1.0.0-24
-#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-rhel8:v1.0.0-24
-#     production image name: registry.redhat.io/openshift4/assisted-installer-rhel8:v1.0.0-24
+#     hash: 2806f5cc7c6064180a4f2168a2b0104a9ea259db
+#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-rhel8:v1.0.0-27
+#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-rhel8:v1.0.0-27
+#     production image name: registry.redhat.io/openshift4/assisted-installer-rhel8:v1.0.0-27
 # - assisted-installer-controller:
-#     hash: 9b21fb43cca684ff4de4c8ef9682e1c0f36133c0
-#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-reporter-rhel8:v1.0.0-25
-#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-reporter-rhel8:v1.0.0-25
-#     production image name: registry.redhat.io/openshift4/assisted-installer-reporter-rhel8:v1.0.0-25
+#     hash: 2806f5cc7c6064180a4f2168a2b0104a9ea259db
+#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-reporter-rhel8:v1.0.0-28
+#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-reporter-rhel8:v1.0.0-28
+#     production image name: registry.redhat.io/openshift4/assisted-installer-reporter-rhel8:v1.0.0-28
 # - assisted-installer-agent:
-#     hash: d28226138b29a122d2bae5108e81cebf693bb105
-#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v1.0.0-25
-#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-agent-rhel8:v1.0.0-25
-#     production image name: registry.redhat.io/openshift4/assisted-installer-agent-rhel8:v1.0.0-25
+#     hash: 4b8a77a7db432763c508b11bdd23be556be2197f
+#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v1.0.0-26
+#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-agent-rhel8:v1.0.0-26
+#     production image name: registry.redhat.io/openshift4/assisted-installer-agent-rhel8:v1.0.0-26
 # - OPENSHIFT_INSTALL_RELEASE_IMAGE:
 #     quay.io/openshift-release-dev/ocp-release:4.6.16-x86_64
 #     quay.io/openshift-release-dev/ocp-release:4.7.2-x86_64
