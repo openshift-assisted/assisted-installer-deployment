@@ -77,11 +77,18 @@ def days_ago(datestr):
         return 9999
 
 
+class FailedToGetMetadataException(Exception):
+    pass
+
+
 @functools.lru_cache(maxsize=1000)
 def get_metadata_json(cluster_url):
-    res = requests.get("{}/metdata.json".format(cluster_url))
-    res.raise_for_status()
-    return res.json()
+    try:
+        res = requests.get("{}/metdata.json".format(cluster_url))
+        res.raise_for_status()
+        return res.json()
+    except Exception as e:
+        raise FailedToGetMetadataException from e
 
 
 @functools.lru_cache(maxsize=1000)
@@ -96,9 +103,16 @@ def get_remote_archive(tar_url):
     return nestedarchive.RemoteNestedArchive(tar_url, init_download=True)
 
 
+class FailedToGetLogsTarException(Exception):
+    pass
+
+
 def get_triage_logs_tar(triage_url, cluster_id):
-    tar_url = f"{triage_url}/cluster_{cluster_id}_logs.tar"
-    return get_remote_archive(tar_url)
+    try:
+        tar_url = f"{triage_url}/cluster_{cluster_id}_logs.tar"
+        return get_remote_archive(tar_url)
+    except requests.exceptions.HTTPError as e:
+        raise FailedToGetLogsTarException from e
 
 
 def get_host_log_file(triage_logs_tar, host_id, filename):
@@ -122,6 +136,17 @@ class Signature(abc.ABC):
     def update_ticket(self, url, issue_key, should_update=False):
         try:
             self._update_ticket(url, issue_key, should_update=should_update)
+        except FailedToGetMetadataException as e:
+            browse_url = get_ticket_browse_url(issue_key)
+            logger.error(
+                f"Error getting metadata for {browse_url} at {url}: {e.__cause__}, it may have been deleted"
+            )
+        except FailedToGetLogsTarException as e:
+            if e.__cause__.response.status_code == 404:
+                logger.warning(
+                    f"{get_ticket_browse_url(issue_key)} doesn't have a log tar, skipping {type(self).__name__}")
+                return
+            raise
         except Exception:
             logger.exception("error updating ticket %s", issue_key)
 
@@ -204,11 +229,7 @@ class HostsStatusSignature(Signature):
     def _update_ticket(self, url, issue_key, should_update=False):
 
         url = self._logs_url_to_api(url)
-        try:
-            md = get_metadata_json(url)
-        except Exception as e:
-            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
-            return
+        md = get_metadata_json(url)
 
         cluster = md['cluster']
 
@@ -260,11 +281,7 @@ class FailureDescription(Signature):
             return
 
         url = self._logs_url_to_api(url)
-        try:
-            md = get_metadata_json(url)
-        except Exception as e:
-            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
-            return
+        md = get_metadata_json(url)
 
         cluster = md['cluster']
 
@@ -281,11 +298,7 @@ class HostsExtraDetailSignature(Signature):
     def _update_ticket(self, url, issue_key, should_update=False):
 
         url = self._logs_url_to_api(url)
-        try:
-            md = get_metadata_json(url)
-        except Exception as e:
-            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
-            return
+        md = get_metadata_json(url)
 
         cluster = md['cluster']
 
@@ -331,11 +344,7 @@ class InstallationDiskFIOSignature(Signature):
 
     def _update_ticket(self, url, issue_key, should_update=False):
         url = self._logs_url_to_api(url)
-        try:
-            md = get_metadata_json(url)
-        except Exception as e:
-            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
-            return
+        md = get_metadata_json(url)
 
         cluster = md['cluster']
 
@@ -377,11 +386,7 @@ class StorageDetailSignature(Signature):
     def _update_ticket(self, url, issue_key, should_update=False):
 
         url = self._logs_url_to_api(url)
-        try:
-            md = get_metadata_json(url)
-        except Exception as e:
-            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
-            return
+        md = get_metadata_json(url)
 
         cluster = md['cluster']
 
@@ -417,11 +422,7 @@ class ComponentsVersionSignature(Signature):
     def _update_ticket(self, url, issue_key, should_update=False):
 
         url = self._logs_url_to_api(url)
-        try:
-            md = get_metadata_json(url)
-        except Exception as e:
-            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
-            return
+        md = get_metadata_json(url)
 
         report = ""
         release_tag = md.get('release_tag')
@@ -445,11 +446,7 @@ class LibvirtRebootFlagSignature(Signature):
     def _update_ticket(self, url, issue_key, should_update=False):
 
         url = self._logs_url_to_api(url)
-        try:
-            md = get_metadata_json(url)
-        except Exception as e:
-            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
-            return
+        md = get_metadata_json(url)
 
         cluster = md['cluster']
 
@@ -494,24 +491,14 @@ class MediaDisconnectionSignature(Signature):
     def _update_ticket(self, url, issue_key, should_update=False):
         url = self._logs_url_to_api(url)
 
-        try:
-            md = get_metadata_json(url)
-        except Exception as e:
-            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
-            return
+        md = get_metadata_json(url)
 
         cluster = md['cluster']
         cluster_id = cluster['id']
 
         hosts = []
 
-        try:
-            triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 404:
-                logger.warning(f"{get_ticket_browse_url(issue_key)} doesn't have a log tar, skipping {type(self).__name__}")
-                return
-            raise
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
 
         for host in cluster["hosts"]:
             host_id = host["id"]
@@ -554,11 +541,7 @@ class ConsoleTimeoutSignature(Signature):
     def _update_ticket(self, url, issue_key, should_update=False):
         url = self._logs_url_to_api(url)
 
-        try:
-            md = get_metadata_json(url)
-        except Exception as e:
-            logger.error("Error getting metadata for %s at %s: %s, it may have been deleted", issue_key, url, e)
-            return
+        md = get_metadata_json(url)
 
         def isVMware(host):
             inventory = json.loads(host['inventory'])
@@ -582,6 +565,89 @@ class ConsoleTimeoutSignature(Signature):
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
+class AgentStepFailureSignature(Signature):
+    """
+    This signature creates a report of all agent step failures that were encountered in the logs
+    """
+
+    # This has to be maintained to be the same format as https://github.com/openshift/assisted-installer-agent/blob/aebd94105b4ed6442f21a7a26ab4e40eafd936aa/src/commands/step_processor.go#L81
+    # Remember to maintain backwards compatibility if that format ever changes - create
+    # PATTERN_NEW and try to match both.
+    LOG_PATTERN = re.compile(
+        r'time="(?P<time>.+)" level=(?P<severity>[a-z]+) msg="(?P<message>Step execution failed.*)" file=.+'
+    )
+
+    MSG_PATTERN = re.compile(
+        r'Step execution failed \(exit code (?P<exit_code>\d+)\): <(?P<step_id>[a-z\-0-9]+)>, '
+        r'command: <(?P<command>.+?)>, args: <\[(?P<args>.+?)\]>\. '
+        r'Output:\\nstdout:\\n(?P<stdout>.*)\\n\\nstderr:\\n(?P<stderr>.*)\\n'
+    )
+
+    MAX_FAILURES_PER_HOST = 10
+    TRUNCATE_OUTPUT_LENGTH = 1500
+
+    def __init__(self, jira_client):
+        super().__init__(jira_client, comment_identifying_string="h1. Agent step failures")
+
+    @classmethod
+    def _prepare_output(cls, output):
+        if len(output) == 0:
+            return output
+
+        if len(output) > cls.TRUNCATE_OUTPUT_LENGTH:
+            half = cls.TRUNCATE_OUTPUT_LENGTH // 2
+            output = f"{output[:half]} ... **OUTPUT HAS BEEN TRUNCATED** ... {output[-half:]}"
+
+        return "{code:none}%s{code}" % (output.replace("|", "¦"))
+
+    def _update_ticket(self, url, issue_key, should_update=False):
+        url = self._logs_url_to_api(url)
+
+        md = get_metadata_json(url)
+
+        cluster = md['cluster']
+        cluster_id = cluster['id']
+
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+
+        report = ''
+        for host in cluster["hosts"]:
+            host_id = host["id"]
+
+            try:
+                agent_logs = get_host_log_file(triage_logs_tar, host_id, "agent.logs")
+            except FileNotFoundError:
+                continue
+
+            failures = []
+            for _failure_idx, step_failure_log_match in zip(range(self.MAX_FAILURES_PER_HOST),
+                                                            self.LOG_PATTERN.finditer(agent_logs)):
+                step_failure_log = step_failure_log_match.groupdict()
+                step_failure_message_match = self.MSG_PATTERN.match(step_failure_log["message"])
+
+                if step_failure_message_match is None:
+                    logger.warning("Step failure signature skipped failure because failure message has unexpected format")
+                    continue
+
+                step_failure_message = step_failure_message_match.groupdict()
+
+                failures.append(OrderedDict(
+                    time=step_failure_log['time'],
+                    exit_code=step_failure_message['exit_code'],
+                    step_id=step_failure_message['step_id'],
+                    stdout=self._prepare_output(step_failure_message['stdout']),
+                    stderr=self._prepare_output(step_failure_message['stderr']),
+                ))
+
+            if len(failures) != 0:
+                report += dedent(f"""
+                h2. Agent step failures for {host_id} ({self._get_hostname(host)})
+                {self._generate_table_for_report(failures)}""")
+
+        if len(report) != 0:
+            self._update_triaging_ticket(issue_key, report, should_update=should_update)
+
+
 ############################
 # Common functionality
 ############################
@@ -589,7 +655,7 @@ DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SERVER = "https://issues.redhat.com"
 SIGNATURES = [FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
               StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature,
-              MediaDisconnectionSignature, ConsoleTimeoutSignature]
+              MediaDisconnectionSignature, ConsoleTimeoutSignature, AgentStepFailureSignature]
 
 
 def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
