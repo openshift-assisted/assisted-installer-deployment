@@ -584,7 +584,8 @@ class AgentStepFailureSignature(Signature):
     )
 
     MAX_FAILURES_PER_HOST = 10
-    TRUNCATE_OUTPUT_LENGTH = 1500
+    MAX_LINE_LENGTH = 1000
+    TRUNCATE_OUTPUT_LINES = 100
 
     def __init__(self, jira_client):
         super().__init__(jira_client, comment_identifying_string="h1. Agent step failures")
@@ -594,11 +595,18 @@ class AgentStepFailureSignature(Signature):
         if len(output) == 0:
             return output
 
-        if len(output) > cls.TRUNCATE_OUTPUT_LENGTH:
-            half = cls.TRUNCATE_OUTPUT_LENGTH // 2
-            output = f"{output[:half]} ... **OUTPUT HAS BEEN TRUNCATED** ... {output[-half:]}"
+        pre = "{code:borderStyle=none|bgColor=transparent} "
+        post = " {code}"
+        output_lines = output.replace("|", "¦").split("\\n")
 
-        return "{code:none}%s{code}" % (output.replace("|", "¦"))
+        if len(output_lines) > cls.TRUNCATE_OUTPUT_LINES:
+            half = cls.TRUNCATE_OUTPUT_LINES // 2
+            output_lines = output_lines[:half] + ["**OUTPUT HAS BEEN TRUNCATED**"] + output_lines[-half:]
+
+        output_lines = [line for line in output_lines if line != "\\\""]
+        output_lines = [pre + line[:cls.MAX_LINE_LENGTH] + post for line in output_lines]
+
+        return "".join(output_lines)
 
     def _update_ticket(self, url, issue_key, should_update=False):
         url = self._logs_url_to_api(url)
