@@ -643,7 +643,6 @@ class AgentStepFailureSignature(Signature):
                     time=step_failure_log['time'],
                     exit_code=step_failure_message['exit_code'],
                     step_id=step_failure_message['step_id'],
-                    stdout=self._prepare_output(step_failure_message['stdout']),
                     stderr=self._prepare_output(step_failure_message['stderr']),
                 ))
 
