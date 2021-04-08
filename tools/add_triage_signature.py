@@ -555,11 +555,20 @@ class ConsoleTimeoutSignature(Signature):
         if ("waiting for console" in status_info and
                 "4.7" in openshift_version and
                 any(isVMware(host) for host in cluster['hosts'])):
-            report = "\n".join([
-                "h2. Waiting for console timeout probably due to VMware hosts on OCP 4.7",
-                "You can mark it as caused by issue [MGMT-4454|https://issues.redhat.com/browse/MGMT-4454]",
-                "Solution will be provided via [bugzilla|https://bugzilla.redhat.com/1935539] ticket",
-            ])
+            # ISO conversion according to https://stackoverflow.com/questions/127803/how-do-i-parse-an-iso-8601-formatted-date#comment94022430_49784038
+            if datetime.fromisoformat(cluster['install_started_at'].replace('Z', '')) > datetime(2021, 4, 8):
+                report = "\n".join([
+                    "h2. Waiting for console timeout -probably due to VMware hosts on OCP 4.7 ([bugzilla|https://bugzilla.redhat.com/1935539])-",
+                    "As of April 8th 2021, 4.7.5 was pushed to production. That version contains the supposed fix "
+                    "for this bug. This means that the cause for the timeout in this ticket might not "
+                    "be due to this known bug - it might be caused by something else. Please investigate."
+                ])
+            else:
+                report = "\n".join([
+                    "h2. Waiting for console timeout probably due to VMware hosts on OCP 4.7",
+                    "You can mark it as caused by issue [MGMT-4454|https://issues.redhat.com/browse/MGMT-4454]",
+                    "Solution will be provided via [bugzilla|https://bugzilla.redhat.com/1935539] ticket",
+                ])
 
         if report != "":
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
