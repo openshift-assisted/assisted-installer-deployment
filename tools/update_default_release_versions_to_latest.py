@@ -49,7 +49,8 @@ APP_INTERFACE_GITLAB_REPO = f"service/{APP_INTERFACE_GITLAB_PROJECT}"
 APP_INTERFACE_GITLAB = "gitlab.cee.redhat.com"
 APP_INTERFACE_GITLAB_API = f'https://{APP_INTERFACE_GITLAB}'
 APP_INTERFACE_SAAS_YAML = f"{APP_INTERFACE_CLONE_DIR}/data/services/assisted-installer/cicd/saas.yaml"
-EXCLUDED_ENVIRONMENTS = {"staging", "production"}  # Don't update OPENSHIFT_VERSIONS in these envs
+# For now, all environments are excluded because we don't perform any overrides
+APP_INTERFACE_VERSIONS_OVERRIDE_EXCLUDED_ENVIRONMENTS = {"integration", "staging", "production"}
 
 # assisted-service PR related constants
 ASSISTED_SERVICE_CLONE_DIR = "assisted-service"
@@ -373,13 +374,8 @@ def commit_and_push_version_update_changes_app_interface(key_file, fork, message
     return branch
 
 
-def add_single_node_fake_4_8_release_image(openshift_versions_json):
-    with open(CUSTOM_OPENSHIFT_IMAGES) as f:
-        custom_images = json.load(f)
-
-    versions = json.loads(openshift_versions_json)
-    versions["4.8"] = custom_images["single-node-alpha"]
-    return json.dumps(versions)
+class NoChangesNeeded(Exception):
+    pass
 
 
 def change_version_in_files_app_interface(openshift_versions_json):
@@ -393,18 +389,21 @@ def change_version_in_files_app_interface(openshift_versions_json):
         "production": "/services/assisted-installer/namespaces/assisted-installer-production.yml",
     }
 
-    # TODO: This line needs to be removed once 4.8 is actually released
-    openshift_versions_json = add_single_node_fake_4_8_release_image(openshift_versions_json)
-
     # Ref is used to identify the environment inside the JSON
+    changed = False
     for environment, ref in target_environments.items():
-        if environment in EXCLUDED_ENVIRONMENTS:
+        if environment in APP_INTERFACE_VERSIONS_OVERRIDE_EXCLUDED_ENVIRONMENTS:
             continue
+
+        changed = True
 
         environment_conf = next(target for target in saas["resourceTemplates"][0]["targets"]
                                 if target["namespace"] == {"$ref": ref})
 
         environment_conf["parameters"]["OPENSHIFT_VERSIONS"] = openshift_versions_json
+
+    if not changed:
+        raise NoChangesNeeded
 
     with open(APP_INTERFACE_SAAS_YAML, "w") as f:
         # Dump with a round-trip dumper to preserve the file as much as possible.
@@ -476,21 +475,22 @@ def main(args):
                 param["value"] for param in yaml.safe_load(f)["parameters"] if param["name"] == "OPENSHIFT_VERSIONS"
             )
 
-        change_version_in_files_app_interface(openshift_versions_json)
-
-
         branch = commit_and_push_version_update_changes(task)
         github_pr = open_pr(args, task)
-
-        app_interface_fork = create_app_interface_fork(args)
-        app_interface_branch = commit_and_push_version_update_changes_app_interface(args.gitlab_key_file, app_interface_fork, task)
-        gitlab_pr = open_app_interface_pr(app_interface_fork, app_interface_branch, task)
-
-        jira_client.add_comment(task, f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
-        github_pr.create_issue_comment(f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
-
         github_pr.create_issue_comment(f"Currently no test platform is available, un-holding")
         unhold_pr(github_pr)
+
+        try:
+            change_version_in_files_app_interface(openshift_versions_json)
+        except NoChangesNeeded:
+            pass
+        else:
+            app_interface_fork = create_app_interface_fork(args)
+            app_interface_branch = commit_and_push_version_update_changes_app_interface(args.gitlab_key_file, app_interface_fork, task)
+            gitlab_pr = open_app_interface_pr(app_interface_fork, app_interface_branch, task)
+
+            jira_client.add_comment(task, f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
+            github_pr.create_issue_comment(f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
 
 
         # test changes,
