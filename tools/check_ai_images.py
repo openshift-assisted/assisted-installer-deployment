@@ -1,10 +1,10 @@
-import argparse
-import time
-import subprocess
-import yaml
-import sys
 import os
 import re
+import sys
+import yaml
+import time
+import argparse
+import subprocess
 import update_hash
 
 parser = argparse.ArgumentParser()
@@ -14,18 +14,31 @@ args = parser.parse_args()
 
 def image_dose_not_exist(image, tag):
     cmd = f"docker manifest inspect quay.io/ocpmetal/{image}:{tag}"
-    image_inspect_output = subprocess.check_output(cmd, shell=True)
-    image_inspect_output = subprocess.check_output("echo $?", shell=True)
+    try:
+        image_inspect_output = subprocess.check_output(cmd, shell=True)
+        image_inspect_output = subprocess.check_output("echo $?", shell=True)
+    except subprocess.SubprocessError:
+            image_inspect_output = "-1"
     return int(image_inspect_output)
 
-def main():
+def image_dose_not_exist_with_retry(image, tag):
+    for retry in range(3):
+        get_image_result = image_dose_not_exist(image, tag)
+        if not get_image_result:
+            return  get_image_result
+        print(f"Failed to get image at {retry} retry")
+        time.sleep(5*60)
 
+    print("Failed to get image information after 3 retries")
+    return get_image_result
+
+def main():
     with open(args.deployment, "r") as f:
         deployment = yaml.load(f)
     for rep, val in deployment.items():
         hash = val["revision"]
         for image in val["images"]:
-            if image_dose_not_exist(image, hash):
+            if image_dose_not_exist_with_retry(image, hash):
                 print(f"image {image}:{hash} doesn't exist in registry")
                 raise Exception(f"image {image}:{hash} doesn't exist in registry")
             else:
