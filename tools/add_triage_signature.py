@@ -85,7 +85,7 @@ class FailedToGetMetadataException(Exception):
 @functools.lru_cache(maxsize=1000)
 def get_metadata_json(cluster_url):
     try:
-        res = requests.get("{}/metdata.json".format(cluster_url))
+        res = requests.get("{}/metadata.json".format(cluster_url))
         res.raise_for_status()
         return res.json()
     except Exception as e:

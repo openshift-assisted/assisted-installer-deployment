@@ -118,7 +118,7 @@ def main(arg):
         if not arg.all and ats.days_ago(date) > DEFAULT_DAYS_TO_HANDLE:
             continue
 
-        res = requests.get("{}/files/{}/metdata.json".format(LOGS_COLLECTOR, failure['name']))
+        res = requests.get("{}/files/{}/metadata.json".format(LOGS_COLLECTOR, failure['name']))
         res.raise_for_status()
         cluster = res.json()['cluster']
 
