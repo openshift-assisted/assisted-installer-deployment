@@ -129,6 +129,8 @@ def get_rchos_version_from_iso(rhcos_latest_release, iso_url):
         result = RCHOS_VERSION_FROM_ISO_REGEX.search(zipl_info)
         rchos_version_from_iso = result.group(1)
         logger.info(f"Found rchos_version_from_iso: {rchos_version_from_iso}")
+        import ipdb
+        ipdb.set_trace()
     return rchos_version_from_iso
 
 def get_default_release_json():
@@ -178,7 +180,8 @@ def get_latest_release_from_minor(minor_release: str, all_releases: list):
     if not all_relevant_releases:
         all_relevant_releases = [r for r in all_releases if r.startswith(minor_release)]
 
-
+    if not all_relevant_releases:
+        return None
     return sorted(all_relevant_releases, key=LooseVersion)[-1]
 
 def get_all_releases(path: str):
@@ -209,6 +212,8 @@ def main(args):
 
     for release in default_version_json:
         latest_ocp_release = get_latest_release_from_minor(release, all_ocp_releases)
+        if not latest_ocp_release:
+            continue
         current_default_ocp_release = default_version_json.get(release).get("display_name")
 
         if current_default_ocp_release != latest_ocp_release or dry_run:

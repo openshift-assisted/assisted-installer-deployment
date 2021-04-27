@@ -16,7 +16,6 @@ from distutils.version import LooseVersion
 import jira
 import github
 import gitlab
-import jenkins
 import requests
 import ruamel.yaml
 
@@ -72,10 +71,6 @@ REDHAT_CERT_URL = 'https://password.corp.redhat.com/RH-IT-Root-CA.crt'
 REDHAT_CERT_LOCATION = "/tmp/redhat.cert"
 GIT_SSH_COMMAND_WITH_KEY = "ssh -o StrictHostKeyChecking=accept-new -i '{key}'"
 
-# Jenkins
-JENKINS_URL = "http://assisted-jenkins.usersys.redhat.com"
-TEST_INFRA_JOB = "assisted-test-infra/master"
-
 # Jira
 JIRA_SERVER = "https://issues.redhat.com"
 JIRA_BROWSE_TICKET = f"{JIRA_SERVER}/browse/{{ticket_id}}"
@@ -85,13 +80,14 @@ CUSTOM_OPENSHIFT_IMAGES = os.path.join(script_dir, "custom_openshift_images.json
 
 TICKET_DESCRIPTION = "Default versions need to be updated"
 
+SKIPPED_MAJOR_RELEASE = ["4.6"]
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-jup",  "--jira-user-password",    help="JIRA Username and password in the format of user:pass", required=True)
     parser.add_argument("-gup",  "--github-user-password",  help="GITHUB Username and password in the format of user:pass", required=True)
     parser.add_argument("-gkf",  "--gitlab-key-file",       help="GITLAB key file", required=True)
     parser.add_argument("-gt",   "--gitlab-token",          help="GITLAB user token", required=True)
-    parser.add_argument("-jkup", "--jenkins-user-password", help="JENKINS Username and password in the format of user:pass", required=True)
     parser.add_argument("--dry-run", action='store_true',   help="test run")
     return parser.parse_args()
 
@@ -133,34 +129,7 @@ def get_rchos_version_from_iso(rhcos_latest_release, iso_url):
         result = RCHOS_VERSION_FROM_ISO_REGEX.search(zipl_info)
         rchos_version_from_iso = result.group(1)
         logger.info(f"Found rchos_version_from_iso: {rchos_version_from_iso}")
-    return rchos_version_from_iso
-
-def test_test_infra_passes(args, branch, release):
-    username, password = get_login(args.jenkins_user_password)
-    jenkins_client = jenkins.Jenkins(JENKINS_URL, username=username, password=password)
-    next_build_number = jenkins_client.get_job_info(TEST_INFRA_JOB)['nextBuildNumber']
-    logger.info("Test-infra build number: {}".format(next_build_number))
-
-    github_username, *_ = get_login(args.github_user_password)
-    jenkins_client.build_job(TEST_INFRA_JOB,
-                             parameters={"SERVICE_BRANCH": branch,
-                                         "NOTIFY": False,
-                                         "JOB_NAME": "Update_ocp_version",
-                                         "SERVICE_REPO":ASSISTED_SERVICE_FORKED_URL.format(github_user=github_username),
-                                         "OPENSHIFT_VERSION": release}
-                             )
-    time.sleep(10)
-    url = jenkins_client.get_build_info(TEST_INFRA_JOB, next_build_number)["url"]
-    logger.info("Test-infra build url: {}".format(url))
-    while not jenkins_client.get_build_info(TEST_INFRA_JOB, next_build_number)["result"]:
-        logger.info(f"Waiting for job {url} to finish")
-        time.sleep(30)
-    job_info = jenkins_client.get_build_info(TEST_INFRA_JOB, next_build_number)
-    result = job_info["result"]
-    url = job_info["url"]
-    logger.info(f"Job finished with result {result}")
-    return result == "SUCCESS", url
-
+    return rchos_version_from_iso.split()[0]
 
 def create_task(args, description: str):
     jira_client = get_jira_client(*get_login(args.jira_user_password))
@@ -196,7 +165,6 @@ def create_jira_ticket(jira_client, description):
                                         description=ticket_text)
     jira_client.assign_issue(new_task, DEFAULT_ASSIGN)
     logger.info(f"Task created: {new_task} - {JIRA_BROWSE_TICKET.format(ticket_id=new_task)}")
-    # TODO debug watcherrs call
     # add_watchers(jira_client, new_task)
     return new_task
 
@@ -299,6 +267,8 @@ def get_latest_release_from_minor(minor_release: str, all_releases: list):
     if not all_relevant_releases:
         all_relevant_releases = [r for r in all_releases if r.startswith(minor_release)]
 
+    if not all_relevant_releases:
+        return None
 
     return sorted(all_relevant_releases, key=LooseVersion)[-1]
 
@@ -416,7 +386,6 @@ def main(args):
     dry_run = args.dry_run
     if dry_run:
         logger.info("Running dry-run")
-
     if not dry_run:
         if is_open_update_version_ticket(args) and not dry_run:
             logger.info("No updates today since there is a update waiting to be merged")
@@ -429,7 +398,16 @@ def main(args):
     updates_made = set()
 
     for release in default_version_json:
+
+        if release in SKIPPED_MAJOR_RELEASE:
+            logger.info(f"Skipping {release} listed in the skip list")
+            continue
+
         latest_ocp_release = get_latest_release_from_minor(release, all_ocp_releases)
+        if not latest_ocp_release:
+            logger.info(f"No release found for {release}, continuing")
+            continue
+
         current_default_ocp_release = default_version_json.get(release).get("display_name")
 
         if current_default_ocp_release != latest_ocp_release or dry_run:
@@ -478,7 +456,6 @@ def main(args):
 
         change_version_in_files_app_interface(openshift_versions_json)
 
-
         branch = commit_and_push_version_update_changes(task)
         github_pr = open_pr(args, task)
 
@@ -491,29 +468,6 @@ def main(args):
 
         github_pr.create_issue_comment(f"Currently no test platform is available, un-holding")
         unhold_pr(github_pr)
-
-
-        # test changes,
-        # TODO add a testing platform for this section
-        # release_hold_label = True
-        # for changed_release in updates_made:
-        #     succeeded, url = test_test_infra_passes(args, branch, changed_release)
-        #     if succeeded:
-        #         logging.info(f"Test-infra for {changed_release} test passed, removing hold branch")
-        #         github_pr.create_issue_comment(f"test-infra test passed for release {changed_release}, see {url}")
-        #     else:
-        #         release_hold_label = False
-        #         logging.warning(f"Test-infra test failed for release {changed_release}")
-        #         github_pr.create_issue_comment(f"test-infra test failed for release {changed_release}, see {url}")
-        #
-        # if release_hold_label:
-        #     logger.info(f"All tests infra tests passed, releasing HOLD label")
-        #     github_pr.create_issue_comment(f"All tests infra tests passed, releasing HOLD label")
-        #     unhold_pr(github_pr)
-        # else:
-        #     logger.info("Some or all of the test-infra tests failed, need to be checked before removing hold label")
-        #     github_pr.create_issue_comment("Some or all of the test-infra tests failed, need to be checked before removing hold label")
-
 
 if __name__ == "__main__":
     main(parse_args())
