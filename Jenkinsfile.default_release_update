@@ -24,8 +24,7 @@ pipeline {
                  --jira-user-password "${JIRA_CREDS}"\
                  --github-user-password "${GITHUB_CREDS}"\
                  --gitlab-key-file "${GITLAB_PRIVKEY}"\
-                 --gitlab-token "${GITLAB_TOKEN}"\
-                 --jenkins-user-password "${JENKINS_CRED}" '''
+                 --gitlab-token "${GITLAB_TOKEN}"'''
             }
         }
     }
