@@ -155,8 +155,10 @@ class Signature(abc.ABC):
     def _update_ticket(self, url, issue_key, should_update=False):
         pass
 
-    def _find_signature_comment(self, key):
-        comments = self._jclient.comments(key)
+    def find_signature_comment(self, key, comments=None):
+        if comments is None:
+            comments = self._jclient.comments(key)
+
         for comment in comments:
             if self._identifing_string in comment.body:
                 return comment
@@ -169,7 +171,7 @@ class Signature(abc.ABC):
         report = "\n"
         report += self._identifing_string + "\n"
         report += comment
-        jira_comment = self._find_signature_comment(key)
+        jira_comment = self.find_signature_comment(key)
         signature_name = type(self).__name__
         if self.dry_run_file is not None:
             self.dry_run_file.write(report)
