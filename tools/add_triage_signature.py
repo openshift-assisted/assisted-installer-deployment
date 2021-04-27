@@ -89,7 +89,14 @@ def get_metadata_json(cluster_url):
         res.raise_for_status()
         return res.json()
     except Exception as e:
-        raise FailedToGetMetadataException from e
+        logger.warning("Couldn't find new URL for 'metadata.json' file. "
+                       "Trying to access 'metdata.json'")
+        try:
+            res = requests.get("{}/metdata.json".format(cluster_url))
+            res.raise_for_status()
+            return res.json()
+        except Exception as e:
+            raise FailedToGetMetadataException from e
 
 
 @functools.lru_cache(maxsize=1000)

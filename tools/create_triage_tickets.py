@@ -91,6 +91,19 @@ def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
     return new_issue
 
 
+def get_metadata_json(cluster_url):
+    try:
+        res = requests.get("{}/metadata.json".format(cluster_url))
+        res.raise_for_status()
+        return res.json()
+    except Exception:
+        logger.warning("Couldn't find new URL for 'metadata.json' file. "
+                       "Trying to access 'metdata.json'")
+        res = requests.get("{}/metdata.json".format(cluster_url))
+        res.raise_for_status()
+        return res.json()
+
+
 def main(arg):
     if arg.user_password is None:
         username, password = get_credentials_from_netrc(urlparse(JIRA_SERVER).hostname, arg.netrc)
@@ -118,9 +131,7 @@ def main(arg):
         if not arg.all and ats.days_ago(date) > DEFAULT_DAYS_TO_HANDLE:
             continue
 
-        res = requests.get("{}/files/{}/metadata.json".format(LOGS_COLLECTOR, failure['name']))
-        res.raise_for_status()
-        cluster = res.json()['cluster']
+        cluster = get_metadata_json("{}/files/{}".format(LOGS_COLLECTOR, failure['name']))['cluster']
 
         if cluster['status'] == "error":
             new_issue = create_jira_ticket(jclient, existing_tickets, failure['name'], cluster)
