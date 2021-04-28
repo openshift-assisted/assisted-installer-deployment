@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 import requests
 import jira
 import add_triage_signature as ats
+import close_by_signature
 
 
 DEFAULT_DAYS_TO_HANDLE = 30
@@ -128,6 +129,16 @@ def main(arg):
                 logs_url = "{}/files/{}".format(LOGS_COLLECTOR, failure['name'])
                 ats.add_signatures(jclient, logs_url, new_issue.key)
 
+    if not args.filters_json:
+        return
+
+    close_by_signature.run_using_json(
+        path=args.filters_json,
+        username=username,
+        jira=jclient,
+        issues=existing_tickets,
+    )
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -140,6 +151,13 @@ if __name__ == "__main__":
                         help="Try creating Triage Tickets for all failures. " +
                         "Default is just for failures in the past 30 days")
     parser.add_argument("-v", "--verbose", action="store_true", help="Output verbose logging")
+    parser.add_argument(
+        '--filters-json',
+        help='At the end of the run, filter and close issues that applied to '
+             'the rules in a given json file which has the format: '
+             '{signature_type: {root_issue: message}}',
+        default='./triage_resolving_filters.json',
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
