@@ -6,6 +6,8 @@ import pprint
 import textwrap
 import json
 
+from jira.exceptions import JIRAError
+
 from add_triage_signature import (
     config_logger, get_credentials, get_jira_client, get_issues,
     SIGNATURES,
@@ -148,7 +150,10 @@ def get_filters_from_json(filters_json, jira):
 
 def filter_and_generate_issues(jira, filters, issues):
     for issue in issues:
-        comments = jira.comments(issue)
+        comments = get_issue_comments(jira, issues)
+        if not comments:
+            continue
+
         for _filter in filters:
             comment = _filter.signature.find_signature_comment(issue, comments)
             if comment is None:
@@ -162,6 +167,19 @@ def filter_and_generate_issues(jira, filters, issues):
                     comment=comment,
                 )
                 break
+
+
+def get_issue_comments(jira, issue):
+    if issue is None:
+        return None
+
+    try:
+        return jira.comments(issue)
+    except JIRAError as e:
+        if 'Issue Does Not Exist' not in e:
+            raise
+
+    return None
 
 
 def get_dry_run_stdout(args):
