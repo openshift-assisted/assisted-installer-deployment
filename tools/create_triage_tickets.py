@@ -57,7 +57,7 @@ def get_all_triage_tickets(jclient):
             query,
             maxResults=block_size,
             startAt=idx,
-            fields=['summary', 'key'],
+            fields=['summary', 'key', 'status'],
         )
         if len(issues_bulk) == 0:
             break
