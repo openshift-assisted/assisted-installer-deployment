@@ -59,7 +59,7 @@ def get_all_triage_tickets(jclient):
             startAt=idx,
             fields=['summary', 'key'],
         )
-        if len(issues) == 0:
+        if len(issues_bulk) == 0:
             break
         summaries.extend([x.fields.summary for x in issues_bulk])
         issues.extend(issues_bulk)
