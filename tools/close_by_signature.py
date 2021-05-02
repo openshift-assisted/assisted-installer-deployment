@@ -13,7 +13,6 @@ from add_triage_signature import (
     SIGNATURES,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -35,16 +34,16 @@ def parse_args():
     login_args = login_group.add_mutually_exclusive_group()
     login_args.add_argument(
         '--netrc',
-        default='~/.netrc', 
+        default='~/.netrc',
         required=False,
         help='netrc file',
     )
     login_args.add_argument(
-        '-up', '--user-password', 
+        '-up', '--user-password',
         required=False,
         help='Username and password in the format of user:pass',
     )
-    
+
     selectors_group = parser.add_argument_group(title='Issues selection')
     selectors = selectors_group.add_mutually_exclusive_group(required=True)
     selectors.add_argument(
@@ -115,7 +114,13 @@ def run_using_json(path, username, jira, issues, dry_run_stdout=None):
     logger.debug('Starting issue resolver task using filters json=%s', path)
     filters_json = read_filters_file(path)
     filters = get_filters_from_json(filters_json, jira)
-    close_tickets_by_filters(username, jira, issues, filters, dry_run_stdout)
+    close_tickets_by_filters(
+        username=username,
+        jira=jira,
+        filters=filters,
+        issues=issues,
+        dry_run_stdout=dry_run_stdout,
+    )
 
 
 def read_filters_file(path):
@@ -172,11 +177,10 @@ def filter_and_generate_issues(jira, filters, issues):
 def get_issue_comments(jira, issue):
     if issue is None:
         return None
-
     try:
         return jira.comments(issue)
     except JIRAError as e:
-        if 'Issue Does Not Exist' not in e:
+        if 'Issue Does Not Exist' not in str(e):
             raise
 
     return None
@@ -204,10 +208,15 @@ def close_tickets_by_filters(username, jira, filters, issues, dry_run_stdout):
     )
 
 
-TRANSITION_DONE_ID = '31'   # GET /rest/api/3/issue/{issueIdOrKey}/transitions
+TRANSITION_DONE_ID = '31'  # GET /rest/api/3/issue/{issueIdOrKey}/transitions
 
 
-def close_and_link_issues(username, jira, filtered_issues_generator, dry_run_stdout):
+def close_and_link_issues(
+        username,
+        jira,
+        filtered_issues_generator,
+        dry_run_stdout,
+):
     for issue_data in filtered_issues_generator:
         if issue_data.root_issue:
             link_issue_to_root_issue(
@@ -233,7 +242,7 @@ def close_and_link_issues(username, jira, filtered_issues_generator, dry_run_std
                 flush=True,
             )
             print(
-                f'Assigned issue key={issue_data.issue.root_issue.key} '
+                f'Assigned issue key={issue_data.root_issue.key} '
                 f'to user={username}\n',
                 file=dry_run_stdout,
                 flush=True,
@@ -298,10 +307,10 @@ def run_using_cli(args):
     dry_run_stdout = get_dry_run_stdout(args)
     try:
         close_tickets_by_filters(
-            username=username, 
+            username=username,
             jira=jira,
             filters=filters,
-            issues=issues, 
+            issues=issues,
             dry_run_stdout=dry_run_stdout,
         )
     finally:
