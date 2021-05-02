@@ -150,7 +150,7 @@ def get_filters_from_json(filters_json, jira):
 
 def filter_and_generate_issues(jira, filters, issues):
     for issue in issues:
-        comments = get_issue_comments(jira, issues)
+        comments = get_issue_comments(jira, issue)
         if not comments:
             continue
 
