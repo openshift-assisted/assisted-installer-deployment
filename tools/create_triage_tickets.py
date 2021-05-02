@@ -51,18 +51,22 @@ def get_all_triage_tickets(jclient):
     query = 'component = "Assisted-Installer Triage"'
     idx = 0
     block_size = 100
-    issues = []
+    summaries, issues = [], []
     while True:
-        i = jclient.search_issues(query, maxResults=block_size,
-                                  startAt=idx, fields=['summary', 'key'])
-        if len(i) == 0:
+        issues_bulk = jclient.search_issues(
+            query,
+            maxResults=block_size,
+            startAt=idx,
+            fields=['summary', 'key'],
+        )
+        if len(issues) == 0:
             break
-        #for x in i:
-        #    print("{} - {}".format(x.key, x.fields.summary))
-        issues.extend([x.fields.summary for x in i])
+        summaries.extend([x.fields.summary for x in issues_bulk])
+        issues.extend(issues_bulk)
         idx += block_size
 
-    return set(issues)
+    return issues, set(summaries)
+
 
 def add_watchers(jclient, issue):
     for watcher in DEFAULT_WATCHERS:
@@ -112,7 +116,7 @@ def main(arg):
     res.raise_for_status()
     failed_clusters = res.json()
 
-    existing_tickets = get_all_triage_tickets(jclient)
+    issues, summaries = get_all_triage_tickets(jclient)
 
     for failure in failed_clusters:
         date = failure["name"].split("_")[0]
@@ -124,7 +128,7 @@ def main(arg):
         cluster = res.json()['cluster']
 
         if cluster['status'] == "error":
-            new_issue = create_jira_ticket(jclient, existing_tickets, failure['name'], cluster)
+            new_issue = create_jira_ticket(jclient, summaries, failure['name'], cluster)
             if new_issue is not None:
                 logs_url = "{}/files/{}".format(LOGS_COLLECTOR, failure['name'])
                 ats.add_signatures(jclient, logs_url, new_issue.key)
@@ -136,7 +140,7 @@ def main(arg):
         path=args.filters_json,
         username=username,
         jira=jclient,
-        issues=existing_tickets,
+        issues=issues,
     )
 
 
