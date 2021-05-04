@@ -32,6 +32,7 @@ PR_MESSAGE = "{task}, Bump OCP versions"
 
 OCP_RELEASES = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/"
 RHCOS_RELEASES = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/{minor}"
+ALL_OCP_RELEASES = "https://openshift-release.apps.ci.l2s4.p1.openshiftapps.com/#4-stable"
 
 # RCHOS version
 RCHOS_LIVE_ISO_URL = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/{minor}/{version}/rhcos-{version}-x86_64-live.x86_64.iso"
@@ -414,6 +415,7 @@ def main(args):
             updates_made.add(release)
             logger.info(f"New latest ocp release available for {release}, {current_default_ocp_release} -> {latest_ocp_release}")
             updated_version_json[release]["display_name"] = latest_ocp_release
+            updated_version_json[release]["release_version"] = latest_ocp_release
             updated_version_json[release]["release_image"] = updated_version_json[release]["release_image"].replace(current_default_ocp_release, latest_ocp_release)
 
         rhcos_default_release = get_rchos_release_from_default_version_json(release, default_version_json)
