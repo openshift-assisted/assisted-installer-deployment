@@ -79,9 +79,17 @@ def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
         return None
 
     url = "{}/files/{}".format(LOGS_COLLECTOR, failure_id)
+
+    raw_version = cluster_md['openshift_version']
+
+    if raw_version.startswith("4.8"):
+        # JIRA doesn't have an entry for 4.8.0-fc.0, so shorten it to 4.8
+        raw_version = "4.8"
+
+    ticket_affected_version_field = 'OpenShift {}'.format(raw_version)
     new_issue = jclient.create_issue(project="MGMT",
                                      summary=summary,
-                                     versions=[{'name': 'OpenShift {}'.format(cluster_md['openshift_version'])}],
+                                     versions=[{'name': ticket_affected_version_field}],
                                      components=[{'name': "Assisted-installer Triage"}],
                                      priority={'name': 'Blocker'},
                                      issuetype={'name': 'Bug'},
