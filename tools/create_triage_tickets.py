@@ -80,13 +80,10 @@ def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
 
     url = "{}/files/{}".format(LOGS_COLLECTOR, failure_id)
 
-    raw_version = cluster_md['openshift_version']
+    major, minor, *_ = cluster_md['openshift_version'].split(".")
+    ocp_key = f"{major}.{minor}"
 
-    if raw_version.startswith("4.8"):
-        # JIRA doesn't have an entry for 4.8.0-fc.0, so shorten it to 4.8
-        raw_version = "4.8"
-
-    ticket_affected_version_field = 'OpenShift {}'.format(raw_version)
+    ticket_affected_version_field = 'OpenShift {}'.format(ocp_key)
     new_issue = jclient.create_issue(project="MGMT",
                                      summary=summary,
                                      versions=[{'name': ticket_affected_version_field}],
