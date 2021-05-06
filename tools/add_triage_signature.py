@@ -640,12 +640,11 @@ class ConsoleTimeoutSignature(Signature):
                 "4.7" in openshift_version and
                 any(isVMware(host) for host in cluster['hosts'])):
             # ISO conversion according to https://stackoverflow.com/questions/127803/how-do-i-parse-an-iso-8601-formatted-date#comment94022430_49784038
-            if datetime.fromisoformat(cluster['install_started_at'].replace('Z', '')) > datetime(2021, 4, 8):
+            if datetime.fromisoformat(cluster['install_started_at'].replace('Z', '')) > datetime(2021, 5, 5):
                 report = "\n".join([
-                    "h2. Waiting for console timeout -probably due to VMware hosts on OCP 4.7 ([bugzilla|https://bugzilla.redhat.com/1935539])-",
-                    "As of April 8th 2021, 4.7.5 was pushed to production. That version contains the supposed fix "
-                    "for this bug. This means that the cause for the timeout in this ticket might not "
-                    "be due to this known bug - it might be caused by something else. Please investigate."
+                    "h2. Waiting for console timeout -possibly due to VMware hosts on OCP 4.7 ([bugzilla|https://bugzilla.redhat.com/1935539])-",
+                    "As of May 5th 2021, a fix has been pushed to production. That version contains the supposed fix. This means that the cause "
+                    "for the timeout in this ticket might not be due to this known bug - it might be caused by something else. Please investigate."
                 ])
             else:
                 report = "\n".join([
