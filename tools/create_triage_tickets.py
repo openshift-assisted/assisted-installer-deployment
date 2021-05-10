@@ -122,6 +122,8 @@ def main(arg):
     failed_clusters = res.json()
 
     issues, summaries = get_all_triage_tickets(jclient)
+    if not issues:
+        raise ConnectionError("Failed to get any issues from JIRA")
 
     for failure in failed_clusters:
         date = failure["name"].split("_")[0]
