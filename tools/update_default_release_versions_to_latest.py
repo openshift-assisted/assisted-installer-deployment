@@ -212,7 +212,7 @@ def commit_and_push_version_update_changes(message_prefix):
 
 def verify_latest_config():
     try:
-        cmd(["make", "generate-ocp-version"], cwd=ASSISTED_SERVICE_CLONE_DIR)
+        cmd(["make", "generate-configuration"], cwd=ASSISTED_SERVICE_CLONE_DIR)
     except subprocess.CalledProcessError as e:
         if e.returncode == 2:
             # We run the command just for its side-effects, we don't care if it fails
