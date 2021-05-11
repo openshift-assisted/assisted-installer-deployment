@@ -9,12 +9,12 @@ import logging
 import netrc
 import os
 import sys
+import yaml
 from urllib.parse import urlparse
 import requests
 import jira
 import add_triage_signature as ats
 import close_by_signature
-
 
 DEFAULT_DAYS_TO_HANDLE = 30
 DEFAULT_WATCHERS = ["ronniela", "odepaz"]
@@ -24,6 +24,7 @@ LOGS_COLLECTOR = "http://assisted-logs-collector.usersys.redhat.com"
 JIRA_SERVER = "https://issues.redhat.com/"
 DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SUMMARY = "cloud.redhat.com failure: {failure_id}"
+MARK_ID = "handled_info.yaml"
 
 def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
     cred = netrc.netrc(os.path.expanduser(netrc_file))
@@ -71,6 +72,31 @@ def get_all_triage_tickets(jclient):
 def add_watchers(jclient, issue):
     for watcher in DEFAULT_WATCHERS:
         jclient.add_watcher(issue.key, watcher)
+
+
+def is_logfile_handled(existing_tickets, failure_id):
+    marked_path = os.path.join(args.mark_root, failure_id, MARK_ID)
+    if os.path.isfile(marked_path):
+        logger.info(f"{failure_id} is marked as handled")
+        return True
+
+    # if not marked as handled check if has ticket
+    summary = format_summary({"failure_id": failure_id})
+    if summary in existing_tickets:
+        logger.info(f"Marking {failure_id} as handled due, found summary {summary}")
+        logger.info(f"ticket {failure_id} seems to be already handled, marking it for future validations")
+        mark_logs_as_handled(marked_path, summary)
+        return True
+
+    logger.info(f"Item {summary} looks new")
+    return False
+
+
+def mark_logs_as_handled(marked_path, summary):
+    handled_info = {"summary": summary}
+    with open(marked_path, 'w') as f:
+        yaml.dump(handled_info, f)
+
 
 def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
     summary = format_summary({"failure_id":failure_id})
@@ -135,6 +161,10 @@ def main(arg):
         cluster = res.json()['cluster']
 
         if cluster['status'] == "error":
+            if args.log_marking_root and is_logfile_handled(summaries, failure['name']):
+                logger.info("issue found: %s", failure['name'])
+                continue
+
             new_issue = create_jira_ticket(jclient, summaries, failure['name'], cluster)
             if new_issue is not None:
                 logs_url = "{}/files/{}".format(LOGS_COLLECTOR, failure['name'])
@@ -169,6 +199,7 @@ if __name__ == "__main__":
              '{signature_type: {root_issue: message}}',
         default='./triage_resolving_filters.json',
     )
+    parser.add_argument("--log-marking-root", default=None, required=False, help="Location of the logs for marking as handled")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
