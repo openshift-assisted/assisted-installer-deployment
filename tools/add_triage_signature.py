@@ -612,6 +612,47 @@ class MediaDisconnectionSignature(Signature):
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
+class FeatureUsageSignature(Signature):
+    """
+    The signature adds information about features configured in cluster based
+    on feature_usage field. For example: OLM operators, NTP additional
+    source or proxy configuration
+    """
+    OLM_OPERATORS = ["cnv", "lso", "ocs"]
+
+    def __init__(self, jira_client):
+        super().__init__(jira_client, comment_identifying_string="h1. Configured Features")
+
+    @classmethod
+    def isOlm(cls, name):
+        return name.lower() in cls.OLM_OPERATORS
+
+    @classmethod
+    def isGeneralFeature(cls, name):
+        return not cls.isOlm(name)
+
+    def _update_ticket(self, url, issue_key, should_update=False):
+        url = self._logs_url_to_api(url)
+
+        metadata = get_metadata_json(url)
+        cluster = metadata['cluster']
+        feature_usage_field = cluster.get('feature_usage')
+        if not feature_usage_field:
+            return
+
+        report = ""
+        usage = json.loads(feature_usage_field)
+        operators = list(filter(self.isOlm, usage.keys()))
+        non_operators = list(filter(self.isGeneralFeature, usage.keys()))
+        if len(operators) > 0:
+            report += f"<b>Operators: </b> {', '.join(operators)}\n"
+        if len(non_operators) > 0:
+            report += f"<b>General Features: </b> {', '.join(non_operators)}\n"
+
+        if report != "":
+            self._update_triaging_ticket(issue_key, report, should_update=should_update)
+
+
 class ConsoleTimeoutSignature(Signature):
     """
     This signature looks for 'waiting for console' error in cluster's status_info.
@@ -752,7 +793,7 @@ class AgentStepFailureSignature(Signature):
 ############################
 DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SERVER = "https://issues.redhat.com"
-SIGNATURES = [FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
+SIGNATURES = [FailureDescription, ComponentsVersionSignature, FeatureUsageSignature, HostsStatusSignature, HostsExtraDetailSignature,
               StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature,
               MediaDisconnectionSignature, ConsoleTimeoutSignature, AgentStepFailureSignature]
 
