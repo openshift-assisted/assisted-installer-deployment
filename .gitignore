@@ -4,3 +4,4 @@ reports/
 .eggs/
 *egg-info
 **/RCS/**
+.idea
