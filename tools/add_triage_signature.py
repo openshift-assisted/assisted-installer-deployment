@@ -683,6 +683,11 @@ class AgentStepFailureSignature(Signature):
         super().__init__(jira_client, comment_identifying_string="h1. Agent step failures")
 
     @classmethod
+    def _filter_message(cls, msg) -> bool:
+        filtered_strings = ["dhclient was timed out"]
+        return any(s in msg['stderr'] for s in filtered_strings)
+
+    @classmethod
     def _prepare_output(cls, output):
         if len(output) == 0:
             return output
@@ -731,12 +736,13 @@ class AgentStepFailureSignature(Signature):
 
                 step_failure_message = step_failure_message_match.groupdict()
 
-                failures.append(OrderedDict(
-                    time=step_failure_log['time'],
-                    exit_code=step_failure_message['exit_code'],
-                    step_id=step_failure_message['step_id'],
-                    stderr=self._prepare_output(step_failure_message['stderr']),
-                ))
+                if not self._filter_message(step_failure_message):
+                    failures.append(OrderedDict(
+                        time=step_failure_log['time'],
+                        exit_code=step_failure_message['exit_code'],
+                        step_id=step_failure_message['step_id'],
+                        stderr=self._prepare_output(step_failure_message['stderr']),
+                     ))
 
             if len(failures) != 0:
                 report += dedent(f"""
