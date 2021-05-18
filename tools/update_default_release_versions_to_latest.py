@@ -40,7 +40,7 @@ RCHOS_LIVE_ISO_URL = "https://mirror.openshift.com/pub/openshift-v4/dependencies
 RCHOS_VERSION_FROM_ISO_REGEX = re.compile("coreos.liveiso=rhcos-(.*) ")
 DOWNLOAD_LIVE_ISO_CMD = "curl {live_iso_url} -o {out_file}"
 
-DEFAULT_VERSIONS_FILES = "default_ocp_versions.json"
+DEFAULT_VERSIONS_FILES = os.path.join("data", "default_ocp_versions.json")
 
 # app-interface PR related constants
 APP_INTERFACE_CLONE_DIR = "app-interface"
@@ -60,7 +60,7 @@ ASSISTED_SERVICE_FORKED_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_FORK
 ASSISTED_SERVICE_CLONE_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_FORK_REPO}.git"
 ASSISTED_SERVICE_UPSTREAM_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_REPO}.git"
 ASSISTED_SERVICE_MASTER_DEFAULT_OCP_VERSIONS_JSON_URL = \
-    f"https://raw.githubusercontent.com/{ASSISTED_SERVICE_GITHUB_REPO}/master/default_ocp_versions.json"
+    f"https://raw.githubusercontent.com/{ASSISTED_SERVICE_GITHUB_REPO}/master/data/default_ocp_versions.json"
 ASSISTED_SERVICE_OPENSHIFT_TEMPLATE_YAML = f"{ASSISTED_SERVICE_CLONE_DIR}/openshift/template.yaml"
 
 OCP_REPLACE_CONTEXT = ['"{version}"', "ocp-release:{version}"]
