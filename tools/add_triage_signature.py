@@ -43,6 +43,8 @@ h1. Cluster Info
 *status:* {status}
 *status_info:* {status_info}
 *OpenShift version:* {openshift_version}
+*Olm Operators:* {operators}
+*Configured features:* {features}
 
 *links:*
 * [Logs|{logs_url}/]
@@ -262,7 +264,34 @@ class FailureDescription(Signature):
     def __init__(self, jira_client):
         super().__init__(jira_client, comment_identifying_string="")
 
+    def is_olm_operator(self, operator_name):
+        return operator_name.lower() in ["cnv", "lso", "ocs"]
+
+    def format_features(self, features):
+        if len(features) > 0:
+            return ', '.join(features)
+        else:
+            return "None"
+
+    def build_feature_description(self, cluster):
+        """
+        feature_usage field on the cluster holds a JSON structure.
+        It's keys are features names where feature is any capacity
+        configured by the user (including Olm operators).
+        For sake of display, operators and other features are listed
+        separately
+        """
+        feature_usage_field = cluster.get('feature_usage')
+        if not feature_usage_field:
+            return "n/a", "n/a"
+
+        feature_usage = json.loads(feature_usage_field)
+        operators = [feature for feature in feature_usage.keys() if self.is_olm_operator(feature)]
+        other_features = [feature for feature in feature_usage.keys() if not self.is_olm_operator(feature)]
+        return self.format_features(operators), self.format_features(other_features)
+
     def build_description(self, url, cluster_md):
+        operators, other_features = self.build_feature_description(cluster_md)
         cluster_data = {"cluster_id": cluster_md['id'],
                         "logs_url": self._logs_url_to_ui(url),
                         "domain": cluster_md['email_domain'],
@@ -273,7 +302,9 @@ class FailureDescription(Signature):
                         "status": cluster_md['status'],
                         "status_info": cluster_md['status_info'],
                         "OCP_cluster_id": cluster_md['openshift_cluster_id'],
-                        "username": cluster_md['user_name']}
+                        "username": cluster_md['user_name'],
+                        "operators": operators,
+                        "features": other_features}
 
         return format_description(cluster_data)
 
