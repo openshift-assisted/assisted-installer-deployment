@@ -55,9 +55,9 @@ EXCLUDED_ENVIRONMENTS = {"staging", "production"}  # Don't update OPENSHIFT_VERS
 ASSISTED_SERVICE_CLONE_DIR = "assisted-service"
 ASSISTED_SERVICE_GITHUB_REPO_ORGANIZATION = "openshift"
 ASSISTED_SERVICE_GITHUB_REPO = f"{ASSISTED_SERVICE_GITHUB_REPO_ORGANIZATION}/assisted-service"
-ASSISTED_SERVICE_GITHUB_FORK_REPO = "{github_user}/assisted-service"
+ASSISTED_SERVICE_GITHUB_FORK_REPO = "oshercc/assisted-service"
 ASSISTED_SERVICE_FORKED_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_FORK_REPO}"
-ASSISTED_SERVICE_CLONE_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_FORK_REPO}.git"
+ASSISTED_SERVICE_CLONE_URL = "https://{github_user}:{github_password}@github.com/{ASSISTED_SERVICE_GITHUB_FORK_REPO}.git"
 ASSISTED_SERVICE_UPSTREAM_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_REPO}.git"
 ASSISTED_SERVICE_MASTER_DEFAULT_OCP_VERSIONS_JSON_URL = \
     f"https://raw.githubusercontent.com/{ASSISTED_SERVICE_GITHUB_REPO}/master/data/default_ocp_versions.json"
@@ -179,10 +179,10 @@ def get_jira_client(username, password):
     logger.info("log-in with username: %s", username)
     return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
 
-def clone_assisted_service(github_user):
+def clone_assisted_service(github_user, github_password):
     cmd(["rm", "-rf", ASSISTED_SERVICE_CLONE_DIR])
 
-    cmd(["git", "clone", ASSISTED_SERVICE_CLONE_URL.format(github_user=github_user), ASSISTED_SERVICE_CLONE_DIR])
+    cmd(["git", "clone", ASSISTED_SERVICE_CLONE_URL.format(github_user=github_user, github_password=github_password, ASSISTED_SERVICE_GITHUB_FORK_REPO=ASSISTED_SERVICE_GITHUB_FORK_REPO), ASSISTED_SERVICE_CLONE_DIR])
 
     def git_cmd(*args: str):
         return cmd(("git", "-C", ASSISTED_SERVICE_CLONE_DIR) + args)
@@ -441,10 +441,11 @@ def main(args):
         else:
             jira_client, task = create_task(args, TICKET_DESCRIPTION)
 
-        clone_assisted_service(ASSISTED_SERVICE_GITHUB_REPO_ORGANIZATION if dry_run else get_login(args.github_user_password)[0])
+        user, password = get_login(args.github_user_password)
+        clone_assisted_service(user, password)
 
         with open(os.path.join(ASSISTED_SERVICE_CLONE_DIR, DEFAULT_VERSIONS_FILES), 'w') as outfile:
-            json.dump(updated_version_json, outfile, indent=8)
+            json.dump(updated_version_json, outfile, indent=4)
         verify_latest_config()
 
         if dry_run:
