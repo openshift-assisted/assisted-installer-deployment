@@ -26,13 +26,14 @@ logging.getLogger("__main__").setLevel(logging.INFO)
 # Users / branch names / messages
 BRANCH_NAME = "{prefix}_update_assisted_service_versions"
 DEFAULT_ASSIGN = "oscohen"
-DEFAULT_WATCHERS = ["ronniela", "romfreiman", "lgamliel", "oscohen"]
-PR_MENTION = ["romfreiman", "ronniel1", "gamli75", "oshercc"]
-PR_MESSAGE = "{task}, Bump OCP versions"
+DEFAULT_WATCHERS = ["lgamliel", "oscohen", "yuvalgoldberg"]
+PR_MENTION = ["gamli75", "oshercc", "YuviGold"]
+PR_MESSAGE = "{task}, Bump OCP versions {versions_string}"
 
-OCP_RELEASES = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/"
+OCP_INFO_CALL = """curl https://api.openshift.com/api/upgrades_info/v1/graph\?channel\=stable-{version}\&arch\=amd64 | jq '[.nodes[]] | sort_by(.version | split(".") | map(tonumber))[-1]'"""
+OCP_INFO_FC_CALL = """curl https://api.openshift.com/api/upgrades_info/v1/graph\?channel\=candidate-{version}\&arch\=amd64 | jq '[.nodes[]] | max_by(.version)'"""
+
 RHCOS_RELEASES = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/{minor}"
-ALL_OCP_RELEASES = "https://openshift-release.apps.ci.l2s4.p1.openshiftapps.com/#4-stable"
 
 # RCHOS version
 RCHOS_LIVE_ISO_URL = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/{minor}/{version}/rhcos-{version}-x86_64-live.x86_64.iso"
@@ -219,14 +220,14 @@ def verify_latest_config():
             return
         raise
 
-def open_pr(args, task):
+def open_pr(args, task, title):
     branch = BRANCH_NAME.format(prefix=task)
 
     github_client = github.Github(*get_login(args.github_user_password))
     repo = github_client.get_repo(ASSISTED_SERVICE_GITHUB_REPO)
     body = " ".join([f"@{user}" for user in PR_MENTION])
     pr = repo.create_pull(
-        title=PR_MESSAGE.format(task=task),
+        title=title,
         body=body,
         head=f"{github_client.get_user().login}:{branch}",
         base="master"
@@ -243,12 +244,12 @@ def unhold_pr(pr):
     pr.create_issue_comment('/unhold')
 
 
-def open_app_interface_pr(fork, branch, task):
+def open_app_interface_pr(fork, branch, task, title):
     body = " ".join([f"@{user}" for user in PR_MENTION])
     body = f"{body}\nSee ticket {JIRA_BROWSE_TICKET.format(ticket_id=task)}"
 
     pr = fork.mergerequests.create({
-        'title': PR_MESSAGE.format(task=task),
+        'title': title,
         'description': body,
         'source_branch': branch,
         'target_branch': 'master',
@@ -259,7 +260,18 @@ def open_app_interface_pr(fork, branch, task):
     logging.info(f"New PR opened {pr.web_url}")
     return pr
 
-def get_latest_release_from_minor(minor_release: str, all_releases: list):
+def get_latest_release_from_minor(minor_release: str):
+
+    release_data  = subprocess.check_output(OCP_INFO_CALL.format(version=minor_release), shell=True)
+    release_data = json.loads(release_data)
+
+    if not release_data:
+        release_data = subprocess.check_output(OCP_INFO_FC_CALL.format(version=minor_release), shell=True)
+        release_data = json.loads(release_data)
+
+    return release_data['version']
+
+def get_latest_rchos_release_from_minor(minor_release: str, all_releases: list):
     def is_pre_release(release):
         return "-fc" in release or "-rc" in release
 
@@ -394,7 +406,6 @@ def main(args):
 
     default_version_json = get_default_release_json()
     updated_version_json = copy.deepcopy(default_version_json)
-    all_ocp_releases = get_all_releases(OCP_RELEASES)
 
     updates_made = set()
 
@@ -404,7 +415,7 @@ def main(args):
             logger.info(f"Skipping {release} listed in the skip list")
             continue
 
-        latest_ocp_release = get_latest_release_from_minor(release, all_ocp_releases)
+        latest_ocp_release = get_latest_release_from_minor(release)
         if not latest_ocp_release:
             logger.info(f"No release found for {release}, continuing")
             continue
@@ -420,7 +431,7 @@ def main(args):
 
         rhcos_default_release = get_rchos_release_from_default_version_json(release, default_version_json)
         rhcos_latest_of_releases = get_all_releases(RHCOS_RELEASES.format(minor=release))
-        rhcos_latest_release = get_latest_release_from_minor(release, rhcos_latest_of_releases)
+        rhcos_latest_release = get_latest_rchos_release_from_minor(release, rhcos_latest_of_releases)
 
         if rhcos_default_release != rhcos_latest_release or dry_run:
             updates_made.add(release)
@@ -441,6 +452,9 @@ def main(args):
         else:
             jira_client, task = create_task(args, TICKET_DESCRIPTION)
 
+        versions_str = " and ".join(updates_made)
+        title = PR_MESSAGE.format(task=task, versions_string=versions_str),
+
         user, password = get_login(args.github_user_password)
         clone_assisted_service(user, password)
 
@@ -460,16 +474,18 @@ def main(args):
         change_version_in_files_app_interface(openshift_versions_json)
 
         branch = commit_and_push_version_update_changes(task)
-        github_pr = open_pr(args, task)
+        github_pr = open_pr(args, task, title)
 
         app_interface_fork = create_app_interface_fork(args)
         app_interface_branch = commit_and_push_version_update_changes_app_interface(args.gitlab_key_file, app_interface_fork, task)
-        gitlab_pr = open_app_interface_pr(app_interface_fork, app_interface_branch, task)
+        gitlab_pr = open_app_interface_pr(app_interface_fork, app_interface_branch, task, title)
 
         jira_client.add_comment(task, f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
         github_pr.create_issue_comment(f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
 
-        github_pr.create_issue_comment(f"Currently no test platform is available, un-holding")
+        github_pr.create_issue_comment(f"Running all tests")
+        github_pr.create_issue_comment(f"/test all")
+
         unhold_pr(github_pr)
 
 if __name__ == "__main__":
