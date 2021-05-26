@@ -220,12 +220,11 @@ def verify_latest_config():
             return
         raise
 
-def open_pr(args, task, title):
+def open_pr(args, task, title, body):
     branch = BRANCH_NAME.format(prefix=task)
 
     github_client = github.Github(*get_login(args.github_user_password))
     repo = github_client.get_repo(ASSISTED_SERVICE_GITHUB_REPO)
-    body = " ".join([f"@{user}" for user in PR_MENTION])
     pr = repo.create_pull(
         title=title,
         body=body,
@@ -261,19 +260,31 @@ def open_app_interface_pr(fork, branch, task, title):
     return pr
 
 def get_latest_release_from_minor(minor_release: str):
+    release_data = get_release_data(minor_release)
+    return release_data['version']
 
-    release_data  = subprocess.check_output(OCP_INFO_CALL.format(version=minor_release), shell=True)
+def get_release_note_url(minor_release: str):
+    release_data = get_release_data(minor_release)
+    try:
+        release_url = release_data['metadata']["url"]
+    except KeyError:
+        logger.info("release has no release notes url")
+        return None
+    return release_url
+
+
+def get_release_data(minor_release):
+    release_data = subprocess.check_output(OCP_INFO_CALL.format(version=minor_release), shell=True)
     release_data = json.loads(release_data)
-
     if not release_data:
         release_data = subprocess.check_output(OCP_INFO_FC_CALL.format(version=minor_release), shell=True)
         release_data = json.loads(release_data)
+    return release_data
 
-    return release_data['version']
+def is_pre_release(release):
+        return "-fc" in release or "-rc" in release
 
 def get_latest_rchos_release_from_minor(minor_release: str, all_releases: list):
-    def is_pre_release(release):
-        return "-fc" in release or "-rc" in release
 
     all_relevant_releases = [r for r in all_releases if r.startswith(minor_release) and not is_pre_release(r)]
 
@@ -433,7 +444,7 @@ def main(args):
         rhcos_latest_of_releases = get_all_releases(RHCOS_RELEASES.format(minor=release))
         rhcos_latest_release = get_latest_rchos_release_from_minor(release, rhcos_latest_of_releases)
 
-        if rhcos_default_release != rhcos_latest_release or dry_run:
+        if (not is_pre_release(rhcos_default_release) and rhcos_default_release != rhcos_latest_release) or dry_run:
             updates_made.add(release)
             logger.info(f"New latest rhcos release available, {rhcos_default_release} -> {rhcos_latest_release}")
             updated_version_json[release]["rhcos_image"] = updated_version_json[release]["rhcos_image"].replace(rhcos_default_release, rhcos_latest_release)
@@ -453,7 +464,8 @@ def main(args):
             jira_client, task = create_task(args, TICKET_DESCRIPTION)
 
         versions_str = " and ".join(updates_made)
-        title = PR_MESSAGE.format(task=task, versions_string=versions_str),
+        title = PR_MESSAGE.format(task=task, versions_string=versions_str)
+        logger.info(f"PR title will be {title}")
 
         user, password = get_login(args.github_user_password)
         clone_assisted_service(user, password)
@@ -474,7 +486,10 @@ def main(args):
         change_version_in_files_app_interface(openshift_versions_json)
 
         branch = commit_and_push_version_update_changes(task)
-        github_pr = open_pr(args, task, title)
+
+        body = get_pr_body(updates_made)
+
+        github_pr = open_pr(args, task, title, body)
 
         app_interface_fork = create_app_interface_fork(args)
         app_interface_branch = commit_and_push_version_update_changes_app_interface(args.gitlab_key_file, app_interface_fork, task)
@@ -487,6 +502,19 @@ def main(args):
         github_pr.create_issue_comment(f"/test all")
 
         unhold_pr(github_pr)
+
+
+def get_pr_body(updates_made):
+    body = " ".join([f"@{user}" for user in PR_MENTION])
+    release_notes = ""
+    for updated_version in updates_made:
+        release_note = get_release_note_url(updated_version)
+        if release_note:
+            release_notes += f"{updated_version} release notes: {release_note}\n"
+        else:
+            release_notes += f"{updated_version} has no available release notes\n"
+    body += "\n" + release_notes
+    return body
 
 if __name__ == "__main__":
     main(parse_args())
