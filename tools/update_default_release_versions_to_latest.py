@@ -214,6 +214,7 @@ def commit_and_push_version_update_changes(message_prefix):
 def verify_latest_config():
     try:
         cmd(["make", "generate-configuration"], cwd=ASSISTED_SERVICE_CLONE_DIR)
+        # cmd(["skipper", "make", "generate-bundle"], cwd=ASSISTED_SERVICE_CLONE_DIR)
     except subprocess.CalledProcessError as e:
         if e.returncode == 2:
             # We run the command just for its side-effects, we don't care if it fails
@@ -350,7 +351,7 @@ def clone_app_interface(gitlab_key_file):
     )
 
 
-def commit_and_push_version_update_changes_app_interface(key_file, fork, message_prefix):
+def commit_and_push_version_update_changes_app_interface(key_file, fork, message, message_prefix):
     branch = BRANCH_NAME.format(prefix=message_prefix)
 
     def git_cmd(*args: str):
@@ -361,7 +362,7 @@ def commit_and_push_version_update_changes_app_interface(key_file, fork, message
     git_cmd("fetch", "--unshallow", "origin")
     git_cmd("remote", "add", fork_remote_name, fork.ssh_url_to_repo)
     git_cmd("checkout", "-b", branch)
-    git_cmd("commit", "-a", "-m", f"{message_prefix} Updating versions to latest releases")
+    git_cmd("commit", "-a", "-m", f"{message} Updating versions to latest releases")
     git_cmd("push", "--set-upstream", fork_remote_name)
 
     return branch
@@ -492,7 +493,7 @@ def main(args):
         github_pr = open_pr(args, task, title, body)
 
         app_interface_fork = create_app_interface_fork(args)
-        app_interface_branch = commit_and_push_version_update_changes_app_interface(args.gitlab_key_file, app_interface_fork, task)
+        app_interface_branch = commit_and_push_version_update_changes_app_interface(args.gitlab_key_file, app_interface_fork, title, task)
         gitlab_pr = open_app_interface_pr(app_interface_fork, app_interface_branch, task, title)
 
         jira_client.add_comment(task, f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
