@@ -489,13 +489,6 @@ def main(args):
 
         github_pr = open_pr(args, task, title, body)
 
-        app_interface_fork = create_app_interface_fork(args)
-        app_interface_branch = commit_and_push_version_update_changes_app_interface(args.gitlab_key_file, app_interface_fork, title, task)
-        gitlab_pr = open_app_interface_pr(app_interface_fork, app_interface_branch, task, title)
-
-        jira_client.add_comment(task, f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
-        github_pr.create_issue_comment(f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
-
         github_pr.create_issue_comment(f"Running all tests")
         github_pr.create_issue_comment(f"/test all")
 
@@ -505,8 +498,8 @@ def main(args):
             pass
         else:
             app_interface_fork = create_app_interface_fork(args)
-            app_interface_branch = commit_and_push_version_update_changes_app_interface(args.gitlab_key_file, app_interface_fork, task)
-            gitlab_pr = open_app_interface_pr(app_interface_fork, app_interface_branch, task)
+            app_interface_branch = commit_and_push_version_update_changes_app_interface(args.gitlab_key_file, app_interface_fork, title, task)
+            gitlab_pr = open_app_interface_pr(app_interface_fork, app_interface_branch, task, title)
 
             jira_client.add_comment(task, f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
             github_pr.create_issue_comment(f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
