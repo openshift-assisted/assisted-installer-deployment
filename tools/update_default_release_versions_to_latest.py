@@ -193,11 +193,11 @@ def clone_assisted_service(github_user, github_password):
     git_cmd("fetch", "upstream")
     git_cmd("reset", "upstream/master", "--hard")
 
-def commit_and_push_version_update_changes(message_prefix):
+def commit_and_push_version_update_changes(message_prefix, title):
     def git_cmd(*args: str, stdout=None):
         return cmd(("git", "-C", ASSISTED_SERVICE_CLONE_DIR) + args, stdout=stdout)
 
-    git_cmd("commit", "-a", "-m", f"{message_prefix} Updating versions to latest releases")
+    git_cmd("commit", "-a", "-m", f"{title}")
 
     branch = BRANCH_NAME.format(prefix=message_prefix)
 
@@ -206,7 +206,7 @@ def commit_and_push_version_update_changes(message_prefix):
         for line in status_stdout.splitlines():
             logging.info(f"Found on-prem change in file {line}")
 
-        git_cmd("commit", "-a", "-m", f"{message_prefix} Updating versions to latest releases")
+        git_cmd("commit", "-a", "-m", f"{title}")
 
     git_cmd("push", "origin", f"HEAD:{branch}")
     return branch
@@ -483,7 +483,7 @@ def main(args):
                 param["value"] for param in yaml.safe_load(f)["parameters"] if param["name"] == "OPENSHIFT_VERSIONS"
             )
 
-        branch = commit_and_push_version_update_changes(task)
+        branch = commit_and_push_version_update_changes(task, title)
 
         body = get_pr_body(updates_made)
 
