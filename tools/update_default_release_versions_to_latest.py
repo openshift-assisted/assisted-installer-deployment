@@ -419,6 +419,7 @@ def main(args):
     updated_version_json = copy.deepcopy(default_version_json)
 
     updates_made = set()
+    updates_made_str = set()
 
     for release in default_version_json:
 
@@ -434,7 +435,10 @@ def main(args):
         current_default_ocp_release = default_version_json.get(release).get("display_name")
 
         if current_default_ocp_release != latest_ocp_release or dry_run:
+
             updates_made.add(release)
+            updates_made_str.add(f"{current_default_ocp_release} -> {latest_ocp_release}")
+
             logger.info(f"New latest ocp release available for {release}, {current_default_ocp_release} -> {latest_ocp_release}")
             updated_version_json[release]["display_name"] = latest_ocp_release
             updated_version_json[release]["release_version"] = latest_ocp_release
@@ -445,7 +449,10 @@ def main(args):
         rhcos_latest_release = get_latest_rchos_release_from_minor(release, rhcos_latest_of_releases)
 
         if (not is_pre_release(rhcos_default_release) and rhcos_default_release != rhcos_latest_release) or dry_run:
+
             updates_made.add(release)
+            updates_made_str.add(f"rchos {rhcos_default_release} -> {rhcos_latest_release}")
+
             logger.info(f"New latest rhcos release available, {rhcos_default_release} -> {rhcos_latest_release}")
             updated_version_json[release]["rhcos_image"] = updated_version_json[release]["rhcos_image"].replace(rhcos_default_release, rhcos_latest_release)
 
@@ -456,14 +463,14 @@ def main(args):
             updated_version_json[release]["rhcos_version"] = rchos_version_from_iso
 
     if updates_made:
-        logger.info(f"changes were made on the fallowing versions: {updates_made}")
+        logger.info(f"changes were made on the following versions: {updates_made_str}")
 
         if dry_run:
             jira_client, task = None, "TEST-8888"
         else:
             jira_client, task = create_task(args, TICKET_DESCRIPTION)
 
-        versions_str = " and ".join(updates_made)
+        versions_str = ", ".join(updates_made_str)
         title = PR_MESSAGE.format(task=task, versions_string=versions_str)
         logger.info(f"PR title will be {title}")
 
