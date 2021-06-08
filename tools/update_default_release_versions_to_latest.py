@@ -28,7 +28,7 @@ BRANCH_NAME = "{prefix}_update_assisted_service_versions"
 DEFAULT_ASSIGN = "oscohen"
 DEFAULT_WATCHERS = ["lgamliel", "oscohen", "yuvalgoldberg"]
 PR_MENTION = ["gamli75", "oshercc", "YuviGold"]
-PR_MESSAGE = "{task}, Bump OCP versions {versions_string}"
+PR_MESSAGE = "{task}: Bump OCP versions {versions_string}"
 
 OCP_INFO_CALL = """curl https://api.openshift.com/api/upgrades_info/v1/graph\?channel\=stable-{version}\&arch\=amd64 | jq '[.nodes[]] | sort_by(.version | split(".") | map(tonumber))[-1]'"""
 OCP_INFO_FC_CALL = """curl https://api.openshift.com/api/upgrades_info/v1/graph\?channel\=candidate-{version}\&arch\=amd64 | jq '[.nodes[]] | max_by(.version)'"""
