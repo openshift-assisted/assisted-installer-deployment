@@ -10,3 +10,5 @@ RUN rm /tmp/*requirements.txt
 
 RUN apt-get update
 RUN apt-get -y  install jq
+
+RUN  apt-get install p7zip-full -y
