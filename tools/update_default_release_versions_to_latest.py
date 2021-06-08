@@ -447,8 +447,7 @@ def main(args):
         rhcos_latest_of_releases = get_all_releases(RHCOS_RELEASES.format(minor=release))
         rhcos_latest_release = get_latest_rchos_release_from_minor(release, rhcos_latest_of_releases)
 
-        # if (not is_pre_release(rhcos_default_release) and rhcos_default_release != rhcos_latest_release) or dry_run:
-        if rhcos_default_release != rhcos_latest_release or dry_run:
+        if (not is_pre_release(rhcos_default_release) and rhcos_default_release != rhcos_latest_release) or dry_run:
 
             updates_made.add(release)
             updates_made_str.add(f"rchos {rhcos_default_release} -> {rhcos_latest_release}")
