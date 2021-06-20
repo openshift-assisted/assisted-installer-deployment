@@ -27,6 +27,10 @@ from fuzzywuzzy import fuzz
 from tabulate import tabulate
 
 DEFAULT_DAYS_TO_HANDLE = 30
+CF_USER = "customfield_12319044"
+CF_DOMAIN = "customfield_12319045"
+CF_CLUSTER_ID = "customfield_12316349"
+
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +201,10 @@ class Signature(abc.ABC):
         i = self._jclient.issue(key)
         i.update(fields={"description": new_description})
 
+    def _update_fields(self, key, fields_dict):
+        i = self._jclient.issue(key)
+        i.update(fields=fields_dict)
+
     @staticmethod
     def _generate_table_for_report(hosts):
         return tabulate(hosts, headers="keys", tablefmt="jira") + "\n"
@@ -328,6 +336,83 @@ class FailureDescription(Signature):
 
         logger.info("Updating description of %s", issue_key)
         self._update_description(issue_key, description)
+
+
+class FailureDetails(Signature):
+    """
+    This signature sets some fields such as:
+        cluster-id
+        user
+        domain
+    """
+    def __init__(self, jira_client):
+        super().__init__(jira_client, comment_identifying_string="")
+
+    def is_olm_operator(self, operator_name):
+        return operator_name.lower() in ["cnv", "lso", "ocs"]
+
+    def _update_ticket(self, url, issue_key, should_update=False):
+
+        def extract_cluster_md_from_existing_labels():
+            label_prefix_to_property = {
+                "AI_CLUSTER_": "id",
+                "AI_DOMAIN_": "email_domain",
+                "AI_USER_": "user_name",
+            }
+            r = re.compile(r'(AI_[^_]*_)(.*)')
+
+            i = self._jclient.issue(issue_key)
+            cluster_md = {}
+            for l in i.fields.labels:
+                m = r.match(l)
+                if m is None or len(m.groups()) != 2:
+                    continue
+                prefix, value = m.groups()
+                if prefix not in label_prefix_to_property:
+                    continue
+                cluster_md[label_prefix_to_property[prefix]] = value
+            return cluster_md
+
+        if not should_update:
+            logger.debug("Not updating fields of %s", issue_key)
+            return
+
+        url = self._logs_url_to_api(url)
+        cluster_md = []
+        try:
+            md = get_metadata_json(url)
+            cluster_md = md['cluster']
+        except:
+            # if we cannot find the failure logs on the log-server, we'll just use whatever information we
+            # have in the 'labels' field of the ticket
+            # this is mainly relevant for triage tickets that were moved from 'MGMT' project to 'AITRIAGE'
+            # project
+            cluster_md = extract_cluster_md_from_existing_labels()
+
+        update_fields = {
+            "labels": [],
+        }
+        if 'user_name' in cluster_md:
+            update_fields[CF_USER] = cluster_md['user_name']
+        if 'email_domain' in cluster_md:
+            update_fields[CF_DOMAIN] = cluster_md['email_domain']
+        if 'id' in cluster_md:
+            update_fields[CF_CLUSTER_ID] = cluster_md['id']
+
+        feature_usage_field = cluster_md.get('feature_usage')
+        if feature_usage_field:
+            feature_usage = json.loads(feature_usage_field)
+            operators = [feature for feature in feature_usage.keys() if self.is_olm_operator(feature)]
+            other_features = [feature for feature in feature_usage.keys() if not self.is_olm_operator(feature)]
+            if len(operators+other_features) > 0:
+                labels = []
+                for f in operators+other_features:
+                    labels.append("FEATURE-"+f.replace(" ", "-"))
+
+            update_fields["labels"] = labels
+
+        logger.info("Updating fields of %s", issue_key)
+        self._update_fields(issue_key, update_fields)
 
 
 class HostsExtraDetailSignature(Signature):
@@ -837,7 +922,7 @@ class AgentStepFailureSignature(Signature):
 ############################
 DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SERVER = "https://issues.redhat.com"
-SIGNATURES = [FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
+SIGNATURES = [FailureDetails, FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
               StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature,
               MediaDisconnectionSignature, ConsoleTimeoutSignature, AgentStepFailureSignature,
               CNIConfigurationError]
@@ -899,7 +984,7 @@ def get_issue(jclient, issue_key):
     except jira.exceptions.JIRAError as e:
         if e.status_code != 404:
             raise
-    if issue is None or issue.fields.components[0].name != "Assisted-installer Triage":
+    if issue is None or issue.fields.components[0].name != "Cloud-Triage":
         raise Exception("issue {} does not exist or is not a triaging issue".format(issue_key))
 
     return issue
@@ -907,6 +992,7 @@ def get_issue(jclient, issue_key):
 
 def get_logs_url_from_issue(issue):
     m = LOGS_URL_FROM_DESCRIPTION_NEW.search(issue.fields.description)
+
     if m is None:
         logger.debug("Cannot find new format of URL for logs in %s", issue.key)
         m = LOGS_URL_FROM_DESCRIPTION_OLD.search(issue.fields.description)
@@ -918,7 +1004,7 @@ def get_logs_url_from_issue(issue):
 
 def get_all_triage_tickets(jclient, only_recent=False):
     recent_filter = "" if not only_recent else 'and created >= -31d'
-    query = 'project = MGMT AND component = "Assisted-installer Triage" AND labels in (AI_CLOUD_TRIAGE) {}'.format(recent_filter)
+    query = "project = AITRIAGE AND component = Cloud-Triage".format(recent_filter)
 
     return jclient.search_issues(query, maxResults=None)
 
@@ -942,7 +1028,11 @@ def process_issues(jclient, issues, update, update_signature):
     should_progress_bar = sys.stderr.isatty()
     for issue in tqdm.tqdm(issues, disable=not should_progress_bar, file=sys.stderr):
         logger.debug(f"Issue {issue}")
-        url = get_logs_url_from_issue(issue)
+        try:
+            url = get_logs_url_from_issue(issue)
+        except:
+            logger.exception("Error getting logs url of %s", issue.key)
+            continue
 
         if url is None:
             logger.warning(f"Could not get URL from issue {get_ticket_browse_url(issue.key)}. Skipping")

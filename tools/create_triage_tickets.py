@@ -25,6 +25,7 @@ JIRA_SERVER = "https://issues.redhat.com/"
 DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SUMMARY = "cloud.redhat.com failure: {failure_id}"
 
+
 def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
     cred = netrc.netrc(os.path.expanduser(netrc_file))
     username, _, password = cred.authenticators(server)
@@ -39,16 +40,9 @@ def get_jira_client(username, password):
 def format_summary(failure_data):
     return JIRA_SUMMARY.format(**failure_data)
 
-def format_labels(failure_data):
-    return ["no-qe",
-            "AI_CLOUD_TRIAGE",
-            "AI_CLUSTER_{cluster_id}".format(**failure_data),
-            "AI_USER_{username}".format(**failure_data),
-            "AI_DOMAIN_{domain}".format(**failure_data)]
-
 
 def get_all_triage_tickets(jclient):
-    query = 'component = "Assisted-Installer Triage"'
+    query = 'component = "Cloud-Triage"'
     idx = 0
     block_size = 100
     summaries, issues = [], []
@@ -84,15 +78,12 @@ def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
     ocp_key = f"{major}.{minor}"
 
     ticket_affected_version_field = 'OpenShift {}'.format(ocp_key)
-    new_issue = jclient.create_issue(project="MGMT",
+    new_issue = jclient.create_issue(project="AITRIAGE",
                                      summary=summary,
                                      versions=[{'name': ticket_affected_version_field}],
-                                     components=[{'name': "Assisted-installer Triage"}],
+                                     components=[{'name': "Cloud-Triage"}],
                                      priority={'name': 'Blocker'},
                                      issuetype={'name': 'Bug'},
-                                     labels=format_labels({"username":cluster_md["user_name"],
-                                                           "domain":cluster_md["email_domain"],
-                                                           "cluster_id":cluster_md["id"]}),
                                      description=ats.FailureDescription(jclient).build_description(url,
                                                                                                    cluster_md))
 
