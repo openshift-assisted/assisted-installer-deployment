@@ -27,8 +27,8 @@ from fuzzywuzzy import fuzz
 from tabulate import tabulate
 
 DEFAULT_DAYS_TO_HANDLE = 30
-CF_USER = "customfield_12319045"
-CF_DOMAIN = "customfield_12319044"
+CF_USER = "customfield_12319044"
+CF_DOMAIN = "customfield_12319045"
 CF_CLUSTER_ID = "customfield_12316349"
 
 
@@ -342,7 +342,6 @@ class FailureDetails(Signature):
 
     def _update_ticket(self, url, issue_key, should_update=False):
 
-        #import ipdb; ipdb.set_trace()
         def extract_cluster_md_from_existing_labels():
             label_prefix_to_property = {
                 "AI_CLUSTER_": "id",
@@ -385,9 +384,9 @@ class FailureDetails(Signature):
         if 'user_name' in cluster_md:
             update_fields[CF_USER] = cluster_md['user_name']
         if 'email_domain' in cluster_md:
-            cluster_md[CF_DOMAIN] = cluster_md['email_domain']
+            update_fields[CF_DOMAIN] = cluster_md['email_domain']
         if 'id' in cluster_md:
-            cluster_md[CF_CLUSTER_ID] = cluster_md['id']
+            update_fields[CF_CLUSTER_ID] = cluster_md['id']
 
         feature_usage_field = cluster_md.get('feature_usage')
         if feature_usage_field:
@@ -947,7 +946,6 @@ def get_logs_url_from_issue(issue):
 
 def get_all_triage_tickets(jclient, only_recent=False):
     recent_filter = "" if not only_recent else 'and created >= -31d'
-    #query = 'project = MGMT AND component = "Assisted-installer Triage" AND labels in (AI_CLOUD_TRIAGE) {}'.format(recent_filter)
     query = "project = AITRIAGE AND component = Cloud-Triage".format(recent_filter)
 
     return jclient.search_issues(query, maxResults=None)
@@ -975,7 +973,7 @@ def process_issues(jclient, issues, update, update_signature):
         try:
             url = get_logs_url_from_issue(issue)
         except:
-            logger.error("Error getting logs url of %s", issue.key)
+            logger.exception("Error getting logs url of %s", issue.key)
             continue
 
         if url is None:
