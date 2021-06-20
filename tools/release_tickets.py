@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 logging.getLogger("__main__").setLevel(logging.INFO)
 
 REPO_URL_TEMPLATE = "https://github.com/{}"
-ISSUES_REGEX = re.compile(r'((MGMT|OCPBUGSM|BZ)-[0-9]+)')
+ISSUES_REGEX = re.compile(r'((MGMT-|OCPBUGSM-|BZ-|Bug )[0-9]+)')
+BZ_BUGS_PREFIX = "Bug "
 
 BZ_REFERENCE_FIELD = "customfield_12316840"
 DEFAULT_NETRC_FILE = "~/.netrc"
@@ -91,12 +92,17 @@ def get_field_by_name(issue, fieldName):
     except:
         return None
 
-def get_issues_info(jclient, keys):
+def get_jira_issues_info(jclient, keys):
     issues = jclient.search_issues("issue in ({})".format(",".join(keys)), fields=["key", "summary", "status",
                                                                                    "assignee",
                                                                                    BZ_REFERENCE_FIELD,
                                                                                    "fixVersions"])
     return issues
+
+def get_bz_issues_info(bzclient, keys):
+    bugs_ids = {i.replace('Bug ', '') for i in keys}
+    bugs = bzclient.getbugs(bugs_ids, include_fields=['id', 'summary', 'status', 'assigned_to'])
+    return bugs
 
 def get_bz_id_from_jira(issue):
     bz_ref = get_field_by_name(issue, BZ_REFERENCE_FIELD)
@@ -108,8 +114,7 @@ def format_key_for_print(key, isMarkdown=False):
 
     return f"[{key}](https://issues.redhat.com/browse/{key})"
 
-def get_data_for_print(issues, issues_in_repos, isMarkdown=False):
-    headers = ['key', 'summary', 'status', 'assignee', 'repos']
+def get_jira_data_for_print(issues, issues_in_repos, isMarkdown=False):
     table = []
     for i in issues:
         row = {'key': format_key_for_print(i.key, isMarkdown=isMarkdown),
@@ -119,7 +124,19 @@ def get_data_for_print(issues, issues_in_repos, isMarkdown=False):
                'repos': ", ".join(issues_in_repos[i.key])}
         table.append(row)
 
-    return headers, table
+    return table
+
+def get_bz_data_for_print(issues, issues_in_repos, isMarkdown=False):
+    table = []
+    for i in issues:
+        row = {'key': i.id,
+               'summary': i.summary,
+               'status': i.status,
+               'assignee': i.assigned_to,
+               'repos': ", ".join(issues_in_repos["Bug "+str(i.id)])}
+        table.append(row)
+
+    return table
 
 def get_data_for_release_candidates(issues):
     headers = ['key', 'summary', 'status', 'fixVersion']
@@ -134,18 +151,21 @@ def get_data_for_release_candidates(issues):
     return headers, table
 
 
-def print_report_csv(issues, issues_in_repos):
-    headers, data = get_data_for_print(issues, issues_in_repos)
+def print_report_csv(jira_issues, bz_issues, issues_in_repos):
+    headers = ['key', 'summary', 'status', 'assignee', 'repos']
+    jira_data = get_jira_data_for_print(jira_issues, issues_in_repos)
+    bz_data = get_bz_data_for_print(bz_issues, issues_in_repos)
     csvout = csv.DictWriter(sys.stdout, delimiter='|', fieldnames=headers)
     csvout.writeheader()
-    for row in data:
+    for row in jira_data+bz_data:
         csvout.writerow(row)
 
 
-def print_report_table(issues, issues_in_repos, isMarkdown=False):
-    _, data = get_data_for_print(issues, issues_in_repos, isMarkdown=isMarkdown)
+def print_report_table(jira_issues, bz_issues, issues_in_repos, isMarkdown=False):
+    jira_data = get_jira_data_for_print(jira_issues, issues_in_repos, isMarkdown=isMarkdown)
+    bz_data = get_bz_data_for_print(bz_issues, issues_in_repos, isMarkdown=isMarkdown)
     fmt = "github" if isMarkdown else "psql"
-    print(tabulate(data, headers="keys", tablefmt=fmt))
+    print(tabulate(jira_data+bz_data, headers="keys", tablefmt=fmt))
 
 
 def print_report_table_for_release_candidates(issues):
@@ -159,6 +179,16 @@ def filter_issues_to_modify(issues, ignore_issues):
     filtered_issues = []
     for i in issues:
         if i.key not in ignore_issues and i.fields.status.name in ['Done', 'QE Review']:
+            filtered_issues.append(i)
+    return filtered_issues
+
+
+def filter_bz_issues_to_modify(bz_issues, ignore_issues):
+    if not ignore_issues:
+        ignore_issues = []
+    filtered_issues = []
+    for i in bz_issues:
+        if i.id not in ignore_issues and i.status in ['ON_QA', 'POST']:
             filtered_issues.append(i)
     return filtered_issues
 
@@ -189,17 +219,30 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
     if not issue_keys:
         return
 
-    issues = get_issues_info(jclient, issue_keys)
+    bz_issues_keys = []
+    jira_issues_keys = []
+    for i in issue_keys:
+        if BZ_BUGS_PREFIX in i:
+            bz_issues_keys.append(i)
+        else:
+            jira_issues_keys.append(i)
+    logger.info("bz_issues_keys=%s", bz_issues_keys)
+    logger.info("jira_issues_keys=%s", jira_issues_keys)
+
+    bz_issues = get_bz_issues_info(bzclient,bz_issues_keys)
+    jira_issues = get_jira_issues_info(jclient, jira_issues_keys)
     if report_format is not None:
         if report_format == REPORT_FORMAT_CSV:
-            print_report_csv(issues, issues_in_repos)
+            print_report_csv(jira_issues, bz_issues, issues_in_repos)
         elif report_format == REPORT_FORMAT_STD:
-            print_report_table(issues, issues_in_repos, isMarkdown=False)
+            print_report_table(jira_issues, bz_issues, issues_in_repos, isMarkdown=False)
         else:
-            print_report_table(issues, issues_in_repos, isMarkdown=True)
+            print_report_table(jira_issues, bz_issues, issues_in_repos, isMarkdown=True)
         return
 
-    issues = filter_issues_to_modify(issues, ignore_issues)
+    jira_issues_to_modify = filter_issues_to_modify(jira_issues, ignore_issues)
+    bz_issues_to_modify = filter_bz_issues_to_modify(bz_issues, ignore_issues)
+
     if modify_report:
         print_report_table_for_release_candidates(issues)
 
@@ -214,22 +257,24 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
                 return
             fix_version_to_update = format_fix_version(to_commit)
 
-        update_fix_versions_for_all_issues(bzclient, issues, fix_version_to_update, is_dry_run=is_dry_run)
+        update_fix_versions_for_all_issues(bzclient, jira_issues_to_modify, bz_issues_to_modify, fix_version_to_update, is_dry_run=is_dry_run)
 
 def format_fix_version(version):
     return "OCP-Metal-{}".format(version)
 
-def update_fix_versions_for_all_issues(bzclient, issues, fix_version, is_dry_run=False):
+def update_fix_versions_for_all_issues(bzclient, jira_issues_to_modify, bz_issues_to_modify, fix_version, is_dry_run=False):
     bz_issues = []
     jira_issues = []
 
-    for i in issues:
+    for i in jira_issues_to_modify:
         bz_ref = get_field_by_name(i, BZ_REFERENCE_FIELD)
         if bz_ref is not None:
             bz_issues.append(bz_ref.bugid)
         else:
             jira_issues.append(i)
 
+    for i in bz_issues_to_modify:
+        bz_issues.append(i.id)
 
     if len(bz_issues) == 0:
         logger.info("No BZ issues selected for updating")
@@ -329,10 +374,7 @@ if __name__ == "__main__":
     jusername, jpassword = get_login(args.jira_user_password, JIRA_SERVER)
     busername, bpassword = get_login(args.bugzilla_user_password, BZ_SERVER)
     jclient = get_jira_client(jusername, jpassword)
-    if not args.update_ticket_fixed_in:
-        bzclient = None
-    else:
-        bzclient = get_bz_client(busername, bpassword)
+    bzclient = get_bz_client(busername, bpassword)
 
     main(jclient, bzclient, args.from_version, args.to_version, args.report_format, specific_issue=args.issue,
          fix_version=args.fixed_in_value, should_update=args.update_ticket_fixed_in, is_dry_run=args.dry_run,
