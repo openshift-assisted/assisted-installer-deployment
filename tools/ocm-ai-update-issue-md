@@ -1,0 +1,124 @@
+#!/bin/bash
+
+OPTS="e:s:"
+LONGOPTS="end-tag:,start-tag:"
+
+if ! TEMP=$(getopt --options=$OPTS --longoptions=$LONGOPTS --name "$0" -- "$@"); then
+	echo 'Failed to parse options. Terminating...' >&2
+	exit 1
+fi
+eval set -- "$TEMP"
+unset TEMP
+
+while true; do
+    case "$1" in
+        -e|--end-tag)
+            declare -r END_TAG="$2"
+            shift 2
+            continue
+            ;;
+        -s|--start-tag)
+            declare -r START_TAG="$2"
+            shift 2
+            continue
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *)
+            echo 'Unexpected parsed value' >&2
+            exit 2
+            ;;
+    esac
+done
+
+if [[ -z "$END_TAG" ]]; then
+    END_TAG="ocm-2.3-$(date -u +"%Y%m%d")"
+    readonly END_TAG
+    echo "A target container tag with -e|--end-tag to fetch the commit info from. Using today's nightly: $END_TAG" >&2
+fi
+
+if [[ -z "$START_TAG" ]]; then
+    declare START_TAG=""
+    echo "A start container tag with -s|--start-tag to fetch the commit info from. Will use the begining of the ocm-2.3 branch in each repo" >&2
+fi
+
+declare -r QUAY_REPOS=(assisted-service assisted-installer assisted-installer-controller assisted-installer-agent)
+declare -A END_GIT_SHA=()
+declare -A START_GIT_SHA=()
+
+function fetch_quay_info() {
+    local -r store_var="${1}[$2]"
+    local -r repo="$2"
+    local -r tag="$3"
+    local repo
+    echo -n "Fetching git revision for ${repo} container tag ${tag} from quay.io..." >&2
+    declare -g "${store_var}=$(skopeo inspect "docker://quay.io/ocpmetal/${repo}:${tag}" | jq -r '.Labels.git_revision')"
+    echo "Done" >&2
+}
+
+function current_repo_first_branch_commit() {
+    local -r store_var="$1"
+    declare -g "${store_var}=$(git log origin/master..origin/ocm-2.3 --format="%H" | tail -1)"
+}
+
+
+echo "
+# image updates
+"
+for repo in "${QUAY_REPOS[@]}"; do
+    fetch_quay_info "END_GIT_SHA" "$repo" "$END_TAG"
+    echo "
+* [ ] ${repo} https://github.com/openshift/${repo}
+- upstream image tag/digest: ${END_TAG}
+- git SHA: ${END_GIT_SHA[${repo}]}"
+done
+
+if [[ -n "$START_TAG" ]]; then
+    for repo in "${QUAY_REPOS[@]}"; do
+        fetch_quay_info "START_GIT_SHA" "$repo" "$START_TAG"
+    done
+fi
+
+if [[ -z "${OPENSHIFT_REPOS_DIR}" ]]; then
+    echo -n '$OPENSHIFT_REPOS_DIR is not set. Creating a temp dir to clone the assisted repos...' >&2
+    OPENSHIFT_REPOS_DIR=$(mktemp -d)
+    echo "Done" >&2
+fi
+
+
+echo "
+
+# changelog
+
+"
+for repo in "${QUAY_REPOS[@]}"; do
+    echo "Getting changelog for ${repo}..." >&2
+    if [[ ! -d "${OPENSHIFT_REPOS_DIR}/${repo}" ]]; then
+        echo -n "${repo} directory not found. Cloning..." >&2
+        git clone https://github.com/openshift/assisted-service "${OPENSHIFT_REPOS_DIR}/${repo}"
+        echo "Done" >&2
+    fi
+
+    pushd "${OPENSHIFT_REPOS_DIR}/${repo}" >&2 || exit 4
+    echo -n "Fetching from origin in case there's new commits..." >&2
+    git fetch 
+    echo "Done" >&2
+    if [[ -z "$START_TAG" ]]; then
+        echo -n "Start tag was not set. finding first ocm-2.3 branch commit..." >&2
+        current_repo_first_branch_commit "START_GIT_SHA[$repo]"
+        echo "Done" >&2
+    fi
+
+    echo "
+## ${repo}
+"
+    for commit_id in $(git rev-list "${START_GIT_SHA[$repo]}..${END_GIT_SHA[$repo]}"); do
+        commit_metadata=$(git show --format="%n%H%n%s%n%b" --quiet "$commit_id")
+        echo "$commit_metadata" | gawk 'match($0, /(OCPBUGSM-[^:]*):/, ary) {print "https://issues.redhat.com/browse/"ary[1]}'
+        echo "$commit_metadata" | gawk 'match($0, /(Bug )([^:]*):/, ary) {print "https://bugzilla.redhat.com/"ary[2]}'
+    done
+    popd >&2 || exit 4
+done
+exit 0
