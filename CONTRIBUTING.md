@@ -22,6 +22,7 @@ In order to test your new signatures, you can run the script locally to make sur
 4. Activate the virtualenv `. ./venv/bin/activate`
 
 5. Install `requirements.txt` (`python3 -m pip install -r requirements.txt`)
+(On Fedora, this step may need the `python3-devel` package to be installed first)
 
 6. Run `./tools/add_triage_signature.py`, using flags `--dry-run` or `--dry-run-temp`, along with `--issue MGMT-1234` or `--recent-issues`
 
