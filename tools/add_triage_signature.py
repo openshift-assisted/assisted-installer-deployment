@@ -334,6 +334,12 @@ class FailureDescription(Signature):
 
 
 class FailureDetails(Signature):
+    """
+    This signature sets some fields such as:
+        cluster-id
+        user
+        domain
+    """
     def __init__(self, jira_client):
         super().__init__(jira_client, comment_identifying_string="")
 
