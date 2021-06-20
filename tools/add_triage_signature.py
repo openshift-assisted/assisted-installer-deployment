@@ -124,6 +124,11 @@ def get_host_log_file(triage_logs_tar, host_id, filename):
 
     return triage_logs_tar.get(f"{hostname}.tar.gz/logs_host_{host_id}/{filename}")
 
+def get_journal(triage_logs_tar, host_ip, journal_file):
+    return triage_logs_tar.get(
+        f"*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/control-plane/{host_ip}/journals/{journal_file}"
+    )
+
 
 ############################
 # Common functionality
@@ -412,6 +417,49 @@ class InstallationDiskFIOSignature(Signature):
             report = self._generate_table_for_report(hosts)
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
+
+class CNIConfigurationError(Signature):
+    def __init__(self, jira_client):
+        super().__init__(jira_client, comment_identifying_string="h1. No CNI configuration")
+
+    def _update_ticket(self, url, issue_key, should_update=False):
+        url = self._logs_url_to_api(url)
+
+        md = get_metadata_json(url)
+
+        cluster = md['cluster']
+        cluster_id = cluster['id']
+
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+
+        try:
+            # Get any kubelet journal, we don't care about which host IP
+            # TODO: More robust iterate through hosts, look in all of them, rather than letting * capture just the first
+            #       host. For now this is good enough because we saw this error appear in all hosts at the same time.
+            host_ip = "*"
+
+            kubelet_journal = get_journal(triage_logs_tar, host_ip, "kubelet.log")
+        except FileNotFoundError:
+            return
+
+        cni_errors = search_patterns_in_string(kubelet_journal, re.escape("No CNI configuration file in /etc/kubernetes/cni/net.d/. Has your network provider started?"))
+
+        threshold = 1000
+        if len(cni_errors) > threshold:
+            report = dedent(f"""
+            The CNI error appeared on some of the hosts on this cluster more than {threshold} times ({len(cni_errors)}).
+            
+            First error:
+            {{code}}
+            {cni_errors[0]}
+            {{code}}
+             
+            Last error:
+            {{code}}
+            {cni_errors[-1]}
+            {{code}}
+            """)
+            self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 class StorageDetailSignature(Signature):
     def __init__(self, jira_client):
@@ -791,7 +839,8 @@ DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SERVER = "https://issues.redhat.com"
 SIGNATURES = [FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
               StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature,
-              MediaDisconnectionSignature, ConsoleTimeoutSignature, AgentStepFailureSignature]
+              MediaDisconnectionSignature, ConsoleTimeoutSignature, AgentStepFailureSignature,
+              CNIConfigurationError]
 
 
 def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
@@ -813,6 +862,9 @@ LOGS_URL_FROM_DESCRIPTION_NEW = re.compile(r".*\* \[[lL]ogs\|(http.*)\]")
 
 
 def search_patterns_in_string(string, patterns):
+    if type(patterns) == str:
+        patterns = [patterns]
+
     combined_regex = re.compile(f'({"|".join(r".*%s.*" % pattern for pattern in patterns)})')
     return combined_regex.findall(string)
 
