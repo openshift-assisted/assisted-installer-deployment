@@ -45,6 +45,7 @@ if [[ -z "$START_TAG" ]]; then
 fi
 
 declare -r QUAY_REPOS=(assisted-service assisted-installer assisted-installer-controller assisted-installer-agent)
+declare -a VALID_QUAY_REPOS
 declare -A END_GIT_SHA=()
 declare -A START_GIT_SHA=()
 
@@ -53,9 +54,17 @@ function fetch_quay_info() {
     local -r repo="$2"
     local -r tag="$3"
     local repo
+    local sha
+    local manifest
+
     echo -n "Fetching git revision for ${repo} container tag ${tag} from quay.io..." >&2
-    declare -g "${store_var}=$(skopeo inspect "docker://quay.io/ocpmetal/${repo}:${tag}" | jq -r '.Labels.git_revision')"
-    echo "Done" >&2
+    if manifest="$(skopeo inspect "docker://quay.io/ocpmetal/${repo}:${tag}")"; then
+        sha="$(jq -r '.Labels.git_revision' <<<"$manifest")"
+        declare -g "${store_var}=${sha}"
+        echo "Done" >&2
+    else
+        return 1
+    fi
 }
 
 function current_repo_first_branch_commit() {
@@ -65,18 +74,20 @@ function current_repo_first_branch_commit() {
 
 
 echo "
-# image updates
-"
+# image updates"
+
 for repo in "${QUAY_REPOS[@]}"; do
-    fetch_quay_info "END_GIT_SHA" "$repo" "$END_TAG"
-    echo "
+    if fetch_quay_info "END_GIT_SHA" "$repo" "$END_TAG"; then
+        echo "
 * [ ] ${repo} https://github.com/openshift/${repo}
 - upstream image tag/digest: ${END_TAG}
 - git SHA: ${END_GIT_SHA[${repo}]}"
+        VALID_QUAY_REPOS+=("$repo")
+    fi
 done
 
 if [[ -n "$START_TAG" ]]; then
-    for repo in "${QUAY_REPOS[@]}"; do
+    for repo in "${VALID_QUAY_REPOS[@]}"; do
         fetch_quay_info "START_GIT_SHA" "$repo" "$START_TAG"
     done
 fi
@@ -90,10 +101,9 @@ fi
 
 echo "
 
-# changelog
+# changelog"
 
-"
-for repo in "${QUAY_REPOS[@]}"; do
+for repo in "${VALID_QUAY_REPOS[@]}"; do
     echo "Getting changelog for ${repo}..." >&2
     if [[ ! -d "${OPENSHIFT_REPOS_DIR}/${repo}" ]]; then
         echo -n "${repo} directory not found. Cloning..." >&2
