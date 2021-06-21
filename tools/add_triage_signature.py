@@ -373,10 +373,6 @@ class FailureDetails(Signature):
                 cluster_md[label_prefix_to_property[prefix]] = value
             return cluster_md
 
-        if not should_update:
-            logger.debug("Not updating fields of %s", issue_key)
-            return
-
         url = self._logs_url_to_api(url)
         cluster_md = []
         try:
@@ -409,7 +405,7 @@ class FailureDetails(Signature):
                 for f in operators+other_features:
                     labels.append("FEATURE-"+f.replace(" ", "-"))
 
-            update_fields["labels"] = labels
+                update_fields["labels"] = labels
 
         logger.info("Updating fields of %s", issue_key)
         self._update_fields(issue_key, update_fields)
@@ -679,9 +675,12 @@ class ComponentsVersionSignature(Signature):
 
         versions = md.get('versions')
         if versions:
-            report += "assisted-installer: {}\n".format(versions['assisted-installer'])
-            report += "assisted-installer-controller: {}\n".format(versions['assisted-installer-controller'])
-            report += "assisted-installer-agent: {}\n".format(versions['discovery-agent'])
+            if "assisted-installer" in versions:
+                report += "assisted-installer: {}\n".format(versions['assisted-installer'])
+            if "assisted-installer-controller" in versions:
+                report += "assisted-installer-controller: {}\n".format(versions['assisted-installer-controller'])
+            if "discovery-agent" in versions:
+                report += "assisted-installer-agent: {}\n".format(versions['discovery-agent'])
 
         if report != "":
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
