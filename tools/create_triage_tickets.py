@@ -134,6 +134,8 @@ def main(arg):
     if not args.filters_json:
         return
 
+    # TODO: Need to fix the close_by_signature and remove the following 'return' statement
+    return
     close_by_signature.run_using_json(
         path=args.filters_json,
         username=username,
