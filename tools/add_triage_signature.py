@@ -29,10 +29,10 @@ from fuzzywuzzy import fuzz
 from tabulate import tabulate
 
 DEFAULT_DAYS_TO_HANDLE = 30
-CF_USER = "customfield_12319044"
-CF_DOMAIN = "customfield_12319045"
-CF_CLUSTER_ID = "customfield_12316349"
-CF_FUNCTION_IMPACT = "customfield_12317358"
+CF_USER = "12319044"
+CF_DOMAIN = "12319045"
+CF_CLUSTER_ID = "12316349"
+CF_FUNCTION_IMPACT = "12317358"
 
 
 logger = logging.getLogger(__name__)
@@ -41,9 +41,9 @@ JIRA_DESCRIPTION = """
 {{color:red}}Do not manually edit this description, it will get automatically over-written{{color}}
 h1. Cluster Info
 
-*Cluster ID:* [{cluster_id}|https://cloud.redhat.com/openshift/assisted-installer/clusters/{cluster_id}]
-*Username:* {username}
-*Email domain:* {domain}
+*Cluster ID:* [{cluster_id}|https://issues.redhat.com/issues/?jql=project%20%3D%20AITRIAGE%20AND%20component%20%3D%20Cloud-Triage%20and%20cf%5B{cf_cluster_id}%5D%20~%20"{cluster_id}"]
+*Username:* [{username}|https://issues.redhat.com/issues/?jql=project%20%3D%20AITRIAGE%20AND%20component%20%3D%20Cloud-Triage%20and%20cf%5B{cf_user}%5D%20~%20"{username}"]
+*Email domain:* [{domain}|https://issues.redhat.com/issues/?jql=project%20%3D%20AITRIAGE%20AND%20component%20%3D%20Cloud-Triage%20and%20cf%5B{cf_domain}%5D%20~%20"{domain}"]
 *Created_at:* {created_at}
 *Installation started at:* {installation_started_at}
 *Failed on:* {failed_on}
@@ -54,6 +54,7 @@ h1. Cluster Info
 *Configured features:* {features}
 
 *links:*
+* [Cluster on prod|https://cloud.redhat.com/openshift/assisted-installer/clusters/{cluster_id}]
 * [Logs|{logs_url}/]
 * [Kraken|https://kraken.psi.redhat.com/clusters/{OCP_cluster_id}]
 * [Metrics|https://grafana.app-sre.devshift.net/d/assisted-installer-cluster-overview/cluster-overview?orgId=1&from=now-1h&to=now&var-datasource=app-sre-prod-04-prometheus&var-clusterId={cluster_id}]
@@ -62,6 +63,8 @@ h1. Cluster Info
 * [DM Elastic Dashboard|http://assisted-elastic.usersys.redhat.com:5601/app/dashboards#/view/500e1d40-58d6-11eb-8ff7-115676c7222d?_g=(filters:!(),query:(language:kuery,query:'cluster_id:%20%22{cluster_id}%22'),refreshInterval:(pause:!t,value:0),time:(from:now-2w,to:now))&_a=(description:'',filters:!(),fullScreenMode:!f,options:(hidePanelTitles:!f,useMargins:!t),query:(language:kuery,query:'cluster_id:%20%22{cluster_id}%22%20'),timeRestore:!f,title:'cluster%20overview',viewMode:view)]
 """
 
+def custom_field_name(custom_field):
+    return f"customfield_{custom_field}"
 
 def config_logger(verbose):
     handler = colorlog.StreamHandler()
@@ -170,7 +173,7 @@ class Signature(abc.ABC):
         pass
 
     def _add_signature_label(self, key, labels):
-        issue_labels = self._jclient.issue(key).fields.__dict__[CF_FUNCTION_IMPACT]
+        issue_labels = self._jclient.issue(key).fields.__dict__[custom_field_name(CF_FUNCTION_IMPACT)]
         if issue_labels is None:
             issue_labels = []
         is_changed = False
@@ -179,7 +182,7 @@ class Signature(abc.ABC):
                 is_changed = True
                 issue_labels.append(l)
         if is_changed:
-            self._update_fields(key, {CF_FUNCTION_IMPACT: issue_labels})
+            self._update_fields(key, {custom_field_name(CF_FUNCTION_IMPACT): issue_labels})
 
     def find_signature_comment(self, key, comments=None):
         if comments is None:
@@ -345,7 +348,10 @@ class FailureDescription(Signature):
                         "OCP_cluster_id": cluster_md['openshift_cluster_id'],
                         "username": cluster_md['user_name'],
                         "operators": operators,
-                        "features": other_features}
+                        "features": other_features,
+                        "cf_user": CF_USER,
+                        "cf_cluster_id": CF_CLUSTER_ID,
+                        "cf_domain": CF_DOMAIN}
 
         return format_description(cluster_data)
 
@@ -417,11 +423,11 @@ class FailureDetails(Signature):
             "labels": [],
         }
         if 'user_name' in cluster_md:
-            update_fields[CF_USER] = cluster_md['user_name']
+            update_fields[custom_field_name(CF_USER)] = cluster_md['user_name']
         if 'email_domain' in cluster_md:
-            update_fields[CF_DOMAIN] = cluster_md['email_domain']
+            update_fields[custom_field_name(CF_DOMAIN)] = cluster_md['email_domain']
         if 'id' in cluster_md:
-            update_fields[CF_CLUSTER_ID] = cluster_md['id']
+            update_fields[custom_field_name(CF_CLUSTER_ID)] = cluster_md['id']
 
         feature_usage_field = cluster_md.get('feature_usage')
         if feature_usage_field:
