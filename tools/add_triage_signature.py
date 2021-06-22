@@ -514,7 +514,8 @@ class CNIConfigurationError(Signature):
             return [(remote_host['host_id'], remote_host['l3_connectivity'][0]['remote_ip_address'])
                     for remote_host in
                     json.loads(host["connectivity"])['remote_hosts']]
-        except Exception:
+        except KeyError:
+            # Malformed host obect, ignore
             return []
 
     @classmethod
@@ -522,8 +523,7 @@ class CNIConfigurationError(Signature):
         """
         Given a cluster object, return a list of all host IP addresses.
 
-        Since the metadata.json file does not contain the IP address of each host, we have to infer it
-        by assembling a set - looking at the connectivity stanza of each of the hosts
+        Since the metadata.json file does not contain the IP address of each host, we have to infer it by examining the connectivity stanza of each of the hosts. Collecting the neighboring hosts from each of the host objects into a set should hopefully give us all host IP addresses.
         """
         return set(itertools.chain(*(cls._get_host_neighbors(host) for host in cluster['hosts'])))
 
