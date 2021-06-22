@@ -8,6 +8,8 @@ import logging
 import netrc
 import os
 import re
+
+import itertools
 import sys
 import tempfile
 from collections import OrderedDict, defaultdict
@@ -503,6 +505,28 @@ class CNIConfigurationError(Signature):
     def __init__(self, jira_client):
         super().__init__(jira_client, comment_identifying_string="h1. No CNI configuration")
 
+    @staticmethod
+    def _get_host_neighbors(host):
+        """
+        Given a host object, get the IP addresses of neighboring hosts. These are extracted from the given host's "connectivity" stanza.
+        """
+        try:
+            return [(remote_host['host_id'], remote_host['l3_connectivity'][0]['remote_ip_address'])
+                    for remote_host in
+                    json.loads(host["connectivity"])['remote_hosts']]
+        except KeyError:
+            # Malformed host obect, ignore
+            return []
+
+    @classmethod
+    def _get_all_host_ip_addresses(cls, cluster):
+        """
+        Given a cluster object, return a list of all host IP addresses.
+
+        Since the metadata.json file does not contain the IP address of each host, we have to infer it by examining the connectivity stanza of each of the hosts. Collecting the neighboring hosts from each of the host objects into a set should hopefully give us all host IP addresses.
+        """
+        return set(itertools.chain(*(cls._get_host_neighbors(host) for host in cluster['hosts'])))
+
     def _update_ticket(self, url, issue_key, should_update=False):
         url = self._logs_url_to_api(url)
 
@@ -513,34 +537,30 @@ class CNIConfigurationError(Signature):
 
         triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
 
-        try:
-            # Get any kubelet journal, we don't care about which host IP
-            # TODO: More robust iterate through hosts, look in all of them, rather than letting * capture just the first
-            #       host. For now this is good enough because we saw this error appear in all hosts at the same time.
-            host_ip = "*"
+        host_ip_addresses = self._get_all_host_ip_addresses(cluster)
 
-            kubelet_journal = get_journal(triage_logs_tar, host_ip, "kubelet.log")
-        except FileNotFoundError:
-            return
-
-        cni_errors = search_patterns_in_string(kubelet_journal, re.escape("No CNI configuration file in /etc/kubernetes/cni/net.d/. Has your network provider started?"))
-
+        hosts = []
         threshold = 1000
-        if len(cni_errors) > threshold:
-            report = dedent(f"""
-            The CNI error appeared on some of the hosts on this cluster more than {threshold} times ({len(cni_errors)}).
-            
-            First error:
-            {{code}}
-            {cni_errors[0]}
-            {{code}}
-             
-            Last error:
-            {{code}}
-            {cni_errors[-1]}
-            {{code}}
-            """)
+        for host_id, host_ip in host_ip_addresses:
+            try:
+                kubelet_journal = get_journal(triage_logs_tar, host_ip, "kubelet.log")
+                cni_errors = search_patterns_in_string(kubelet_journal, re.escape("No CNI configuration file in /etc/kubernetes/cni/net.d/. Has your network provider started?"))
+
+                if len(cni_errors) > threshold:
+                    hosts.append(OrderedDict({
+                        "Host ID": host_id,
+                        "Host IP": host_ip,
+                        "Number of errors": f"{len(cni_errors)} (threshold {threshold})",
+                        "First error": f"{{code}}{cni_errors[0]}{{code}}",
+                        "Last error": f"{{code}}{cni_errors[1]}{{code}}",
+                    }))
+            except FileNotFoundError:
+                continue
+
+        if len(hosts):
+            report = self._generate_table_for_report(hosts)
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
+
 
 class StorageDetailSignature(Signature):
     def __init__(self, jira_client):
