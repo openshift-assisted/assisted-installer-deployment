@@ -539,8 +539,13 @@ class CNIConfigurationError(Signature):
 
         host_ip_addresses = self._get_all_host_ip_addresses(cluster)
 
+        if len(host_ip_addresses) == 0:
+            # Fallback because some clusters just have a weird metadata.json without even a `hosts` stanza...
+            host_ip_addresses = [('Unknown', '*')]
+
         hosts = []
         threshold = 1000
+
         for host_id, host_ip in host_ip_addresses:
             try:
                 kubelet_journal = get_journal(triage_logs_tar, host_ip, "kubelet.log")
