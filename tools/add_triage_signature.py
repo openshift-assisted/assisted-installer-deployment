@@ -32,6 +32,7 @@ DEFAULT_DAYS_TO_HANDLE = 30
 CF_USER = "customfield_12319044"
 CF_DOMAIN = "customfield_12319045"
 CF_CLUSTER_ID = "customfield_12316349"
+CF_FUNCTION_IMPACT = "customfield_12317358"
 
 
 logger = logging.getLogger(__name__)
@@ -168,6 +169,18 @@ class Signature(abc.ABC):
     def _update_ticket(self, url, issue_key, should_update=False):
         pass
 
+    def _add_signature_label(self, key, labels):
+        issue_labels = self._jclient.issue(key).fields.__dict__[CF_FUNCTION_IMPACT]
+        if issue_labels is None:
+            issue_labels = []
+        is_changed = False
+        for l in labels:
+            if l not in issue_labels:
+                is_changed = True
+                issue_labels.append(l)
+        if is_changed:
+            self._update_fields(key, {CF_FUNCTION_IMPACT: issue_labels})
+
     def find_signature_comment(self, key, comments=None):
         if comments is None:
             comments = self._jclient.comments(key)
@@ -239,6 +252,19 @@ class Signature(abc.ABC):
 
         inventory = json.loads(host['inventory'])
         return inventory['hostname']
+
+
+class ErrorSignature(Signature):
+    def __init__(self, jira_client, signature_label, comment_identifying_string,
+                 old_comment_string=None):
+        Signature.__init__(self, jira_client, comment_identifying_string,
+                           old_comment_string=old_comment_string)
+        self._signature_label = signature_label
+
+    def _update_triaging_ticket(self, key, comment, should_update=False):
+        Signature._update_triaging_ticket(self, key, comment, should_update=should_update)
+        if should_update:
+            self._add_signature_label(key, ["SIGNATURE_"+self._signature_label])
 
 
 class HostsStatusSignature(Signature):
@@ -501,9 +527,10 @@ class InstallationDiskFIOSignature(Signature):
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
-class CNIConfigurationError(Signature):
+class CNIConfigurationError(ErrorSignature):
     def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. No CNI configuration")
+        super().__init__(jira_client, signature_label="missing_CNI",
+                         comment_identifying_string="h1. No CNI configuration")
 
     @staticmethod
     def _get_host_neighbors(host):
@@ -711,9 +738,10 @@ class ComponentsVersionSignature(Signature):
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
-class LibvirtRebootFlagSignature(Signature):
+class LibvirtRebootFlagSignature(ErrorSignature):
     def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Potential hosts with libvirt _on_reboot_ flag issue (MGMT-2840):")
+        super().__init__(jira_client, signature_label="libvirt_reboot_flag",
+                         comment_identifying_string="h1. Potential hosts with libvirt _on_reboot_ flag issue (MGMT-2840):")
 
     def _update_ticket(self, url, issue_key, should_update=False):
 
@@ -745,7 +773,7 @@ class LibvirtRebootFlagSignature(Signature):
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
-class MediaDisconnectionSignature(Signature):
+class MediaDisconnectionSignature(ErrorSignature):
     '''
     The signature downloads cluster logs, and go over all the hosts logs files searching for a 'dmesg' file
     Then, it looks for i/o errors (disks, media) patterns and groups them per host
@@ -758,7 +786,8 @@ class MediaDisconnectionSignature(Signature):
     ]
 
     def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Virtual media disconnection")
+        super().__init__(jira_client, signature_label="media_disconnect",
+                         comment_identifying_string="h1. Virtual media disconnection")
 
     def _update_ticket(self, url, issue_key, should_update=False):
         url = self._logs_url_to_api(url)
@@ -800,7 +829,7 @@ class MediaDisconnectionSignature(Signature):
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
-class ConsoleTimeoutSignature(Signature):
+class ConsoleTimeoutSignature(ErrorSignature):
     """
     This signature looks for 'waiting for console' error in cluster's status_info.
     If OpenShift version is 4.7 and hosts are VMware vms, outputs a warning.
@@ -808,7 +837,8 @@ class ConsoleTimeoutSignature(Signature):
     """
 
     def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Console timeout - VMware hosts / OCP 4.7")
+        super().__init__(jira_client, signature_label="console_timeout_VMware_4.7",
+                         comment_identifying_string="h1. Console timeout - VMware hosts / OCP 4.7")
 
     def _update_ticket(self, url, issue_key, should_update=False):
         url = self._logs_url_to_api(url)
@@ -1033,10 +1063,14 @@ def get_all_triage_tickets(jclient, only_recent=False):
     return jclient.search_issues(query, maxResults=None)
 
 
-def get_issues(jclient, issue, only_recent):
+def get_issues(jclient, issue, query, only_recent):
     if issue is not None:
         logger.info(f"Fetching just {issue}")
         return [get_issue(jclient, issue)]
+
+    if query is not None:
+        logger.info(f"Fetching from quety '{query}'")
+        return jclient.search_issues(query, maxResults=100)
 
     logger.info(f"Fetching {'recent' if only_recent else 'all'} issues")
     return get_all_triage_tickets(jclient, only_recent=only_recent)
@@ -1084,7 +1118,7 @@ def main(args):
 
     jclient = get_jira_client(username, password)
 
-    issues = get_issues(jclient, args.issue, args.recent_issues)
+    issues = get_issues(jclient, args.issue, args.search_query, args.recent_issues)
 
     if args.dry_run_temp:
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as dry_run_file:
@@ -1154,6 +1188,7 @@ You can run this script without affecting the tickets by using the --dry-run fla
     selectors.add_argument("-r", "--recent-issues", action='store_true', help="Handle recent (30 days) Triaging Tickets")
     selectors.add_argument("-a", "--all-issues", action='store_true', help="Handle all Triaging Tickets")
     selectors.add_argument("-i", "--issue", required=False, help="Triage issue key")
+    selectors.add_argument("-s", "--search-query", required=False, help="Triage issue jql query")
 
     parser.add_argument("-u", "--update", action="store_true", help="Update ticket even if signature already exist")
     parser.add_argument("-v", "--verbose", action="store_true", help="Output verbose logging")
