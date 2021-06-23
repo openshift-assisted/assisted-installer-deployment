@@ -155,7 +155,7 @@ def get_filters_from_json(filters_json, jira):
 
 def filter_and_generate_issues(jira, filters, issues):
     for issue in issues:
-        if issue.fields.status.name in ('Done', 'Obsolete'):
+        if issue.fields.status.name in ('Closed', 'Done', 'Obsolete'):
             continue
 
         comments = get_issue_comments(jira, issue)
@@ -163,7 +163,7 @@ def filter_and_generate_issues(jira, filters, issues):
             continue
 
         for _filter in filters:
-            comment = _filter.signature.find_signature_comment(issue, comments)
+            comment = _filter.signature.find_signature_comment(comments=comments)
             if comment is None:
                 continue
 
@@ -212,7 +212,7 @@ def close_tickets_by_filters(username, jira, filters, issues, dry_run_stdout):
     )
 
 
-TRANSITION_DONE_ID = '31'  # GET /rest/api/3/issue/{issueIdOrKey}/transitions
+TARGET_TRANSITION_ID = '41'  # '41' - 'Closed', see GET /rest/api/2/issue/{issueIdOrKey}/transitions
 
 
 def close_and_link_issues(
@@ -235,7 +235,7 @@ def close_and_link_issues(
                      issue_data.comment.body)
 
         if dry_run_stdout is None:
-            jira.transition_issue(issue_data.issue, TRANSITION_DONE_ID)
+            jira.transition_issue(issue_data.issue, TARGET_TRANSITION_ID)
             jira.assign_issue(issue_data.issue, username)
         else:
             print(
@@ -306,7 +306,7 @@ def run_using_cli(args):
     else:
         filters = get_filters_from_args(args, jira)
 
-    issues = get_issues(jira, args.issue, args.recent_issues)
+    issues = get_issues(jira, args.issue, only_recent=args.recent_issues)
 
     dry_run_stdout = get_dry_run_stdout(args)
     try:
