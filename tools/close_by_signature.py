@@ -110,12 +110,11 @@ class IssueData:
         self.comment = comment
 
 
-def run_using_json(path, username, jira, issues, dry_run_stdout=None):
+def run_using_json(path, jira, issues, dry_run_stdout=None):
     logger.debug('Starting issue resolver task using filters json=%s', path)
     filters_json = read_filters_file(path)
     filters = get_filters_from_json(filters_json, jira)
     close_tickets_by_filters(
-        username=username,
         jira=jira,
         filters=filters,
         issues=issues,
@@ -198,14 +197,13 @@ def get_dry_run_stdout(args):
         return sys.stdout
 
 
-def close_tickets_by_filters(username, jira, filters, issues, dry_run_stdout):
+def close_tickets_by_filters(jira, filters, issues, dry_run_stdout):
     filtered_issues_generator = filter_and_generate_issues(
         jira=jira,
         filters=filters,
         issues=issues,
     )
     close_and_link_issues(
-        username=username,
         jira=jira,
         filtered_issues_generator=filtered_issues_generator,
         dry_run_stdout=dry_run_stdout,
@@ -213,14 +211,10 @@ def close_tickets_by_filters(username, jira, filters, issues, dry_run_stdout):
 
 
 TARGET_TRANSITION_ID = '41'  # '41' - 'Closed', see GET /rest/api/2/issue/{issueIdOrKey}/transitions
+CLOSED_TICKETS_ASSIGNEE = 'ronniela'
 
 
-def close_and_link_issues(
-        username,
-        jira,
-        filtered_issues_generator,
-        dry_run_stdout,
-):
+def close_and_link_issues(jira, filtered_issues_generator, dry_run_stdout):
     for issue_data in filtered_issues_generator:
         if issue_data.root_issue:
             link_issue_to_root_issue(
@@ -236,7 +230,7 @@ def close_and_link_issues(
 
         if dry_run_stdout is None:
             jira.transition_issue(issue_data.issue, TARGET_TRANSITION_ID)
-            jira.assign_issue(issue_data.issue, username)
+            jira.assign_issue(issue_data.issue, CLOSED_TICKETS_ASSIGNEE)
         else:
             print(
                 f'Closed issue key={issue_data.issue.key} '
@@ -247,7 +241,7 @@ def close_and_link_issues(
             )
             print(
                 f'Assigned issue key={issue_data.root_issue.key} '
-                f'to user={username}\n',
+                f'to user={CLOSED_TICKETS_ASSIGNEE}\n',
                 file=dry_run_stdout,
                 flush=True,
             )
@@ -311,7 +305,6 @@ def run_using_cli(args):
     dry_run_stdout = get_dry_run_stdout(args)
     try:
         close_tickets_by_filters(
-            username=username,
             jira=jira,
             filters=filters,
             issues=issues,
