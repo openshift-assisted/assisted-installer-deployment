@@ -184,7 +184,9 @@ class Signature(abc.ABC):
         if is_changed:
             self._update_fields(key, {custom_field_name(CF_FUNCTION_IMPACT): issue_labels})
 
-    def find_signature_comment(self, key, comments=None):
+    def find_signature_comment(self, key=None, comments=None):
+        assert key or comments
+
         if comments is None:
             comments = self._jclient.comments(key)
 
@@ -1069,13 +1071,13 @@ def get_all_triage_tickets(jclient, only_recent=False):
     return jclient.search_issues(query, maxResults=None)
 
 
-def get_issues(jclient, issue, query, only_recent):
+def get_issues(jclient, issue, query=None, only_recent=True):
     if issue is not None:
         logger.info(f"Fetching just {issue}")
         return [get_issue(jclient, issue)]
 
     if query is not None:
-        logger.info(f"Fetching from quety '{query}'")
+        logger.info(f"Fetching from query '{query}'")
         return jclient.search_issues(query, maxResults=100)
 
     logger.info(f"Fetching {'recent' if only_recent else 'all'} issues")
