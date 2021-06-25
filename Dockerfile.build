@@ -1,5 +1,11 @@
 FROM python:3
 
+RUN apt-get update && apt-get install -y \
+    jq \
+    p7zip-full
+
+RUN pip install pip --upgrade
+
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
@@ -8,7 +14,3 @@ RUN pip install -r /tmp/dev-requirements.txt
 
 RUN rm /tmp/*requirements.txt
 
-RUN apt-get update
-RUN apt-get -y  install jq
-
-RUN  apt-get install p7zip-full -y
