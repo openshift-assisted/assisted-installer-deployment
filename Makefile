@@ -1,7 +1,7 @@
 SERVICE := $(or ${SERVICE},quay.io/ocpmetal/assisted-installer-deployment:latest)
 
 
-all: pep8 pylint image
+all: pycodestyle pylint image
 
 image: build
 	skipper build assisted-installer-deployment
