@@ -53,11 +53,11 @@ def log_exception(msg):
         logger.error(msg)
 
 
-def jira_netrc_login(netrcFile):
+def jira_netrc_login(server, netrcFile):
     cred = netrc.netrc(os.path.expanduser(netrcFile))
-    username, _, password = cred.authenticators(urlparse(JIRA_SERVER).hostname)
+    username, _, password = cred.authenticators(server)
     logger.info("log-in with username: %s", username)
-    return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
+    return username, password
 
 
 def get_raw_field(issue, fieldName):
@@ -535,7 +535,16 @@ def handle_sprint_update(args, jiraTool, issues):
 
 
 def main(args):
-    j = jira_netrc_login(args.netrc)
+    if args.user_password is None:
+        username, password = jira_netrc_login(urlparse(JIRA_SERVER).hostname, args.netrc)
+    else:
+        try:
+            username, password = args.user_password.split(":", 1)
+        except Exception as e:
+            raise ValueError("Failed to parse user:password") from e
+
+    j = jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
+
     max_results = args.max_results
     if args.max_results == MAX_RESULTS and args.linked_issues:
         logger.debug("Increasing the Jira maxResults param to %s", TRIAGE_MAX_RESULTS)
@@ -639,6 +648,8 @@ def build_parser():
     loginGroup = parser.add_argument_group(title="Jira login options")
     loginArgs = loginGroup.add_mutually_exclusive_group()
     loginArgs.add_argument("--netrc", default="~/.netrc", help="netrc file")
+    loginArgs.add_argument("-up", "--user-password", required=False,
+                           help="Username and password in the format of user:pass")
     selectorsGroup = parser.add_argument_group(title="Issues selection")
     selectors = selectorsGroup.add_mutually_exclusive_group(required=True)
     selectors.add_argument("-s", "--search-query", required=False, help="Search query to use")
@@ -655,11 +666,11 @@ def build_parser():
                            dest="search_query", const='filter = "AI epics for fixup"',
                            help="Search for epics for fixup operation")
     selectors.add_argument("-tt", "--triaging-tickets", action='store_const', dest="search_query",
-                           const='project = MGMT AND component = "Assisted-installer Triage" AND labels in (AI_CLOUD_TRIAGE) ORDER BY key DESC',
+                           const='project = AITRIAGE AND component = "Cloud-Triage" ORDER BY key DESC',
                            help="Search for Assisted Installer triaging tickets")
     selectors.add_argument("-rtt", "--recent-triaging-tickets", action='store_const',
                            dest="search_query",
-                           const='project = MGMT AND component = "Assisted-installer Triage" AND labels in (AI_CLOUD_TRIAGE) AND created > -7d',
+                           const='project = AITRIAGE AND component = "Cloud-Triage" AND created > -7d',
                            help="Search for Assisted Installer triaging tickets")
     selectors.add_argument("-ce", "--current-version-epics", action='store_const',
                            dest="search_query", const=SEARCH_QUERY_EPICS + CURRENT_VERSION_FILTER,

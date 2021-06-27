@@ -1,11 +1,11 @@
-all: pep8 pylint build
+all: pycodestyle pylint build
 
-.PHONY: pep8 pylint clean build
+.PHONY: pycodestyle pylint clean build
 build:
 	python setup.py sdist
 
-pep8:
-	pep8 --max-line-length=145 release
+pycodestyle:
+	pycodestyle .
 
 pylint:
 	mkdir -p reports
