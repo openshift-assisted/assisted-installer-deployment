@@ -758,6 +758,10 @@ class LibvirtRebootFlagSignature(ErrorSignature):
 
         cluster = md['cluster']
 
+        # this signature is not relevant for SNO
+        if len(cluster['hosts']) <= 1:
+               return
+
         # this signature is relevant only if all hosts, but the bootstrap is in 'Rebooting' stage
         hosts = []
         for host in cluster['hosts']:
