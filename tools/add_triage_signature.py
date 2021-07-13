@@ -55,7 +55,7 @@ h1. Cluster Info
 
 *links:*
 * [Cluster on prod|https://cloud.redhat.com/openshift/assisted-installer/clusters/{cluster_id}]
-* [Logs|{logs_url}/]
+* [Logs|{logs_url}]
 * [Kraken|https://kraken.psi.redhat.com/clusters/{OCP_cluster_id}]
 * [Metrics|https://grafana.app-sre.devshift.net/d/assisted-installer-cluster-overview/cluster-overview?orgId=1&from=now-1h&to=now&var-datasource=app-sre-prod-04-prometheus&var-clusterId={cluster_id}]
 * [Kibana|https://kibana-openshift-logging.apps.app-sre-prod-04.i5h0.p1.openshiftapps.com/app/kibana#/discover?_g=(refreshInterval:(pause:!t,value:0),time:(from:now-24h,mode:quick,to:now))&_a=(columns:!(_source),interval:auto,query:'"{cluster_id}"',sort:!('@timestamp',desc))]
