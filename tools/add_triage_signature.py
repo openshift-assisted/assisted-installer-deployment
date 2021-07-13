@@ -339,7 +339,7 @@ class FailureDescription(Signature):
     def build_description(self, url, cluster_md):
         operators, other_features = self.build_feature_description(cluster_md)
         cluster_data = {"cluster_id": cluster_md['id'],
-                        "logs_url": self._logs_url_to_ui(url),
+                        "logs_url": self._logs_url_to_ui(url).strip('/') + '/',
                         "domain": cluster_md['email_domain'],
                         "openshift_version": cluster_md['openshift_version'],
                         "created_at": format_time(cluster_md['created_at']),
