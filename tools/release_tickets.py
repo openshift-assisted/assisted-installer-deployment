@@ -96,7 +96,7 @@ def get_jira_issues_info(jclient, keys):
     issues = jclient.search_issues("issue in ({})".format(",".join(keys)), fields=["key", "summary", "status",
                                                                                    "assignee",
                                                                                    BZ_REFERENCE_FIELD,
-                                                                                   "fixVersions"])
+                                                                                   "fixVersions"], maxResults=200)
     return issues
 
 def get_bz_issues_info(bzclient, keys):
@@ -244,7 +244,7 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
     bz_issues_to_modify = filter_bz_issues_to_modify(bz_issues, ignore_issues)
 
     if modify_report:
-        print_report_table_for_release_candidates(issues)
+        print_report_table_for_release_candidates(jira_issues)
 
     if should_update:
         if fix_version:
