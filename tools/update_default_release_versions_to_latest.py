@@ -447,13 +447,14 @@ def main(args):
         rhcos_latest_of_releases = get_all_releases(RHCOS_RELEASES.format(minor=release))
         rhcos_latest_release = get_latest_rchos_release_from_minor(release, rhcos_latest_of_releases)
 
-        if (not is_pre_release(rhcos_default_release) and rhcos_default_release != rhcos_latest_release) or dry_run:
+        if (not is_pre_release(rhcos_latest_release) and rhcos_default_release != rhcos_latest_release) or dry_run:
 
             updates_made.add(release)
             updates_made_str.add(f"rchos {rhcos_default_release} -> {rhcos_latest_release}")
 
             logger.info(f"New latest rhcos release available, {rhcos_default_release} -> {rhcos_latest_release}")
             updated_version_json[release]["rhcos_image"] = updated_version_json[release]["rhcos_image"].replace(rhcos_default_release, rhcos_latest_release)
+            updated_version_json[release]["rhcos_rootfs"] = updated_version_json[release]["rhcos_rootfs"].replace(rhcos_default_release, rhcos_latest_release)
 
             if dry_run:
                 rchos_version_from_iso = "8888888"
