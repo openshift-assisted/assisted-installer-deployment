@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 
 def parse_args():
     desc = textwrap.dedent("""\
-        Automatically resolve triage tickets that are linked to known issues by 
-        signature type and/or common message in the signature comment body. 
-        Root issues can be linked to given signature messages, and if provided they 
-        will be linked to the resolved issues on close. 
+        Automatically resolve triage tickets that are linked to known issues by
+        signature type and/or common message in the signature comment body.
+        Root issues can be linked to given signature messages, and if provided they
+        will be linked to the resolved issues on close.
     """)
     parser = argparse.ArgumentParser(description=desc)
     parser.add_argument(
@@ -211,7 +211,7 @@ def close_tickets_by_filters(jira, filters, issues, dry_run_stdout):
 
 
 TARGET_TRANSITION_ID = '41'  # '41' - 'Closed', see GET /rest/api/2/issue/{issueIdOrKey}/transitions
-CLOSED_TICKETS_ASSIGNEE = 'ronniela'
+CLOSED_TICKETS_ASSIGNEE = 'odepaz'
 
 
 def close_and_link_issues(jira, filtered_issues_generator, dry_run_stdout):
