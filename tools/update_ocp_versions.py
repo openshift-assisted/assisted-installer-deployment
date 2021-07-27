@@ -27,8 +27,8 @@ logging.getLogger("__main__").setLevel(logging.INFO)
 # Users / branch names / messages
 BRANCH_NAME = "{prefix}_update_assisted_service_versions"
 DEFAULT_ASSIGN = "oscohen"
-DEFAULT_WATCHERS = ["ronniela", "romfreiman", "lgamliel", "oscohen"]
-PR_MENTION = ["romfreiman", "ronniel1", "gamli75", "oshercc"]
+DEFAULT_WATCHERS = ["romfreiman", "lgamliel", "oscohen"]
+PR_MENTION = ["romfreiman", "gamli75", "oshercc"]
 PR_MESSAGE = "{task}, Bump OCP versions"
 
 OCP_RELEASES = "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/"
