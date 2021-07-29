@@ -465,12 +465,13 @@ def main(args):
     if updates_made:
         logger.info(f"changes were made on the following versions: {updates_made_str}")
 
+        versions_str = ", ".join(updates_made_str)
+
         if dry_run:
             jira_client, task = None, "TEST-8888"
         else:
-            jira_client, task = create_task(args, TICKET_DESCRIPTION)
+            jira_client, task = create_task(args, TICKET_DESCRIPTION + " " + versions_str)
 
-        versions_str = ", ".join(updates_made_str)
         title = PR_MESSAGE.format(task=task, versions_string=versions_str)
         logger.info(f"PR title will be {title}")
 
