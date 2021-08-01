@@ -491,9 +491,10 @@ def main(args):
                 param["value"] for param in yaml.safe_load(f)["parameters"] if param["name"] == "OPENSHIFT_VERSIONS"
             )
 
-        branch = commit_and_push_version_update_changes(task, title)
-
         body = get_pr_body(updates_made)
+
+        commit_message = title + '\n\n' + get_release_notes(updates_made)
+        branch = commit_and_push_version_update_changes(task, commit_message)
 
         github_pr = open_pr(args, task, title, body)
 
@@ -515,9 +516,14 @@ def main(args):
         unhold_pr(github_pr)
 
 
-
 def get_pr_body(updates_made):
     body = " ".join([f"@{user}" for user in PR_MENTION])
+    release_notes = get_release_notes(updates_made)
+    body += "\n" + release_notes
+    return body
+
+
+def get_release_notes(updates_made):
     release_notes = ""
     for updated_version in updates_made:
         release_note = get_release_note_url(updated_version)
@@ -525,8 +531,8 @@ def get_pr_body(updates_made):
             release_notes += f"{updated_version} release notes: {release_note}\n"
         else:
             release_notes += f"{updated_version} has no available release notes\n"
-    body += "\n" + release_notes
-    return body
+    return release_notes
+
 
 if __name__ == "__main__":
     main(parse_args())
