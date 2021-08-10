@@ -792,10 +792,7 @@ class MediaDisconnectionSignature(ErrorSignature):
     Eventually, the signature will include common i/o errors and the number of times they appeared
     '''
 
-    ERRORS_PATTERNS = [
-        'I/O error',
-        'disconnect',
-    ]
+    ERRORS_PATTERNS = 'media was likely disconnected'
 
     def __init__(self, jira_client):
         super().__init__(jira_client, signature_label="media_disconnect",
@@ -803,33 +800,20 @@ class MediaDisconnectionSignature(ErrorSignature):
 
     def _update_ticket(self, url, issue_key, should_update=False):
         url = self._logs_url_to_api(url)
-
         md = get_metadata_json(url)
-
         cluster = md['cluster']
-        cluster_id = cluster['id']
 
-        hosts = []
-
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
-
-        for host in cluster["hosts"]:
-            host_id = host["id"]
-
-            try:
-                dmesg_file = get_host_log_file(triage_logs_tar, host_id, "dmesg.logs")
-            except FileNotFoundError:
-                continue
-
-            logs = search_patterns_in_string(dmesg_file, self.ERRORS_PATTERNS)
-            logs = [(group[0], len(group)) for group in group_similar_strings(logs, ratio=80)]
-
-            for log in logs:
-                hosts.append(OrderedDict(
-                    id=host_id,
-                    hostname=self._get_hostname(host),
-                    log=f"{{color:red}}{log[0]}{{color}}",
-                    similar_logs=log[1]))
+        hosts = list()
+        for host in cluster['hosts']:
+            status_info = host['status_info']
+            if self.ERRORS_PATTERNS in status_info:
+                hosts.append(
+                    OrderedDict(
+                        id=host["id"],
+                        hostname=self._get_hostname(host),
+                        status_info=f"{{color:red}}{status_info}{{color}}",
+                    )
+                )
 
         if len(hosts) != 0:
             report = dedent("""
