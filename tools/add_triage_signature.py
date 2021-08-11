@@ -785,6 +785,36 @@ class LibvirtRebootFlagSignature(ErrorSignature):
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
+class ApiInvalidCertificateSignature(ErrorSignature):
+
+    LOG_PATTERN = re.compile('time=".*" level=error msg=".*x509: certificate is valid.* not .*')
+
+    def __init__(self, jira_client):
+        super().__init__(jira_client, signature_label="api_invalid_certificate",
+                         comment_identifying_string="h1. Invalid SAN values on certificate for AI API")
+
+    def _update_ticket(self, url, issue_key, should_update=False):
+        url = self._logs_url_to_api(url)
+
+        md = get_metadata_json(url)
+
+        cluster = md['cluster']
+        cluster_id = cluster['id']
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+
+        try:
+            controller_logs = triage_logs_tar.get("controller_logs.tar.gz/assisted-installer-controller-*.logs")
+        except FileNotFoundError:
+            return
+
+        invalid_api_log_lines = self.LOG_PATTERN.findall(controller_logs)
+
+        logs_text = "\n".join(invalid_api_log_lines)
+        if invalid_api_log_lines:
+            report = dedent("""{}""".format(logs_text))
+            self._update_triaging_ticket(issue_key, report, should_update=should_update)
+
+
 class MediaDisconnectionSignature(ErrorSignature):
     '''
     The signature downloads cluster logs, and go over all the hosts logs files searching for a 'dmesg' file
@@ -972,7 +1002,7 @@ class AgentStepFailureSignature(Signature):
 ############################
 DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SERVER = "https://issues.redhat.com"
-SIGNATURES = [FailureDetails, FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
+SIGNATURES = [ApiInvalidCertificateSignature, FailureDetails, FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
               StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature,
               MediaDisconnectionSignature, ConsoleTimeoutSignature, AgentStepFailureSignature,
               CNIConfigurationError]
