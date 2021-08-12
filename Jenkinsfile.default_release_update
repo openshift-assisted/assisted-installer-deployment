@@ -10,7 +10,7 @@ pipeline {
         JENKINS_CRED = credentials('bot-user-jenkins')
     }
 
-    triggers { cron('0 0 * * 0') }
+    triggers { cron('0 0 * * *') }
 
     options {
       timeout(time: 2, unit: 'HOURS')
