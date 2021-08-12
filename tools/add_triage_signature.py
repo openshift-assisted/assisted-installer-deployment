@@ -808,11 +808,34 @@ class ApiInvalidCertificateSignature(ErrorSignature):
             return
 
         invalid_api_log_lines = self.LOG_PATTERN.findall(controller_logs)
-
-        logs_text = "\n".join(invalid_api_log_lines)
         if invalid_api_log_lines:
-            report = dedent("""{}""".format(logs_text))
+            ticket_inform = "see: https://issues.redhat.com/browse/MGMT-4039\n"
+            logs_text = "{code}" + "\n".join(invalid_api_log_lines[:5]) + "{code}"
+
+            if len(invalid_api_log_lines) > 5:
+                logs_text += "\n additional {} relevant similar error log lines are found".format(
+                    len(invalid_api_log_lines) - 5)
+                report = dedent("""{}""".format(ticket_inform + logs_text))
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
+
+
+class AllInstallationAttemptsSignature(Signature):
+    def __init__(self, jira_client):
+        self.jira_client = jira_client
+        super().__init__(jira_client, comment_identifying_string="h1. all installation attempts of a cluster")
+
+    def _update_ticket(self, url, issue_key, should_update=False):
+        url = self._logs_url_to_api(url)
+        md = get_metadata_json(url)
+        cluster = md['cluster']
+        cluster_id = cluster['id']
+        cluster_triage_tickets = self.jira_client.search_issues(
+            f"""project = AITRIAGE AND "Cluster ID" ~ {cluster_id}""")
+        tickets_report = list()
+        for ticket in cluster_triage_tickets:
+            if issue_key == ticket.key:
+                continue
+            self.jira_client.create_issue_link("is related to", issue_key, ticket.key)
 
 
 class MediaDisconnectionSignature(ErrorSignature):
@@ -1002,7 +1025,7 @@ class AgentStepFailureSignature(Signature):
 ############################
 DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SERVER = "https://issues.redhat.com"
-SIGNATURES = [ApiInvalidCertificateSignature, FailureDetails, FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
+SIGNATURES = [AllInstallationAttemptsSignature, ApiInvalidCertificateSignature, FailureDetails, FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
               StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature,
               MediaDisconnectionSignature, ConsoleTimeoutSignature, AgentStepFailureSignature,
               CNIConfigurationError]
