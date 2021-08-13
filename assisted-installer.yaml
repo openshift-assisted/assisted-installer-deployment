@@ -4,7 +4,7 @@ openshift/assisted-installer:
   - assisted-installer-controller
   - assisted-installer
 openshift/assisted-service:
-  revision: 165e849305ecb67cc6b1b24ccb76137c10693f53
+  revision: 1437673a37e30917830cdd09ec45a719638e5315
   images:
   - assisted-service
 openshift-assisted/assisted-ui:
