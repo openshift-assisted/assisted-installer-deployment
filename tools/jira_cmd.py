@@ -357,7 +357,7 @@ class JiraTool():
 
         issue_keys_count = Counter(linked_issue_keys)
         if linked_issue_keys:
-            linked_issues = self._jira.search_issues("issue in (%s)" % (",".join(set(linked_issue_keys))),
+            linked_issues = self._jira.search_issues("project != AITRIAGE AND issue in (%s)" % (",".join(set(linked_issue_keys))),
                                                      maxResults=self._maxResults)
         # remove triaging tickets from the list
         filtered_linked_issues = []
