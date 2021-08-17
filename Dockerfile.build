@@ -18,7 +18,7 @@ RUN alternatives --set python /usr/bin/python3.8
 RUN curl -fsSL https://get.docker.com -o get-docker.sh
 RUN sh get-docker.sh
 
-RUN pip3 install pip --upgrade
+RUN pip3 install pip strato-skipper --upgrade
 
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
