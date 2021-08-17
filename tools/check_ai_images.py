@@ -14,29 +14,33 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)-10s %(filename)s:%(
 logger = logging.getLogger(__name__)
 logging.getLogger("__main__").setLevel(logging.INFO)
 
-def image_dose_not_exist(image, tag):
+
+def image_does_not_exist(image, tag):
     cmd = f"docker manifest inspect quay.io/ocpmetal/{image}:{tag}"
     try:
         image_inspect_output = subprocess.check_output(cmd, shell=True)
         image_inspect_output = subprocess.check_output("echo $?", shell=True)
     except subprocess.SubprocessError:
-            image_inspect_output = "-1"
+        image_inspect_output = "-1"
+
     return int(image_inspect_output)
+
 
 def image_exist_with_retry(image, tag):
     for retry in range(3):
-        get_image_result = image_dose_not_exist(image, tag)
+        get_image_result = image_does_not_exist(image, tag)
         if not get_image_result:
-            return  True
+            return True
         logger.warning(f"Failed to get image at {retry} retry")
         time.sleep(10*60)
 
     logger.error(f"Failed to get image at {retry} retry")
     return not get_image_result
 
+
 def main():
     with open(args.deployment, "r") as f:
-        deployment = yaml.load(f)
+        deployment = yaml.safe_load(f)
     for rep, val in deployment.items():
         hash = val["revision"]
         for image in val["images"]:
@@ -45,7 +49,6 @@ def main():
             else:
                 logger.error(f"image {image}:{hash} doesn't exist in registry")
                 raise Exception(f"image {image}:{hash} doesn't exist in registry")
-
 
 
 if __name__ == "__main__":

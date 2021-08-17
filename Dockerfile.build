@@ -1,19 +1,29 @@
-FROM python:3
+FROM quay.io/centos/centos:stream8
 
-RUN apt-get update && apt-get install -y \
+# Needed for p7zip package:
+RUN dnf install -y epel-release
+
+RUN dnf update -y && dnf install -y \
     jq \
-    p7zip-full
+    gcc \
+    p7zip \
+    make \
+    python38 \
+    python38-pip \
+    python38-devel \
+        && dnf clean all
 
-RUN pip install pip --upgrade
+RUN alternatives --set python /usr/bin/python3.8
 
 RUN curl -fsSL https://get.docker.com -o get-docker.sh
 RUN sh get-docker.sh
+
+RUN pip3 install pip --upgrade
 
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
 COPY dev-requirements.txt /tmp/dev-requirements.txt
 RUN pip install -r /tmp/dev-requirements.txt
-#RUN pip install strato-skipper
 
 RUN rm /tmp/*requirements.txt
