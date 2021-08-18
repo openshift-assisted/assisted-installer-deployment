@@ -25,6 +25,7 @@ args = parser.parse_args()
 
 documentation_path = os.path.join(args.documentation_dir, args.repo)
 
+
 def main():
     version_documentation_list = list()
 

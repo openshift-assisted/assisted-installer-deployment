@@ -84,7 +84,7 @@ def format_description(failure_data):
 
 def create_jira_ticket(jclient, existing_tickets, test_id, test_data):
     last_pass_timestamp = get_last_pass(test_data)
-    summary = format_summary({"test_id":test_id,
+    summary = format_summary({"test_id": test_id,
                               "last_pass": last_pass_timestamp})
     if summary in existing_tickets:
         logger.debug("issue found: %s", summary)
@@ -98,7 +98,7 @@ def create_jira_ticket(jclient, existing_tickets, test_id, test_data):
                                                                      "last_fail": i,
                                                                      "failed_tests": failed_tests,
                                                                      "status": test_status,
-                                                                    }),
+                                                                     }),
                                      summary=summary,
                                      versions=[{'name': 'OpenShift {}'.format(TEST_VERSION_REGEX.findall(test_id)[0])}],
                                      components=[{'name': "CI-Triage"}],
@@ -115,9 +115,9 @@ def get_failed_tests():
     try:
         res = requests.get(TEST_STATUS_URL)
         res.raise_for_status()
-        tests = {n:data for n,data in res.json().items() if data['overall_status'] == "FAILING"}
+        tests = {n: data for n, data in res.json().items() if data['overall_status'] == "FAILING"}
         return tests
-    except:
+    except Exception:
         logger.exception("Error getting list of failed tests")
         raise
 

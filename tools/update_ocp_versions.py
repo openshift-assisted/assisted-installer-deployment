@@ -85,12 +85,14 @@ CUSTOM_OPENSHIFT_IMAGES = os.path.join(script_dir, "custom_openshift_images.json
 
 TICKET_DESCRIPTION = "Default versions need to be updated"
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     # parser.add_argument("-jup",  "--jira-user-password",    help="JIRA Username and password in the format of user:pass", required=True)
     parser.add_argument("-gup",  "--github-user-password",  help="GITHUB Username and password in the format of user:pass", required=True)
     parser.add_argument("--dry-run", action='store_true',   help="test run")
     return parser.parse_args()
+
 
 def cmd(command, env=None, **kwargs):
     logging.info(f"Running command {command} with env {env} kwargs {kwargs}")
@@ -108,10 +110,12 @@ def cmd(command, env=None, **kwargs):
 
     return stdout, stderr
 
+
 def cmd_with_git_ssh_key(key_file):
     return functools.partial(cmd, env={
         "GIT_SSH_COMMAND": GIT_SSH_COMMAND_WITH_KEY.format(key=key_file)
     })
+
 
 def get_rchos_version_from_iso(rhcos_latest_release, iso_url):
     live_iso_url = iso_url.format(version=rhcos_latest_release)
@@ -133,6 +137,7 @@ def get_rchos_version_from_iso(rhcos_latest_release, iso_url):
         ipdb.set_trace()
     return rchos_version_from_iso
 
+
 def get_default_release_json():
     res = requests.get(ASSISTED_SERVICE_MASTER_DEFAULT_OCP_VERSIONS_JSON_URL)
     if not res.ok:
@@ -150,6 +155,7 @@ def get_login(user_password):
 
     return username, password
 
+
 def clone_assisted_service(github_user):
     cmd(["rm", "-rf", ASSISTED_SERVICE_CLONE_DIR])
 
@@ -162,6 +168,7 @@ def clone_assisted_service(github_user):
     git_cmd("fetch", "upstream")
     git_cmd("reset", "upstream/master", "--hard")
 
+
 def verify_latest_config():
     try:
         cmd(["make", "generate-configuration"], cwd=ASSISTED_SERVICE_CLONE_DIR)
@@ -170,6 +177,7 @@ def verify_latest_config():
             # We run the command just for its side-effects, we don't care if it fails
             return
         raise
+
 
 def get_latest_release_from_minor(minor_release: str, all_releases: list):
     def is_pre_release(release):
@@ -184,6 +192,7 @@ def get_latest_release_from_minor(minor_release: str, all_releases: list):
         return None
     return sorted(all_relevant_releases, key=LooseVersion)[-1]
 
+
 def get_all_releases(path: str):
     res = requests.get(path)
     if not res.ok:
@@ -193,11 +202,13 @@ def get_all_releases(path: str):
     soup = BeautifulSoup(page, 'html.parser')
     return [node.get('href').replace("/", "") for node in soup.find_all('a')]
 
+
 def get_rchos_release_from_default_version_json(ocp_version_minor, release_json):
     rchos_release_image = release_json[ocp_version_minor]['rhcos_image']
     result = RHCOS_LIVE_ISO_REGEX.search(rchos_release_image)
     rhcos_default_version = result.group(1)
     return rhcos_default_version
+
 
 def main(args):
     dry_run = args.dry_run
@@ -220,7 +231,8 @@ def main(args):
             updates_made.add(release)
             logger.info(f"New latest ocp release available for {release}, {current_default_ocp_release} -> {latest_ocp_release}")
             updated_version_json[release]["display_name"] = latest_ocp_release
-            updated_version_json[release]["release_image"] = updated_version_json[release]["release_image"].replace(current_default_ocp_release, latest_ocp_release)
+            updated_version_json[release]["release_image"] = updated_version_json[release]["release_image"].replace(
+                current_default_ocp_release, latest_ocp_release)
 
         rhcos_default_release = get_rchos_release_from_default_version_json(release, default_version_json)
         rhcos_latest_of_releases = get_all_releases(RHCOS_RELEASES.format(minor=release))
@@ -229,12 +241,14 @@ def main(args):
         if rhcos_default_release != rhcos_latest_release or dry_run:
             updates_made.add(release)
             logger.info(f"New latest rhcos release available, {rhcos_default_release} -> {rhcos_latest_release}")
-            updated_version_json[release]["rhcos_image"] = updated_version_json[release]["rhcos_image"].replace(rhcos_default_release, rhcos_latest_release)
+            updated_version_json[release]["rhcos_image"] = updated_version_json[release]["rhcos_image"].replace(
+                rhcos_default_release, rhcos_latest_release)
 
             if dry_run:
                 rchos_version_from_iso = "8888888"
             else:
-                rchos_version_from_iso = get_rchos_version_from_iso(rhcos_latest_release, RCHOS_LIVE_ISO_URL.format(minor=release, version=rhcos_latest_release))
+                rchos_version_from_iso = get_rchos_version_from_iso(
+                    rhcos_latest_release, RCHOS_LIVE_ISO_URL.format(minor=release, version=rhcos_latest_release))
             updated_version_json[release]["rhcos_version"] = rchos_version_from_iso
 
     if updates_made:
@@ -256,6 +270,7 @@ def main(args):
 
         import ipdb
         ipdb.set_trace()
+
 
 if __name__ == "__main__":
     main(parse_args())

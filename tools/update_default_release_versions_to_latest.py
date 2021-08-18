@@ -2,7 +2,6 @@ import os
 import re
 import json
 import yaml
-import time
 import copy
 import logging
 import argparse
@@ -30,8 +29,12 @@ DEFAULT_WATCHERS = ["lgamliel", "oscohen", "yuvalgoldberg"]
 PR_MENTION = ["gamli75", "oshercc", "YuviGold"]
 PR_MESSAGE = "{task}: Bump OCP versions {versions_string}"
 
-OCP_INFO_CALL = """curl https://api.openshift.com/api/upgrades_info/v1/graph\?channel\=stable-{version}\&arch\=amd64 | jq '[.nodes[]] | sort_by(.version | split(".") | map(tonumber))[-1]'"""
-OCP_INFO_FC_CALL = """curl https://api.openshift.com/api/upgrades_info/v1/graph\?channel\=candidate-{version}\&arch\=amd64 | jq '[.nodes[]] | max_by(.version)'"""
+OCP_INFO_CALL = (
+    r"curl https://api.openshift.com/api/upgrades_info/v1/graph\?channel\=stable-{version}\&arch\=amd64 | "
+    r"jq '[.nodes[]] | sort_by(.version | split(\".\") | map(tonumber))[-1]' ")
+OCP_INFO_FC_CALL = (
+    r"curl https://api.openshift.com/api/upgrades_info/v1/graph\?channel\=candidate-{version}\&arch\=amd64 | "
+    r"jq '[.nodes[]] | max_by(.version)'")
 
 RHCOS_RELEASES = "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/{minor}"
 
@@ -85,6 +88,7 @@ TICKET_DESCRIPTION = "Default versions need to be updated"
 
 SKIPPED_MAJOR_RELEASE = ["4.6"]
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-jup",  "--jira-user-password",    help="JIRA Username and password in the format of user:pass", required=True)
@@ -93,6 +97,7 @@ def parse_args():
     parser.add_argument("-gt",   "--gitlab-token",          help="GITLAB user token", required=True)
     parser.add_argument("--dry-run", action='store_true',   help="test run")
     return parser.parse_args()
+
 
 def cmd(command, env=None, **kwargs):
     logging.info(f"Running command {command} with env {env} kwargs {kwargs}")
@@ -116,6 +121,7 @@ def cmd_with_git_ssh_key(key_file):
         "GIT_SSH_COMMAND": GIT_SSH_COMMAND_WITH_KEY.format(key=key_file)
     })
 
+
 def get_rchos_version_from_iso(rhcos_latest_release, iso_url):
     live_iso_url = iso_url.format(version=rhcos_latest_release)
     with tempfile.NamedTemporaryFile() as tmp_live_iso_file:
@@ -133,6 +139,7 @@ def get_rchos_version_from_iso(rhcos_latest_release, iso_url):
         rchos_version_from_iso = result.group(1)
         logger.info(f"Found rchos_version_from_iso: {rchos_version_from_iso}")
     return rchos_version_from_iso.split()[0]
+
 
 def create_task(args, description: str):
     jira_client = get_jira_client(*get_login(args.jira_user_password))
@@ -180,10 +187,12 @@ def get_jira_client(username, password):
     logger.info("log-in with username: %s", username)
     return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
 
+
 def clone_assisted_service(github_user, github_password):
     cmd(["rm", "-rf", ASSISTED_SERVICE_CLONE_DIR])
 
-    cmd(["git", "clone", ASSISTED_SERVICE_CLONE_URL.format(github_user=github_user, github_password=github_password, ASSISTED_SERVICE_GITHUB_FORK_REPO=ASSISTED_SERVICE_GITHUB_FORK_REPO), ASSISTED_SERVICE_CLONE_DIR])
+    cmd(["git", "clone", ASSISTED_SERVICE_CLONE_URL.format(github_user=github_user, github_password=github_password,
+        ASSISTED_SERVICE_GITHUB_FORK_REPO=ASSISTED_SERVICE_GITHUB_FORK_REPO), ASSISTED_SERVICE_CLONE_DIR])
 
     def git_cmd(*args: str):
         return cmd(("git", "-C", ASSISTED_SERVICE_CLONE_DIR) + args)
@@ -191,6 +200,7 @@ def clone_assisted_service(github_user, github_password):
     git_cmd("remote", "add", "upstream", ASSISTED_SERVICE_UPSTREAM_URL)
     git_cmd("fetch", "upstream")
     git_cmd("reset", "upstream/master", "--hard")
+
 
 def commit_and_push_version_update_changes(message_prefix, title):
     def git_cmd(*args: str, stdout=None):
@@ -221,6 +231,7 @@ def verify_latest_config():
             return
         raise
 
+
 def open_pr(args, task, title, body):
     branch = BRANCH_NAME.format(prefix=task)
 
@@ -239,6 +250,7 @@ def open_pr(args, task, title, body):
 
 def hold_pr(pr):
     pr.create_issue_comment('/hold')
+
 
 def unhold_pr(pr):
     pr.create_issue_comment('/unhold')
@@ -260,9 +272,11 @@ def open_app_interface_pr(fork, branch, task, title):
     logging.info(f"New PR opened {pr.web_url}")
     return pr
 
+
 def get_latest_release_from_minor(minor_release: str):
     release_data = get_release_data(minor_release)
     return release_data['version']
+
 
 def get_release_note_url(minor_release: str):
     release_data = get_release_data(minor_release)
@@ -282,8 +296,10 @@ def get_release_data(minor_release):
         release_data = json.loads(release_data)
     return release_data
 
+
 def is_pre_release(release):
-        return "-fc" in release or "-rc" in release
+    return "-fc" in release or "-rc" in release
+
 
 def get_latest_rchos_release_from_minor(minor_release: str, all_releases: list):
 
@@ -297,6 +313,7 @@ def get_latest_rchos_release_from_minor(minor_release: str, all_releases: list):
 
     return sorted(all_relevant_releases, key=LooseVersion)[-1]
 
+
 def get_all_releases(path: str):
     res = requests.get(path)
     if not res.ok:
@@ -306,15 +323,20 @@ def get_all_releases(path: str):
     soup = BeautifulSoup(page, 'html.parser')
     return [node.get('href').replace("/", "") for node in soup.find_all('a')]
 
+
 def get_rchos_release_from_default_version_json(ocp_version_minor, release_json):
     rchos_release_image = release_json[ocp_version_minor]['rhcos_image']
     result = RHCOS_LIVE_ISO_REGEX.search(rchos_release_image)
     rhcos_default_version = result.group(1)
     return rhcos_default_version
 
+
 def is_open_update_version_ticket(args):
     jira_client = get_jira_client(*get_login(args.jira_user_password))
-    open_tickets = jira_client.search_issues(f'component = "Assisted-Installer CI" AND status="TO DO" AND Summary~"{TICKET_DESCRIPTION}"', maxResults=False, fields=['summary', 'key'])
+    open_tickets = jira_client.search_issues(
+        f'component = "Assisted-Installer CI" AND status="TO DO" AND Summary~"{TICKET_DESCRIPTION}"',
+        maxResults=False,
+        fields=['summary', 'key'])
     if open_tickets:
         open_ticket_id = open_tickets[0].key
         logger.info(f"ticket {open_ticket_id} with updates waiting to get resolved, not checking for new updates until it is closed")
@@ -441,7 +463,8 @@ def main(args):
             logger.info(f"New latest ocp release available for {release}, {current_default_ocp_release} -> {latest_ocp_release}")
             updated_version_json[release]["display_name"] = latest_ocp_release
             updated_version_json[release]["release_version"] = latest_ocp_release
-            updated_version_json[release]["release_image"] = updated_version_json[release]["release_image"].replace(current_default_ocp_release, latest_ocp_release)
+            updated_version_json[release]["release_image"] = updated_version_json[release]["release_image"].replace(
+                current_default_ocp_release, latest_ocp_release)
 
         rhcos_default_release = get_rchos_release_from_default_version_json(release, default_version_json)
         rhcos_latest_of_releases = get_all_releases(RHCOS_RELEASES.format(minor=release))
@@ -453,13 +476,16 @@ def main(args):
             updates_made_str.add(f"rchos {rhcos_default_release} -> {rhcos_latest_release}")
 
             logger.info(f"New latest rhcos release available, {rhcos_default_release} -> {rhcos_latest_release}")
-            updated_version_json[release]["rhcos_image"] = updated_version_json[release]["rhcos_image"].replace(rhcos_default_release, rhcos_latest_release)
-            updated_version_json[release]["rhcos_rootfs"] = updated_version_json[release]["rhcos_rootfs"].replace(rhcos_default_release, rhcos_latest_release)
+            updated_version_json[release]["rhcos_image"] = updated_version_json[release]["rhcos_image"].replace(
+                rhcos_default_release, rhcos_latest_release)
+            updated_version_json[release]["rhcos_rootfs"] = updated_version_json[release]["rhcos_rootfs"].replace(
+                rhcos_default_release, rhcos_latest_release)
 
             if dry_run:
                 rchos_version_from_iso = "8888888"
             else:
-                rchos_version_from_iso = get_rchos_version_from_iso(rhcos_latest_release, RCHOS_LIVE_ISO_URL.format(minor=release, version=rhcos_latest_release))
+                rchos_version_from_iso = get_rchos_version_from_iso(
+                    rhcos_latest_release, RCHOS_LIVE_ISO_URL.format(minor=release, version=rhcos_latest_release))
             updated_version_json[release]["rhcos_version"] = rchos_version_from_iso
 
     if updates_made:
