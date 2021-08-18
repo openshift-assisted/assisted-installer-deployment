@@ -1,5 +1,7 @@
 # assisted-installer-deployment
 
+Tools, scripts, and code for deployment-related aspects of assisted-installer.
+
 ## Release a new version
 
 You can release a new version by creating a tag in all the assisted-installer repositories.
