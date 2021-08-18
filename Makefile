@@ -10,3 +10,17 @@ image: build
 
 local-update: image
 	docker build -t assisted-installer-deployment:local -f Dockerfile.assisted-installer-deployment .
+
+build:
+	python setup.py sdist
+
+pycodestyle:
+	pycodestyle .
+
+pylint:
+	mkdir -p reports
+	PYLINTHOME=reports/ pylint release
+
+clean:
+	rm -rf build dist *egg-info ./__pycache__
+	find -name *.pyc -delete
