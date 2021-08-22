@@ -511,7 +511,7 @@ def main(args):
         if dry_run:
             return
 
-        clone_app_interface(args.gitlab_key_file)
+        # clone_app_interface(args.gitlab_key_file)
         with open(ASSISTED_SERVICE_OPENSHIFT_TEMPLATE_YAML) as f:
             openshift_versions_json = next(
                 param["value"] for param in yaml.safe_load(f)["parameters"] if param["name"] == "OPENSHIFT_VERSIONS"
@@ -527,17 +527,17 @@ def main(args):
         github_pr.create_issue_comment(f"Running all tests")
         github_pr.create_issue_comment(f"/test all")
 
-        try:
-            change_version_in_files_app_interface(openshift_versions_json)
-        except NoChangesNeeded:
-            pass
-        else:
-            app_interface_fork = create_app_interface_fork(args)
-            app_interface_branch = commit_and_push_version_update_changes_app_interface(args.gitlab_key_file, app_interface_fork, title, task)
-            gitlab_pr = open_app_interface_pr(app_interface_fork, app_interface_branch, task, title)
-
-            jira_client.add_comment(task, f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
-            github_pr.create_issue_comment(f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
+        # try:
+        #     change_version_in_files_app_interface(openshift_versions_json)
+        # except NoChangesNeeded:
+        #     pass
+        # else:
+        #     app_interface_fork = create_app_interface_fork(args)
+        #     app_interface_branch = commit_and_push_version_update_changes_app_interface(args.gitlab_key_file, app_interface_fork, title, task)
+        #     gitlab_pr = open_app_interface_pr(app_interface_fork, app_interface_branch, task, title)
+        #
+        #     jira_client.add_comment(task, f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
+        #     github_pr.create_issue_comment(f"Created a PR in app-interface GitLab {gitlab_pr.web_url}")
 
         unhold_pr(github_pr)
 
