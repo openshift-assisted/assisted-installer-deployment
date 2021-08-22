@@ -318,4 +318,3 @@ def run_using_cli(args):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     run_using_cli(parse_args())
-

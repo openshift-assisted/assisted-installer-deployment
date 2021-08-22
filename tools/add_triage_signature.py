@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# pylint: disable=invalid-name,broad-except,missing-function-docstring,too-few-public-methods,missing-class-docstring,missing-module-docstring,line-too-long,too-many-locals,logging-fstring-interpolation
+# pylint: disable=invalid-name,broad-except,missing-function-docstring,too-few-public-methods,missing-class-docstring
+# pylint: disable=missing-module-docstring,line-too-long,too-many-locals,logging-fstring-interpolation
 import abc
 import argparse
 import functools
@@ -15,7 +16,6 @@ import tempfile
 from collections import OrderedDict, defaultdict
 from datetime import datetime
 from textwrap import dedent
-from typing import List
 from urllib.parse import urlparse
 from enum import Flag, auto
 
@@ -61,10 +61,12 @@ h1. Cluster Info
 * [Kibana|https://kibana-openshift-logging.apps.app-sre-prod-04.i5h0.p1.openshiftapps.com/app/kibana#/discover?_g=(refreshInterval:(pause:!t,value:0),time:(from:now-24h,mode:quick,to:now))&_a=(columns:!(_source),interval:auto,query:'"{cluster_id}"',sort:!('@timestamp',desc))]
 * [DM Elastic|http://assisted-elastic.usersys.redhat.com:5601/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:0),time:(from:now-2w,to:now))&_a=(columns:!(_source),filters:!(),index:bd9dadc0-7bfa-11eb-95b8-d13a1970ae4d,interval:auto,query:(language:lucene,query:'cluster.id:%20%22{cluster_id}%22'),sort:!())]
 * [DM Elastic Dashboard|http://assisted-elastic.usersys.redhat.com:5601/app/dashboards#/view/500e1d40-58d6-11eb-8ff7-115676c7222d?_g=(filters:!(),query:(language:kuery,query:'cluster_id:%20%22{cluster_id}%22'),refreshInterval:(pause:!t,value:0),time:(from:now-2w,to:now))&_a=(description:'',filters:!(),fullScreenMode:!f,options:(hidePanelTitles:!f,useMargins:!t),query:(language:kuery,query:'cluster_id:%20%22{cluster_id}%22%20'),timeRestore:!f,title:'cluster%20overview',viewMode:view)]
-"""
+"""  # nopep8
+
 
 def custom_field_name(custom_field):
     return f"customfield_{custom_field}"
+
 
 def config_logger(verbose):
     handler = colorlog.StreamHandler()
@@ -134,6 +136,7 @@ def get_host_log_file(triage_logs_tar, host_id, filename):
 
     return triage_logs_tar.get(f"{hostname}.tar.gz/logs_host_{host_id}/{filename}")
 
+
 def get_journal(triage_logs_tar, host_ip, journal_file):
     return triage_logs_tar.get(
         f"*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/control-plane/{host_ip}/journals/{journal_file}"
@@ -177,10 +180,10 @@ class Signature(abc.ABC):
         if issue_labels is None:
             issue_labels = []
         is_changed = False
-        for l in labels:
-            if l not in issue_labels:
+        for label in labels:
+            if label not in issue_labels:
                 is_changed = True
-                issue_labels.append(l)
+                issue_labels.append(label)
         if is_changed:
             self._update_fields(key, {custom_field_name(CF_FUNCTION_IMPACT): issue_labels})
 
@@ -381,6 +384,7 @@ class FailureDetails(Signature):
         user
         domain
     """
+
     def __init__(self, jira_client):
         super().__init__(jira_client, comment_identifying_string="")
 
@@ -399,8 +403,8 @@ class FailureDetails(Signature):
 
             i = self._jclient.issue(issue_key)
             cluster_md = {}
-            for l in i.fields.labels:
-                m = r.match(l)
+            for label in i.fields.labels:
+                m = r.match(label)
                 if m is None or len(m.groups()) != 2:
                     continue
                 prefix, value = m.groups()
@@ -414,7 +418,7 @@ class FailureDetails(Signature):
         try:
             md = get_metadata_json(url)
             cluster_md = md['cluster']
-        except:
+        except Exception:
             # if we cannot find the failure logs on the log-server, we'll just use whatever information we
             # have in the 'labels' field of the ticket
             # this is mainly relevant for triage tickets that were moved from 'MGMT' project to 'AITRIAGE'
@@ -555,10 +559,12 @@ class CNIConfigurationError(ErrorSignature):
 
     @classmethod
     def _get_all_host_ip_addresses(cls, cluster):
-        """
-        Given a cluster object, return a list of all host IP addresses.
+        """Given a cluster object, return a list of all host IP addresses.
 
-        Since the metadata.json file does not contain the IP address of each host, we have to infer it by examining the connectivity stanza of each of the hosts. Collecting the neighboring hosts from each of the host objects into a set should hopefully give us all host IP addresses.
+        Since the metadata.json file does not contain the IP address of each host,
+        we have to infer it by examining the connectivity stanza of each of the hosts.
+        Collecting the neighboring hosts from each of the host objects into a set should hopefully
+        give us all host IP addresses.
         """
         return set(itertools.chain(*(cls._get_host_neighbors(host) for host in cluster['hosts'])))
 
@@ -584,7 +590,8 @@ class CNIConfigurationError(ErrorSignature):
         for host_id, host_ip in host_ip_addresses:
             try:
                 kubelet_journal = get_journal(triage_logs_tar, host_ip, "kubelet.log")
-                cni_errors = search_patterns_in_string(kubelet_journal, re.escape("No CNI configuration file in /etc/kubernetes/cni/net.d/. Has your network provider started?"))
+                cni_errors = search_patterns_in_string(kubelet_journal, re.escape(
+                    "No CNI configuration file in /etc/kubernetes/cni/net.d/. Has your network provider started?"))
 
                 if len(cni_errors) > threshold:
                     hosts.append(OrderedDict({
@@ -760,7 +767,7 @@ class LibvirtRebootFlagSignature(ErrorSignature):
 
         # this signature is not relevant for SNO
         if len(cluster['hosts']) <= 1:
-               return
+            return
 
         # this signature is relevant only if all hosts, but the bootstrap is in 'Rebooting' stage
         hosts = []
@@ -906,12 +913,14 @@ class ConsoleTimeoutSignature(ErrorSignature):
         if ("waiting for console" in status_info and
                 "4.7" in openshift_version and
                 any(isVMware(host) for host in cluster['hosts'])):
-            # ISO conversion according to https://stackoverflow.com/questions/127803/how-do-i-parse-an-iso-8601-formatted-date#comment94022430_49784038
+            # ISO conversion according to
+            # https://stackoverflow.com/questions/127803/how-do-i-parse-an-iso-8601-formatted-date#comment94022430_49784038
             if datetime.fromisoformat(cluster['install_started_at'].replace('Z', '')) > datetime(2021, 5, 5):
                 report = "\n".join([
                     "h2. Waiting for console timeout -possibly due to VMware hosts on OCP 4.7 ([bugzilla|https://bugzilla.redhat.com/1935539])-",
-                    "As of May 5th 2021, a fix has been pushed to production. That version contains the supposed fix. This means that the cause "
-                    "for the timeout in this ticket might not be due to this known bug - it might be caused by something else. Please investigate."
+                    "As of May 5th 2021, a fix has been pushed to production. That version contains the supposed fix. "
+                    "This means that the cause for the timeout in this ticket might not be due to this known bug - "
+                    "it might be caused by something else. Please investigate."
                 ])
             else:
                 report = "\n".join([
@@ -929,7 +938,8 @@ class AgentStepFailureSignature(Signature):
     This signature creates a report of all agent step failures that were encountered in the logs
     """
 
-    # This has to be maintained to be the same format as https://github.com/openshift/assisted-installer-agent/blob/aebd94105b4ed6442f21a7a26ab4e40eafd936aa/src/commands/step_processor.go#L81
+    # This has to be maintained to be the same format as
+    # https://github.com/openshift/assisted-installer-agent/blob/aebd94105b4ed6442f21a7a26ab4e40eafd936aa/src/commands/step_processor.go#L81
     # Remember to maintain backwards compatibility if that format ever changes - create
     # PATTERN_NEW and try to match both.
     LOG_PATTERN = re.compile(
@@ -1009,7 +1019,7 @@ class AgentStepFailureSignature(Signature):
                         exit_code=step_failure_message['exit_code'],
                         step_id=step_failure_message['step_id'],
                         stderr=self._prepare_output(step_failure_message['stderr']),
-                     ))
+                    ))
 
             if len(failures) != 0:
                 report += dedent(f"""
@@ -1025,7 +1035,8 @@ class AgentStepFailureSignature(Signature):
 ############################
 DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SERVER = "https://issues.redhat.com"
-SIGNATURES = [AllInstallationAttemptsSignature, ApiInvalidCertificateSignature, FailureDetails, FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
+SIGNATURES = [AllInstallationAttemptsSignature, ApiInvalidCertificateSignature, FailureDetails,
+              FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
               StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature,
               MediaDisconnectionSignature, ConsoleTimeoutSignature, AgentStepFailureSignature,
               CNIConfigurationError]
@@ -1137,7 +1148,7 @@ def process_issues(jclient, issues, update, update_signature):
         logger.debug(f"Issue {issue}")
         try:
             url = get_logs_url_from_issue(issue)
-        except:
+        except Exception:
             logger.exception("Error getting logs url of %s", issue.key)
             continue
 

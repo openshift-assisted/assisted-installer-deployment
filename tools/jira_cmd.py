@@ -63,8 +63,9 @@ def jira_netrc_login(server, netrcFile):
 def get_raw_field(issue, fieldName):
     try:
         return issue.fields.__dict__[fieldName]
-    except:
+    except Exception:
         return None
+
 
 def get_sprint_name(issue):
     sprint_str = get_raw_field(issue, FIELD_SPRINT)
@@ -77,6 +78,7 @@ def get_sprint_name(issue):
 
     return m[0]
 
+
 def get_sprint_id(issue):
     sprint_str = get_raw_field(issue, FIELD_SPRINT)
     if not sprint_str:
@@ -88,20 +90,23 @@ def get_sprint_id(issue):
 
     return int(m[0])
 
+
 def get_assignee(issue):
     try:
         return issue.fields.assignee.displayName
-    except:
+    except Exception:
         try:
             return issue.raw['fields']['assignee']['displayName']
-        except:
+        except Exception:
             return "Unassigned"
+
 
 def format_key_for_print(key, isMarkdown):
     if not isMarkdown:
         return key
 
     return f"[{key}](https://issues.redhat.com/browse/{key})"
+
 
 def get_data_for_print(issues, issues_count=None, print_fields=None):
     if not print_fields:
@@ -187,13 +192,13 @@ class JiraTool():
     def is_admin_in_project(self, project):
         try:
             return self._admin_in_projects[project]
-        except:
+        except Exception:
             pass
 
         is_admin = False
         try:
             is_admin = self._jira.my_permissions(project)['permissions']['PROJECT_ADMIN']['havePermission']
-        except:
+        except Exception:
             log_exception("Cannot get permissions for project {}".format(project))
 
         self._admin_in_projects[project] = is_admin
@@ -204,7 +209,7 @@ class JiraTool():
             logger.info("linking %s to %s", to_ticket.key, ticket.key)
             res = self._jira.create_issue_link("relates to", ticket, to_ticket)
             res.raise_for_status()
-        except:
+        except Exception:
             logger.exceptio("Error linking to %s", to_ticket.key)
 
     def update_issue_fields(self, issue, fields_dict):
@@ -230,7 +235,7 @@ class JiraTool():
             contributor_names.append(assignee.name)
             logger.info("Adding %s as contributor to %s", assignee.name, ticket.key)
             self.update_issue_fields(ticket, {FIELD_CONTRIBUTORS: [{'name': u} for u in contributor_names]})
-        except:
+        except Exception:
             logger.exception("Error adding contributor to %s", ticket.key)
 
     def add_watchers(self, ticket, watchers):
@@ -238,7 +243,7 @@ class JiraTool():
             for watcher in watchers:
                 logger.info("Adding %s as watcher to %s", watcher, ticket.key)
                 self._jira.add_watcher(ticket.key, watcher)
-        except:
+        except Exception:
             logger.exception("Error adding watcher to %s", ticket.key)
 
     def remove_watchers(self, ticket, watchers):
@@ -246,7 +251,7 @@ class JiraTool():
             for watcher in watchers:
                 logger.info("removing %s as watcher from %s", watcher, ticket.key)
                 self._jira.remove_watcher(ticket.key, watcher)
-        except:
+        except Exception:
             logger.exception("Error removing watcher to %s", ticket.key)
 
     @staticmethod
@@ -269,9 +274,9 @@ class JiraTool():
     @staticmethod
     def get_project_labels(issue):
         labels = []
-        for l in issue.fields.labels:
-            if l in PROJECT_LABELS:
-                labels.append(l)
+        for label in issue.fields.labels:
+            if label in PROJECT_LABELS:
+                labels.append(label)
 
         return labels
 
@@ -292,7 +297,7 @@ class JiraTool():
                 names.append({'name': c.name})
         names.append({'name': component})
         logger.info("add_component: updating %s with components: %s", issue.key, names)
-        self.update_issue_fields(issue, {"components":names})
+        self.update_issue_fields(issue, {"components": names})
 
     def remove_component(self, issue, component):
         was_found = False
@@ -311,11 +316,11 @@ class JiraTool():
 
     def add_labels(self, issue, labels):
         new_labels = labels.copy()
-        for l in issue.fields.labels:
-            if l in labels:
-                logger.debug("%s, is already in %s", l, issue.key)
+        for label in issue.fields.labels:
+            if label in labels:
+                logger.debug("%s, is already in %s", label, issue.key)
             else:
-                new_labels.append(l)
+                new_labels.append(label)
         if new_labels != issue.fields.labels:
             logger.info("add_labels: updating %s with labels: %s", issue.key, new_labels)
             self.update_issue_fields(issue, {"labels": new_labels})
@@ -323,12 +328,12 @@ class JiraTool():
     def remove_labels(self, issue, labels):
         was_found = False
         new_labels = []
-        for l in issue.fields.labels:
-            if l in labels:
-                logger.info("removing %s from %s", l, issue.key)
+        for label in issue.fields.labels:
+            if label in labels:
+                logger.info("removing %s from %s", label, issue.key)
                 was_found = True
             else:
-                new_labels.append(l)
+                new_labels.append(label)
         if not was_found:
             logger.debug("remove_labels: labels %s not found in %s", labels, issue.key)
         else:
@@ -352,8 +357,8 @@ class JiraTool():
         linked_issue_keys = []
         linked_issues = []
         for i in issues:
-            for l in i.fields.issuelinks:
-                linked_issue_keys.append(self.extract_linked_issue(l).key)
+            for label in i.fields.issuelinks:
+                linked_issue_keys.append(self.extract_linked_issue(label).key)
 
         issue_keys_count = Counter(linked_issue_keys)
         if linked_issue_keys:
@@ -366,7 +371,6 @@ class JiraTool():
                 filtered_linked_issues.append(i)
 
         return filtered_linked_issues, issue_keys_count
-
 
     def get_selected_issues(self, issues, isEpicTasks=False, onlyMgmtIssues=False):
         if not isEpicTasks:
@@ -382,20 +386,18 @@ class JiraTool():
     def extract_linked_issue(issue_link):
         try:
             return issue_link.outwardIssue
-        except:
+        except Exception:
             return issue_link.inwardIssue
 
-
     def remove_links(self, ticket, to_remove):
-        for l in ticket.fields.issuelinks:
-            key = self.extract_linked_issue(l).key
-
+        for link in ticket.fields.issuelinks:
+            key = self.extract_linked_issue(link).key
 
             if key == to_remove.key:
                 try:
                     logger.info("removing link %s", key)
-                    l.delete()
-                except:
+                    link.delete()
+                except Exception:
                     log_exception("Error removing link {}".format(key))
 
     def get_issues_in_epic(self, key):
@@ -427,6 +429,7 @@ def filter_issue_status(issues, statuses):
 
     return filtered_issues
 
+
 def epic_fixup(jtool, epic_list):
     for epic in epic_list:
         if epic.fields.issuetype.name != 'Epic':
@@ -452,7 +455,7 @@ def epic_fixup(jtool, epic_list):
             for i in epic_issues:
                 jtool.add_labels(i, project_labels)
 
-        missing_project_labels = [l for l in PROJECT_LABELS if l not in project_labels]
+        missing_project_labels = [label for label in PROJECT_LABELS if label not in project_labels]
         if missing_project_labels:
             for i in epic_issues:
                 jtool.remove_labels(i, missing_project_labels)
@@ -477,9 +480,11 @@ def handle_labels_update(args, jiraTool, issues):
         for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
             jiraTool.remove_labels(i, args.remove_labels)
 
+
 def handle_remove_comment(args, jiraTool, issues):
     for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
         jiraTool.remove_comment(i, args.remove_comment)
+
 
 def handle_watchers_update(args, jiraTool, issues):
     if args.add_watchers is not None:
@@ -489,6 +494,7 @@ def handle_watchers_update(args, jiraTool, issues):
     if args.remove_watchers is not None:
         for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
             jiraTool.remove_watchers(i, args.remove_watchers)
+
 
 def handle_link_update(args, jiraTool, issues):
     if args.link_to is not None:
@@ -503,6 +509,7 @@ def handle_link_update(args, jiraTool, issues):
         for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
             jiraTool.remove_links(i, to_remove)
 
+
 def handle_fix_version_update(args, jiraTool, issues):
     for i in jiraTool.get_selected_issues(issues, args.epic_tasks):
         if len(i.fields.fixVersions) != 1 or args.fix_version != i.fields.fixVersions[0].name:
@@ -514,7 +521,7 @@ def handle_fix_version_update(args, jiraTool, issues):
             i.fields.fixVersions = [{'name': args.fix_version}]
             try:
                 jiraTool.update_issue_fields(i, {'fixVersions': i.fields.fixVersions})
-            except:
+            except Exception:
                 log_exception("Could not set fixVersion of {}".format(i.key))
         else:
             logger.info("issue %s is already at fixVersion %s", i.key, args.fix_version)
@@ -530,7 +537,7 @@ def handle_sprint_update(args, jiraTool, issues):
         logger.info("setting sprint %s to issue %s", args.sprint, i.key)
         try:
             jiraTool.update_issue_fields(i, {FIELD_SPRINT: args.sprint})
-        except:
+        except Exception:
             log_exception("Could not set sprint of {}".format(i.key))
 
 

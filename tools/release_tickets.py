@@ -52,11 +52,13 @@ def get_bz_client(username, password):
 
     return bugzilla.RHBugzilla3(BZ_SERVER, user=username, password=password)
 
+
 def create_dir(dirname):
     try:
         os.mkdir(dirname)
-    except:
+    except Exception:
         pass
+
 
 def clone_repo(repo):
     dirname = "temp/{}".format(os.path.basename(repo))
@@ -67,6 +69,7 @@ def clone_repo(repo):
         subprocess.check_call("git clone {}".format(repo_url), shell=True, cwd="temp")
     return dirname
 
+
 def get_issues_list_for_repo(repo, from_commit, to_commit):
     create_dir("temp")
     dirname = clone_repo(repo)
@@ -74,6 +77,7 @@ def get_issues_list_for_repo(repo, from_commit, to_commit):
                                       shell=True, cwd=dirname)
     matches = ISSUES_REGEX.findall(raw_log.decode('utf-8'), re.MULTILINE)
     return [i for i, _ in matches]
+
 
 def get_manifest_yaml(commit=None):
     if commit:
@@ -83,14 +87,17 @@ def get_manifest_yaml(commit=None):
     with open("assisted-installer.yaml") as fin:
         return yaml.safe_load(fin)
 
+
 def get_commit_from_manifest(manifest, repo):
     return manifest[repo]['revision']
+
 
 def get_field_by_name(issue, fieldName):
     try:
         return issue.fields.__getattribute__(issue.fields, fieldName)
-    except:
+    except Exception:
         return None
+
 
 def get_jira_issues_info(jclient, keys):
     issues = jclient.search_issues("issue in ({})".format(",".join(keys)), fields=["key", "summary", "status",
@@ -99,20 +106,24 @@ def get_jira_issues_info(jclient, keys):
                                                                                    "fixVersions"], maxResults=200)
     return issues
 
+
 def get_bz_issues_info(bzclient, keys):
     bugs_ids = {i.replace('Bug ', '') for i in keys}
     bugs = bzclient.getbugs(bugs_ids, include_fields=['id', 'summary', 'status', 'assigned_to'])
     return bugs
 
+
 def get_bz_id_from_jira(issue):
     bz_ref = get_field_by_name(issue, BZ_REFERENCE_FIELD)
     return None if bz_ref is None else bz_ref.bugid
+
 
 def format_key_for_print(key, isMarkdown=False):
     if not isMarkdown:
         return key
 
     return f"[{key}](https://issues.redhat.com/browse/{key})"
+
 
 def get_jira_data_for_print(issues, issues_in_repos, isMarkdown=False):
     table = []
@@ -126,6 +137,7 @@ def get_jira_data_for_print(issues, issues_in_repos, isMarkdown=False):
 
     return table
 
+
 def get_bz_data_for_print(issues, issues_in_repos, isMarkdown=False):
     table = []
     for i in issues:
@@ -137,6 +149,7 @@ def get_bz_data_for_print(issues, issues_in_repos, isMarkdown=False):
         table.append(row)
 
     return table
+
 
 def get_data_for_release_candidates(issues):
     headers = ['key', 'summary', 'status', 'fixVersion']
@@ -229,7 +242,7 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
     logger.info("bz_issues_keys=%s", bz_issues_keys)
     logger.info("jira_issues_keys=%s", jira_issues_keys)
 
-    bz_issues = get_bz_issues_info(bzclient,bz_issues_keys)
+    bz_issues = get_bz_issues_info(bzclient, bz_issues_keys)
     jira_issues = get_jira_issues_info(jclient, jira_issues_keys)
     if report_format is not None:
         if report_format == REPORT_FORMAT_CSV:
@@ -259,8 +272,10 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
 
         update_fix_versions_for_all_issues(bzclient, jira_issues_to_modify, bz_issues_to_modify, fix_version_to_update, is_dry_run=is_dry_run)
 
+
 def format_fix_version(version):
     return "OCP-Metal-{}".format(version)
+
 
 def update_fix_versions_for_all_issues(bzclient, jira_issues_to_modify, bz_issues_to_modify, fix_version, is_dry_run=False):
     bz_issues = []
@@ -291,7 +306,7 @@ def update_fix_versions_for_all_issues(bzclient, jira_issues_to_modify, bz_issue
     else:
         if is_dry_run:
             for i in jira_issues:
-                #__import__('ipdb').set_trace()
+                # __import__('ipdb').set_trace()
                 logger.info("Dry-run: Updating Jira tickets %s (%s, %s) with fixed_in %s", i.key,
                             i.fields.status.name, i.fields.fixVersions, fix_version)
         else:
@@ -299,16 +314,18 @@ def update_fix_versions_for_all_issues(bzclient, jira_issues_to_modify, bz_issue
                 logger.info("Updating Jira tickets %s with fixed_in %s", i.key, fix_version)
                 update_fixversion_for_jira_issue(i, fix_version)
 
+
 def update_fixversion_for_jira_issue(issue, fix_version):
     if len(issue.fields.fixVersions) != 1 or fix_version != issue.fields.fixVersions[0].name:
         logger.info("setting fixVersion %s to issue %s", fix_version, issue.key)
         issue.fields.fixVersions = [{'name': fix_version}]
         try:
             issue.update(fields={'fixVersions': issue.fields.fixVersions})
-        except:
+        except Exception:
             logger.exception("Could not set fixVersion of %s", issue.key)
     else:
         logger.info("issue %s is already at fixVersion %s", issue.key, fix_version)
+
 
 def get_login(user_password, server):
     if user_password is None:
@@ -316,9 +333,10 @@ def get_login(user_password, server):
     else:
         try:
             [username, password] = user_password.split(":", 1)
-        except:
+        except Exception:
             logger.error("Failed to parse user:password")
     return username, password
+
 
 if __name__ == "__main__":
     VALID_REPOS = ['assisted-installer', 'assisted-service', 'assisted-installer-agent', 'assisted-ui']

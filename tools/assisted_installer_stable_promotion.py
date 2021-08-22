@@ -21,13 +21,14 @@ IMAGE_FORMAT = "quay.io/ocpmetal/{image_name}:{tag}"
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--deployment", help="deployment yaml file to update", type=str,
- default=os.path.join(os.path.dirname(__file__), "../assisted-installer.yaml"))
+                    default=os.path.join(os.path.dirname(__file__), "../assisted-installer.yaml"))
 parser.add_argument("--tag", help="image tagging", type=str)
 parser.add_argument("--version-tag", help="promote to a version based tag. Will not add tag with date", action='store_true')
 args = parser.parse_args()
 
 timestamped_tag = "{tag}.{timestamp}".format(
     tag=args.tag, timestamp=datetime.now().strftime("%d.%m.%Y-%H.%M"))
+
 
 def main():
     tags = [args.tag]
@@ -36,6 +37,7 @@ def main():
 
     tag_manifest_images(tags)
     tag_repo(tags)
+
 
 def tag_manifest_images(tags):
     with open(args.deployment, "r") as f:
@@ -48,6 +50,7 @@ def tag_manifest_images(tags):
             except Exception as ex:
                 logging("Failed to tag {image}, reason: {exception}".format(image=image, exception=ex))
 
+
 def tag_image(image, tags):
 
     subprocess.check_output("podman pull {}".format(image), shell=True)
@@ -59,6 +62,7 @@ def tag_image(image, tags):
         tagged_image = "{image}:{tag}".format(image=image.rsplit(":")[0], tag=t)
         subprocess.check_output("podman tag {} {}".format(image, tagged_image), shell=True)
         subprocess.check_output("podman push {}".format(tagged_image), shell=True)
+
 
 def tag_repo(tags):
     for t in tags:

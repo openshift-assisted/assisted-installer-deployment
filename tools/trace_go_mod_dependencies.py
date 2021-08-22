@@ -14,7 +14,7 @@ def get_top_module(dir=None):
     return subprocess.check_output('grep "^module" go.mod | cut -d" " -f2', shell=True, cwd=dir).decode('utf-8')
 
 
-def find_root(G,child):
+def find_root(G, child):
     parent = list(G.predecessors(child))
     if len(parent) == 0:
         print(f"found root: {child}")
@@ -55,4 +55,3 @@ if __name__ == "__main__":
 
     top_module = get_top_module(args.dir).strip()
     get_mod_deps(top_module, package=args.package, dir=args.dir, display_graph=args.display_graph)
-

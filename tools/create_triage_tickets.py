@@ -66,8 +66,9 @@ def add_watchers(jclient, issue):
     for watcher in DEFAULT_WATCHERS:
         jclient.add_watcher(issue.key, watcher)
 
+
 def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
-    summary = format_summary({"failure_id":failure_id})
+    summary = format_summary({"failure_id": failure_id})
     if summary in existing_tickets:
         logger.debug("issue found: %s", summary)
         return None
@@ -98,14 +99,14 @@ def main(arg):
     else:
         try:
             [username, password] = arg.user_password.split(":", 1)
-        except:
+        except Exception:
             logger.error("Failed to parse user:password")
 
     jclient = get_jira_client(username, password)
 
     try:
         res = requests.get("{}/files/".format(LOGS_COLLECTOR))
-    except:
+    except Exception:
         logger.exception("Error getting list of failed clusters")
         sys.exit(1)
 

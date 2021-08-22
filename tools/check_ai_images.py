@@ -7,7 +7,7 @@ import subprocess
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--deployment", help="deployment yaml file to update", type=str,
- default=os.path.join(os.path.dirname(__file__), "../assisted-installer.yaml"))
+                    default=os.path.join(os.path.dirname(__file__), "../assisted-installer.yaml"))
 args = parser.parse_args()
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)-10s %(filename)s:%(lineno)d %(message)s')
@@ -53,4 +53,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

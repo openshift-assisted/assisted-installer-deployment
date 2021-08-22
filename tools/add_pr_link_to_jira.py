@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-#Adds links on Jira ticket to the given github PR
+# Adds links on Jira ticket to the given github PR
 
 import argparse
 import os
@@ -69,15 +69,13 @@ if __name__ == "__main__":
 
     pr_found = False
     links = j1.remote_links(issue)
-    for l in links:
-        print( l.object.title, l.object.url)
-        if l.object.url == args.pr_link:
-            print("PR already exist: {}".format(l.object.title))
+    for link in links:
+        print(link.object.title, link.object.url)
+        if link.object.url == args.pr_link:
+            print("PR already exist: {}".format(link.object.title))
             pr_found = True
 
     if not pr_found:
         print("PR not found adding it: {}".format(args.pr_link))
         o = dict(title=args.pr_link, url=args.pr_link)
         j1.add_remote_link(issue, o)
-
-
