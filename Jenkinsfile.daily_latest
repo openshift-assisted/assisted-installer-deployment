@@ -22,7 +22,7 @@ pipeline {
                 sh '''git clean -f'''
                 sh '''skipper run python tools/update_assisted_installer_yaml.py --full'''
                 sh '''python3 tools/check_ai_images.py'''
-                withCredentials([usernamePassword(credentialsId: '9fa5c056-6227-4f70-97df-6aa31854c20a', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]){
+                withCredentials([usernamePassword(credentialsId: 'oshercc_github_cred', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]){
                     sh('''
                         if [ "$(git status --porcelain)" ];
                         then
