@@ -29,7 +29,8 @@ def main(jira_client, filter_id, webhook):
                 labels.append(label.replace("FEATURE-", ""))
 
         email_domain = issue.raw["fields"]["customfield_12319045"]
-        ticket_text += f"<{url}|{key}>   {email_domain:<20} {labels}\n"
+        user = issue.raw["fields"]["customfield_12319044"]
+        ticket_text += f"<{url}|{key}>   {user:<15} {email_domain:<15} {labels}\n"
 
         email_domains.append(email_domain)
         feature += labels
