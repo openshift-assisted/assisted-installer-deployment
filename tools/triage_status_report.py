@@ -1,8 +1,8 @@
-import os
-import jira
 import json
 import requests
 import argparse
+
+import jira
 
 JIRA_SERVER = "https://issues.redhat.com"
 FILTER_ID = 12380672
@@ -40,12 +40,12 @@ def main(jira_client, filter_id, webhook):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--jira-creds", "-jc", required=True, help="Jira credentials in the format of user:password")
+    parser.add_argument("--jira-username", required=True, help="Jira username for accessing triage tickets")
+    parser.add_argument("--jira-password", required=True, help="Jira password for accessing triage tickets")
     parser.add_argument("--webhook", "-wh", required=True, help="Slack channel url to post information")
     parser.add_argument("--filter-id", default=FILTER_ID, help="Jira filter id")
     args = parser.parse_args()
 
-    jira_user, jira_pass = args.jira_creds.split(":")
-    client = jira.JIRA(JIRA_SERVER, basic_auth=(jira_user, jira_pass))
+    client = jira.JIRA(JIRA_SERVER, basic_auth=(args.jira_username, args.jira_password))
 
     main(client, args.filter_id, args.webhook)
