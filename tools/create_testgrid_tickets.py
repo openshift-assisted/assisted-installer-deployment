@@ -65,9 +65,13 @@ def get_last_failure_instance(test_id):
     return res.json()['changelists'][0]
 
 
-def get_last_pass(test_data):
+def get_overall_tests(test_data):
     return [t for t in test_data['tests']
-            if t['display_name'] == 'Overall'][0]['pass_timestamp']
+            if t['display_name'] == 'Overall']
+
+
+def get_last_pass(test_data):
+    return get_overall_tests(test_data)[0]['pass_timestamp']
 
 
 def format_labels(failure_data):
@@ -111,11 +115,27 @@ def create_jira_ticket(jclient, existing_tickets, test_id, test_data):
     return new_issue
 
 
+def is_test_failing(test_data):
+    # Following is the old way to check if a grid is failing - once the testgrid bug
+    # described below is fixed, this code can be restored:
+    # failing = test_data['overall_status'] == "FAILING"
+    # return failing
+
+    # testgrid has a bug where it marks successful tests as "FAILING", just because they
+    # have failed test cases. But sometimes test cases are allowed to fail while the run itself is
+    # "passing", but testgrid doesn't take that into account - so it marks a grid as "FAILING" even though
+    # its "Overall" row is green. When the "Overall" row is green but the test is marked as failing, the
+    # overall tests don't get included in the `tests` list, so we use that to detect this scenario.
+    actually_failing = len(get_overall_tests(test_data)) > 0
+
+    return actually_failing
+
+
 def get_failed_tests():
     try:
         res = requests.get(TEST_STATUS_URL)
         res.raise_for_status()
-        tests = {n: data for n, data in res.json().items() if data['overall_status'] == "FAILING"}
+        tests = {n: data for n, data in res.json().items() if is_test_failing(data)}
         return tests
     except Exception:
         logger.exception("Error getting list of failed tests")
