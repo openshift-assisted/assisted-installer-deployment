@@ -1,10 +1,11 @@
 import argparse
-import subprocess
-import yaml
-import sys
-import os
 import logging
+import os
+import subprocess
 from datetime import datetime
+
+import yaml
+
 logging.basicConfig(format='%(asctime)s %(message)s')
 logging.getLogger().setLevel(logging.INFO)
 
@@ -52,16 +53,11 @@ def tag_manifest_images(tags):
 
 
 def tag_image(image, tags):
-
-    subprocess.check_output("podman pull {}".format(image), shell=True)
-
-    # seting images names & tags
     for t in tags:
         logging.info("Tagging image {image} to {tag}".format(
             image=image, tag=t))
         tagged_image = "{image}:{tag}".format(image=image.rsplit(":")[0], tag=t)
-        subprocess.check_output("podman tag {} {}".format(image, tagged_image), shell=True)
-        subprocess.check_output("podman push {}".format(tagged_image), shell=True)
+        subprocess.check_output("skopeo copy docker://{} docker://{}".format(image, tagged_image), shell=True)
 
 
 def tag_repo(tags):
