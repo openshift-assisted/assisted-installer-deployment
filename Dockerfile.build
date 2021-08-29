@@ -9,6 +9,7 @@ RUN dnf update -y && dnf install -y \
     git \
     p7zip \
     make \
+    skopeo \
     python38 \
     python38-pip \
     python38-devel \
