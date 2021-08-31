@@ -22,7 +22,7 @@ autopep8:
 
 pylint:
 	mkdir -p reports
-	PYLINTHOME=reports/ pylint release
+	PYLINTHOME=reports/ pylint release/
 
 clean:
 	rm -rf build dist *egg-info ./__pycache__
