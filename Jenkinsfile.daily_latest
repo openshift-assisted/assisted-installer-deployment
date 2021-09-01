@@ -20,8 +20,7 @@ pipeline {
         stage('Update master and snapshot branch') {
             steps {
                 sh '''git clean -f'''
-                sh '''skipper run python tools/update_assisted_installer_yaml.py --full'''
-                sh '''python3 tools/check_ai_images.py'''
+                sh '''make snapshot'''
                 withCredentials([usernamePassword(credentialsId: 'oshercc_github_cred', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]){
                     sh('''
                         if [ "$(git status --porcelain)" ];
