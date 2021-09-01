@@ -20,7 +20,8 @@ DEFAULT_REGISTRY = "quay.io/ocpmetal"
 
 @retry(exceptions=subprocess.SubprocessError, tries=3, delay=10)
 def does_image_exist(pull_spec: str) -> bool:
-    return subprocess.call(f"skopeo inspect --config docker://{pull_spec}", stdout=subprocess.DEVNULL, shell=True) == 0
+    cmd = ["skopeo", "inspect", "--config", f"docker://{pull_spec}"]
+    return subprocess.call(cmd, stdout=subprocess.DEVNULL) == 0
 
 
 def main():
