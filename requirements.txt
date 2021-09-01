@@ -15,3 +15,4 @@ colorlog~=4.7.2
 fuzzywuzzy~=0.18.0
 nestedarchive==0.2.2
 python-Levenshtein==0.12.2
+retry==0.9.2

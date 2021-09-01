@@ -1,9 +1,10 @@
-import os
-import yaml
-import time
 import argparse
 import logging
+import os
 import subprocess
+
+import yaml
+from retry import retry
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--deployment", help="deployment yaml file to update", type=str,
@@ -14,41 +15,27 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)-10s %(filename)s:%(
 logger = logging.getLogger(__name__)
 logging.getLogger("__main__").setLevel(logging.INFO)
 
-
-def image_does_not_exist(image, tag):
-    cmd = f"docker manifest inspect quay.io/ocpmetal/{image}:{tag}"
-    try:
-        image_inspect_output = subprocess.check_output(cmd, shell=True)
-        image_inspect_output = subprocess.check_output("echo $?", shell=True)
-    except subprocess.SubprocessError:
-        image_inspect_output = "-1"
-
-    return int(image_inspect_output)
+DEFAULT_REGISTRY = "quay.io/ocpmetal"
 
 
-def image_exist_with_retry(image, tag):
-    for retry in range(3):
-        get_image_result = image_does_not_exist(image, tag)
-        if not get_image_result:
-            return True
-        logger.warning(f"Failed to get image at {retry} retry")
-        time.sleep(10*60)
-
-    logger.error(f"Failed to get image at {retry} retry")
-    return not get_image_result
+@retry(exceptions=subprocess.SubprocessError, tries=3, delay=10)
+def does_image_exist(pull_spec: str) -> bool:
+    return subprocess.call(f"skopeo inspect --config docker://{pull_spec}", stdout=subprocess.DEVNULL, shell=True) == 0
 
 
 def main():
     with open(args.deployment, "r") as f:
         deployment = yaml.safe_load(f)
-    for rep, val in deployment.items():
+
+    for _, val in deployment.items():
         hash = val["revision"]
         for image in val["images"]:
-            if image_exist_with_retry(image, hash):
-                logger.info(f"image {image}:{hash} is located")
-            else:
-                logger.error(f"image {image}:{hash} doesn't exist in registry")
-                raise Exception(f"image {image}:{hash} doesn't exist in registry")
+            pull_spec = f"{DEFAULT_REGISTRY}/{image}:{hash}"
+
+            if not does_image_exist(pull_spec):
+                raise ValueError(f"Image {pull_spec} couldn't be found.")
+
+            logger.info(f"Image {pull_spec} was found")
 
 
 if __name__ == "__main__":

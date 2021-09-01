@@ -26,6 +26,10 @@ pylint:
 
 snapshot:
 	skipper run python3 tools/update_assisted_installer_yaml.py --full
+	$(MAKE) verify_snapshot
+
+verify_snapshot:
+	skipper run python3 tools/check_ai_images.py
 
 tag_images:
 	skipper run python3 tools/assisted_installer_stable_promotion.py --tag ${TAG} --version-tag
