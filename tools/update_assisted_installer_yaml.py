@@ -1,10 +1,7 @@
 import argparse
-import time
 import subprocess
 import yaml
-import sys
 import os
-import re
 import yamlordereddictloader
 import update_hash
 

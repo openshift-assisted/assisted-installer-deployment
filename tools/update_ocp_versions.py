@@ -1,8 +1,6 @@
 import os
 import re
 import json
-import yaml
-import time
 import copy
 import logging
 import argparse
@@ -13,12 +11,7 @@ import subprocess
 from bs4 import BeautifulSoup
 from distutils.version import LooseVersion
 
-import jira
-import github
-import gitlab
-import jenkins
 import requests
-import ruamel.yaml
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)-10s %(filename)s:%(lineno)d %(message)s')
 logger = logging.getLogger(__name__)
@@ -61,7 +54,6 @@ ASSISTED_SERVICE_CLONE_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_FORK_
 ASSISTED_SERVICE_UPSTREAM_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_REPO}.git"
 ASSISTED_SERVICE_MASTER_DEFAULT_OCP_VERSIONS_JSON_URL = \
     f"https://raw.githubusercontent.com/{ASSISTED_SERVICE_GITHUB_REPO}/master/data/default_ocp_versions.json"
-ASSISTED_SERVICE_OPENSHIFT_TEMPLATE_YAML = f"{ASSISTED_SERVICE_CLONE_DIR}/openshift/template.yaml"
 
 OCP_REPLACE_CONTEXT = ['"{version}"', "ocp-release:{version}"]
 
@@ -262,14 +254,6 @@ def main(args):
 
         if dry_run:
             return
-
-        with open(ASSISTED_SERVICE_OPENSHIFT_TEMPLATE_YAML) as f:
-            openshift_versions_json = next(
-                param["value"] for param in yaml.safe_load(f)["parameters"] if param["name"] == "OPENSHIFT_VERSIONS"
-            )
-
-        import ipdb
-        ipdb.set_trace()
 
 
 if __name__ == "__main__":

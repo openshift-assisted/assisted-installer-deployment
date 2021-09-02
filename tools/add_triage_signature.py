@@ -61,7 +61,7 @@ h1. Cluster Info
 * [Kibana|https://kibana-openshift-logging.apps.app-sre-prod-04.i5h0.p1.openshiftapps.com/app/kibana#/discover?_g=(refreshInterval:(pause:!t,value:0),time:(from:now-24h,mode:quick,to:now))&_a=(columns:!(_source),interval:auto,query:'"{cluster_id}"',sort:!('@timestamp',desc))]
 * [DM Elastic|http://assisted-elastic.usersys.redhat.com:5601/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:0),time:(from:now-2w,to:now))&_a=(columns:!(_source),filters:!(),index:bd9dadc0-7bfa-11eb-95b8-d13a1970ae4d,interval:auto,query:(language:lucene,query:'cluster.id:%20%22{cluster_id}%22'),sort:!())]
 * [DM Elastic Dashboard|http://assisted-elastic.usersys.redhat.com:5601/app/dashboards#/view/500e1d40-58d6-11eb-8ff7-115676c7222d?_g=(filters:!(),query:(language:kuery,query:'cluster_id:%20%22{cluster_id}%22'),refreshInterval:(pause:!t,value:0),time:(from:now-2w,to:now))&_a=(description:'',filters:!(),fullScreenMode:!f,options:(hidePanelTitles:!f,useMargins:!t),query:(language:kuery,query:'cluster_id:%20%22{cluster_id}%22%20'),timeRestore:!f,title:'cluster%20overview',viewMode:view)]
-"""  # nopep8
+"""  # noqa
 
 
 def custom_field_name(custom_field):
@@ -838,10 +838,10 @@ class AllInstallationAttemptsSignature(Signature):
         cluster_id = cluster['id']
         cluster_triage_tickets = self.jira_client.search_issues(
             f"""project = AITRIAGE AND "Cluster ID" ~ {cluster_id}""")
-        tickets_report = list()
         for ticket in cluster_triage_tickets:
             if issue_key == ticket.key:
                 continue
+
             self.jira_client.create_issue_link("is related to", issue_key, ticket.key)
 
 
@@ -1118,7 +1118,7 @@ def get_logs_url_from_issue(issue):
 
 def get_all_triage_tickets(jclient, only_recent=False):
     recent_filter = "" if not only_recent else 'and created >= -31d'
-    query = "project = AITRIAGE AND component = Cloud-Triage".format(recent_filter)
+    query = f"project = AITRIAGE AND component = Cloud-Triage {recent_filter}"
 
     return jclient.search_issues(query, maxResults=None)
 

@@ -3,7 +3,6 @@
 
 
 import subprocess
-from collections import defaultdict
 import networkx as nx
 import argparse
 
@@ -24,7 +23,6 @@ def find_root(G, child):
 
 def get_mod_deps(top_module, package, dir=None, display_graph=False):
     main_deps = set()
-    parent_child = defaultdict(list)
     output = subprocess.check_output('go mod graph', shell=True, cwd=dir)
     for line in output.decode('utf-8').removesuffix("\n").split("\n"):
         dep = line.split(" ")

@@ -556,7 +556,7 @@ def main(args):
     if args.max_results == MAX_RESULTS and args.linked_issues:
         logger.debug("Increasing the Jira maxResults param to %s", TRIAGE_MAX_RESULTS)
         max_results = TRIAGE_MAX_RESULTS
-    jiraTool = JiraTool(j, maxResults=args.max_results)
+    jiraTool = JiraTool(j, maxResults=max_results)
 
     if args.issue is not None:
         issues = [jiraTool.jira().issue(args.issue)]

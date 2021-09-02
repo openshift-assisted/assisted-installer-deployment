@@ -4,9 +4,7 @@
 
 import argparse
 import os
-import sys
 import jira
-import pprint
 import netrc
 import logging
 from urllib.parse import urlparse
