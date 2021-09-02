@@ -1,4 +1,4 @@
-all: pycodestyle pylint
+all: lint
 
 clean:
 	rm -rf build dist *egg-info ./__pycache__
@@ -8,10 +8,10 @@ clean:
 # Verify #
 ##########
 
-lint: pycodestyle
+lint: flake8 pylint
 
-pycodestyle:
-	pycodestyle .
+flake8:
+	flake8 .
 
 autopep8:
 	autopep8 --recursive --in-place .

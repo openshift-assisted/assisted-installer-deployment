@@ -87,7 +87,7 @@ def parse_args():
     dry_run_args.add_argument(
         '-t', '--dry-run-temp',
         action='store_true',
-        help=f'Dry run. Don\'t update tickets. Write output to a temp file'
+        help="Dry run. Don't update tickets. Write output to a temp file"
     )
 
     return parser.parse_args()

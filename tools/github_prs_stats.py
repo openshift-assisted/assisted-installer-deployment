@@ -1,7 +1,5 @@
-import requests
 from datetime import datetime
 import numpy
-import sys
 import netrc
 from github import Github, GithubException
 import os

@@ -1,7 +1,6 @@
 import os
 import re
 import json
-import yaml
 import copy
 import logging
 import argparse
@@ -66,7 +65,6 @@ ASSISTED_SERVICE_CLONE_URL = "https://{github_user}:{github_password}@github.com
 ASSISTED_SERVICE_UPSTREAM_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_REPO}.git"
 ASSISTED_SERVICE_MASTER_DEFAULT_OCP_VERSIONS_JSON_URL = \
     f"https://raw.githubusercontent.com/{ASSISTED_SERVICE_GITHUB_REPO}/master/data/default_ocp_versions.json"
-ASSISTED_SERVICE_OPENSHIFT_TEMPLATE_YAML = f"{ASSISTED_SERVICE_CLONE_DIR}/openshift/template.yaml"
 
 OCP_REPLACE_CONTEXT = ['"{version}"', "ocp-release:{version}"]
 
@@ -511,20 +509,15 @@ def main(args):
         if dry_run:
             return
 
-        with open(ASSISTED_SERVICE_OPENSHIFT_TEMPLATE_YAML) as f:
-            openshift_versions_json = next(
-                param["value"] for param in yaml.safe_load(f)["parameters"] if param["name"] == "OPENSHIFT_VERSIONS"
-            )
-
         body = get_pr_body(updates_made)
 
         commit_message = title + '\n\n' + get_release_notes(updates_made)
-        branch = commit_and_push_version_update_changes(task, commit_message)
+        commit_and_push_version_update_changes(task, commit_message)
 
         github_pr = open_pr(args, task, title, body)
 
-        github_pr.create_issue_comment(f"Running all tests")
-        github_pr.create_issue_comment(f"/test all")
+        github_pr.create_issue_comment("Running all tests")
+        github_pr.create_issue_comment("/test all")
 
         unhold_pr(github_pr)
 
