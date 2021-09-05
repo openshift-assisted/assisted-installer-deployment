@@ -11,12 +11,12 @@ JIRA_SERVER = "https://issues.redhat.com"
 FILTER_ID = 12380672
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(order=True)
 class IssueData:
+    email_domain: str
+    user: str
     key: str
     url: str
-    user: str
-    email_domain: str
     features: List[str]
 
 
@@ -59,7 +59,7 @@ def main(jira_client, filter_id, webhook):
     text = f"There are <{filter_url}|{len(issues)} new triage tickets>\n"
 
     table = ""
-    for issue in _get_issues_data(issues):
+    for issue in sorted(_get_issues_data(issues)):
         table += f"<{issue.url}|{issue.key}>   {issue.user:<15} {issue.email_domain:<15} {issue.features}\n"
 
     if table:
