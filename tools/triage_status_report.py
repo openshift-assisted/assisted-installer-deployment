@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import json
 import argparse
 import dataclasses
@@ -70,9 +71,12 @@ def main(jira_client, filter_id, webhook):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--jira-username", required=True, help="Jira username for accessing triage tickets")
-    parser.add_argument("--jira-password", required=True, help="Jira password for accessing triage tickets")
-    parser.add_argument("--webhook", help="Slack channel url to post information. Not specifying implies dry-run")
+    parser.add_argument("--jira-username", default=os.environ.get("JIRA_USERNAME"),
+                        help="Jira username for accessing triage tickets")
+    parser.add_argument("--jira-password", default=os.environ.get("JIRA_PASSWORD"),
+                        help="Jira password for accessing triage tickets")
+    parser.add_argument("--webhook", default=os.environ.get("WEBHOOK"),
+                        help="Slack channel url to post information. Not specifying implies dry-run")
     parser.add_argument("--filter-id", default=FILTER_ID, help="Jira filter id")
     args = parser.parse_args()
 
