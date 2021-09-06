@@ -4,7 +4,7 @@ openshift/assisted-installer:
   - assisted-installer-controller
   - assisted-installer
 openshift/assisted-service:
-  revision: 9d64b25d5fcd2c90c360cab28b15b32288124c7e
+  revision: 76425eb6a4761914a7038e623ffd4a4b87a86c34
   images:
   - assisted-service
 openshift-assisted/assisted-ui:
@@ -35,5 +35,5 @@ openshift/assisted-installer-agent:
 # - OPENSHIFT_INSTALL_RELEASE_IMAGE:
 #     quay.io/openshift-release-dev/ocp-release:4.6.16-x86_64
 #     quay.io/openshift-release-dev/ocp-release:4.7.24-x86_64
-#     quay.io/openshift-release-dev/ocp-release:4.8.5-x86_64
+#     quay.io/openshift-release-dev/ocp-release:4.8.9-x86_64
 #
