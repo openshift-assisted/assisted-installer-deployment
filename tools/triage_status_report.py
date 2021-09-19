@@ -19,10 +19,33 @@ class IssueData:
     key: str
     url: str
     features: List[str]
+    manufacturers: List[str]
 
 
-def _get_issues_data(issues):
+def get_hw_manufacturers(host_details):
+    manufacturers = []
+
+    table = [line for line in host_details.split("\n")
+             if line and "Host extra details" not in line]
+    header, hosts = table[0], table[1:]
+    for host in hosts:
+        for info, content in zip(header.split("||"), host.split("|")):
+            if "manufacturer" in info:
+                manufacturers.append(content.strip())
+                break
+
+    return manufacturers
+
+
+def _get_issues_data(jira_client, issues):
     for issue in issues:
+        manufacturers = "Unknown"
+        for comment in jira_client.comments(issue):
+            if "Host extra details" not in comment.body:
+                continue
+
+            manufacturers = get_hw_manufacturers(host_details=comment.body)
+
         key = issue.key
         url = issue.permalink()
         user = issue.raw["fields"]["customfield_12319044"]
@@ -40,7 +63,14 @@ def _get_issues_data(issues):
                         "NetworkType",
                     )]
 
-        yield IssueData(key=key, url=url, user=user, email_domain=email_domain, features=features)
+        yield IssueData(
+            key=key,
+            url=url,
+            user=user,
+            email_domain=email_domain,
+            features=features,
+            manufacturers=manufacturers,
+        )
 
 
 def _post_message(webhook, text):
@@ -60,8 +90,16 @@ def main(jira_client, filter_id, webhook):
     text = f"There are <{filter_url}|{len(issues)} new triage tickets>\n"
 
     table = ""
-    for issue in sorted(_get_issues_data(issues)):
-        table += f"<{issue.url}|{issue.key}>   {issue.user:<15} {issue.email_domain:<15} {issue.features}\n"
+    for issue in sorted(_get_issues_data(jira_client, issues)):
+        entry = f"<{issue.url}|{issue.key}>   {issue.user:<20} {issue.email_domain:<15}\n"
+
+        if issue.features:
+            entry += f'\tFeatures:      {", ".join(issue.features)}\n'
+
+        if issue.manufacturers:
+            entry += f'\tManufacturers: {", ".join(issue.manufacturers)}\n'
+
+        table += entry
 
     if table:
         text += '```{}```'.format(table)
