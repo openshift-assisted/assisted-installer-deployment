@@ -12,7 +12,7 @@ openshift-assisted/assisted-ui:
   images:
   - ocp-metal-ui
 openshift/assisted-installer-agent:
-  revision: 14870a7501549fa77bb04480d7c70caa036caee5
+  revision: 38b5a5f880866b695a3ddd9b80f056185a05b41f
   images:
   - assisted-installer-agent
 
