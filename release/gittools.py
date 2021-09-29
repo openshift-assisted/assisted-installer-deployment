@@ -7,7 +7,7 @@ import requests
 
 class GitApiUtils():
     GIT_API_PREFIX = "https://api.github.com"
-    GIT_API_REPOS = "%s/repos" % GIT_API_PREFIX
+    GIT_API_REPOS = f"{GIT_API_PREFIX}/repos"
     GIT_REPO_TREES_URI_PREFIX = "/git/trees"
     GIT_REQUEST_TIMEOUT = 120
 
@@ -33,15 +33,15 @@ class GitApiUtils():
         data = {
             "tag": tag,
             "object": revision,
-            "message": "release %s" % tag,
+            "message": f"release {tag}",
             "type": "commit",
         }
-        url = "%s/%s/git/tags" % (self.GIT_API_REPOS, repo)
+        url = f"{self.GIT_API_REPOS}/{repo}/git/tags"
         response = requests.post(url, auth=self._credentials, json=data, timeout=self.GIT_REQUEST_TIMEOUT)
         response.raise_for_status()
         tag_obj = response.json()
-        ref_data = {'ref': 'refs/tags/%s' % tag, 'sha': tag_obj.get('sha')}
-        ref_url = "%s/%s/git/refs" % (self.GIT_API_REPOS, repo)
+        ref_data = {'ref': f'refs/tags/{tag}', 'sha': tag_obj.get('sha')}
+        ref_url = f"{self.GIT_API_REPOS}/{repo}/git/refs"
         response = requests.post(ref_url, auth=self._credentials, json=ref_data, timeout=self.GIT_REQUEST_TIMEOUT)
         response.raise_for_status()
         return response.json().get('url')
@@ -53,7 +53,7 @@ class GitApiUtils():
         :param str tag: The tag to delete (e.g. 'v1.0.0')
         """
         logging.info('Deleting tag %(tag)s in repository: %(repo)s', dict(tag=tag, repo=repo))
-        ref_url = "%s/%s/git/refs/tags/%s" % (self.GIT_API_REPOS, repo, tag)
+        ref_url = f"{self.GIT_API_REPOS}/{repo}/git/refs/tags/{tag}"
         response = requests.delete(ref_url, auth=self._credentials, timeout=self.GIT_REQUEST_TIMEOUT)
         response.raise_for_status()
 
@@ -65,7 +65,7 @@ class GitApiUtils():
         :return list: List of tags
         """
         logging.info('Listing tags in repository: %(repo)s', dict(repo=repo))
-        ref_url = "%s/%s/git/refs/tags" % (self.GIT_API_REPOS, repo)
+        ref_url = f"{self.GIT_API_REPOS}/{repo}/git/refs/tags"
         response = requests.get(ref_url, auth=self._credentials, timeout=self.GIT_REQUEST_TIMEOUT)
         response.raise_for_status()
         return [i.get("ref").split("/", 2)[-1] for i in response.json()]
