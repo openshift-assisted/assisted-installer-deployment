@@ -38,7 +38,8 @@ def tag_all(manifest, tag, delete_if_exists=False):
             for repo in repos_with_tag:
                 gtools.delete_tag(repo, tag)
         else:
-            raise ValueError("%s tag already exists in these repositories %s" % (tag, repos_with_tag))
+            raise ValueError(f"{tag} tag already exists in these repositories {repos_with_tag}")
+
     for repo, repo_info in manifest_contnet.items():
         logger.info("Creating %s tag in repo: %s, revision: %s", tag, repo, repo_info['revision'])
         gtools.create_tag(repo, repo_info['revision'], tag)
@@ -77,8 +78,9 @@ def check_images_exists(manifest, tag):
             if not image_exists(image, tag, required_sha):
                 logger.warning("Missing image %s from repo: %s", image, repo)
                 missing_images.append(image)
+
     if missing_images:
-        raise Exception("Missinge images %s" % missing_images)
+        raise Exception(f"Missing images {missing_images}")
 
 
 def image_exists(image_name, tag, required_sha):
