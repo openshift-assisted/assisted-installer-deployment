@@ -23,9 +23,9 @@ logging.getLogger("__main__").setLevel(logging.INFO)
 
 # Users / branch names / messages
 BRANCH_NAME = "{prefix}_update_assisted_service_versions"
-DEFAULT_ASSIGN = "oscohen"
-DEFAULT_WATCHERS = ["lgamliel", "oscohen", "yuvalgoldberg"]
-PR_MENTION = ["gamli75", "oshercc", "YuviGold"]
+DEFAULT_ASSIGN = "odepaz"
+DEFAULT_WATCHERS = ["lgamliel", "odepaz", "yuvalgoldberg"]
+PR_MENTION = ["gamli75", "odepaz", "YuviGold"]
 PR_MESSAGE = "{task}: Bump OCP versions {versions_string}"
 
 OCP_INFO_CALL = (
