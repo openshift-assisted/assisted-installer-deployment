@@ -12,6 +12,8 @@ import sys
 from urllib.parse import urlparse
 import requests
 import jira
+from retry import retry
+
 import add_triage_signature as ats
 import close_by_signature
 
@@ -93,6 +95,7 @@ def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
     return new_issue
 
 
+@retry(exceptions=jira.exceptions.JIRAError, tries=3, delay=10)
 def main(arg):
     if arg.user_password is None:
         username, password = get_credentials_from_netrc(urlparse(JIRA_SERVER).hostname, arg.netrc)
