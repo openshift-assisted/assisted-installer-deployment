@@ -85,4 +85,8 @@ class GitApiUtils():
         '''Get the user credentials from .netrc file'''
         ncfile = netrc.netrc(netrc_path or os.path.expanduser('~/.netrc'))
         credentials = ncfile.authenticators("github.com")
+
+        if credentials is None:
+            raise RuntimeError("No credentials for 'github.com' has been found under ~/.netrc")
+
         return credentials[0], credentials[2]
