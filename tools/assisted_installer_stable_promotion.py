@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import logging
 import os
@@ -42,14 +43,14 @@ def main():
 
 def tag_manifest_images(tags):
     with open(args.deployment, "r") as f:
-        deployment = yaml.load(f)
+        deployment = yaml.safe_load(f)
     for rep, rep_data in deployment.items():
         for image in rep_data["images"]:
             image_full_name = IMAGE_FORMAT.format(image_name=image, tag=rep_data["revision"])
             try:
                 tag_image(image_full_name, tags)
             except Exception as ex:
-                logging("Failed to tag {image}, reason: {exception}".format(image=image, exception=ex))
+                logging.exception("Failed to tag %s, reason: %s", image, ex)
 
 
 def tag_image(image, tags):
