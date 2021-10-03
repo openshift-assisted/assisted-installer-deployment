@@ -5,14 +5,13 @@ pipeline {
         QUAY_IO_CREDS = credentials('ocpmetal_cred')
     }
     options {
-      timeout(time: 1, unit: 'HOURS') 
+      timeout(time: 1, unit: 'HOURS')
     }
 
     stages {
 
         stage('Init'){
             steps {
-                // Login to quay.io
                 sh "docker login quay.io -u ${QUAY_IO_CREDS_USR} -p ${QUAY_IO_CREDS_PSW}"
             }
         }
@@ -21,13 +20,13 @@ pipeline {
             steps {
                 sh '''git clean -f'''
                 sh '''make snapshot'''
-                withCredentials([usernamePassword(credentialsId: 'oshercc_github_cred', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]){
+                withCredentials([usernamePassword(credentialsId: 'osherdp-github-creds', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]){
                     sh('''
                         if [ "$(git status --porcelain)" ];
                         then
                             commitDate="date +%d-%m-%Y-%H-%M"
                             git config --local credential.helper "!f() { echo username=\\$GIT_USERNAME; echo password=\\$GIT_PASSWORD; }; f"
-                            git commit -am "Daily commit" -am "`$commitDate`"
+                            git commit -am "Automatic snapshot of repositories' current git revisions" -am "`$commitDate`"
                             git push origin HEAD:master
 
                             git tag nightly -f
@@ -46,7 +45,7 @@ pipeline {
     post {
         failure {
             script {
-                def data = [text: "Daily release fail, see: ${BUILD_URL}"]
+                def data = [text: "'Repositories revision snapshots' job fail, see: ${BUILD_URL}"]
                 writeJSON(file: 'data.txt', json: data, pretty: 4)
             }
             sh '''curl -X POST -H 'Content-type: application/json' --data-binary "@data.txt"  https://hooks.slack.com/services/$SLACK_TOKEN'''
