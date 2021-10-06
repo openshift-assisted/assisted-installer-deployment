@@ -1,13 +1,9 @@
 FROM quay.io/centos/centos:stream8
 
-# Needed for p7zip package:
-RUN dnf install -y epel-release
-
 RUN dnf update -y && dnf install -y \
     jq \
     gcc \
     git \
-    p7zip \
     make \
     skopeo \
     python38 \
