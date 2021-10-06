@@ -19,7 +19,7 @@ import close_by_signature
 
 
 DEFAULT_DAYS_TO_HANDLE = 30
-DEFAULT_WATCHERS = ["odepaz"]
+DEFAULT_WATCHERS = ["mkowalsk"]
 
 
 LOGS_COLLECTOR = "http://assisted-logs-collector.usersys.redhat.com"

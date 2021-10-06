@@ -17,6 +17,7 @@ aliases:
     - slaviered
     - asalkeld
   code-approvers:
+    - mkowalski
     - romfreiman
     - celebdor
     - filanov

@@ -211,7 +211,7 @@ def close_tickets_by_filters(jira, filters, issues, dry_run_stdout):
 
 
 TARGET_TRANSITION_ID = '41'  # '41' - 'Closed', see GET /rest/api/2/issue/{issueIdOrKey}/transitions
-CLOSED_TICKETS_ASSIGNEE = 'odepaz'
+CLOSED_TICKETS_ASSIGNEE = 'mkowalsk'
 
 
 def close_and_link_issues(jira, filtered_issues_generator, dry_run_stdout):

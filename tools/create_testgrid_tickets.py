@@ -14,7 +14,7 @@ import requests
 import jira
 
 
-DEFAULT_WATCHERS = ["odepaz"]
+DEFAULT_WATCHERS = ["mkowalsk"]
 
 
 TEST_VERSION_REGEX = re.compile(r'.*-(\d\.[^-]+)-.*')
