@@ -12,7 +12,7 @@ import re
 from urllib.parse import urlparse
 import requests
 import jira
-
+from retry import retry
 
 DEFAULT_WATCHERS = ["mkowalsk"]
 
@@ -142,6 +142,7 @@ def get_failed_tests():
         raise
 
 
+@retry(exceptions=jira.exceptions.JIRAError, tries=3, delay=10)
 def main(arg):
     if arg.user_password is None:
         username, password = get_credentials_from_netrc(urlparse(JIRA_SERVER).hostname, arg.netrc)
