@@ -52,7 +52,7 @@ def _post_message(webhook, text):
         response.raise_for_status()
 
 
-def main(jira_client, filter_id, webhook):
+def triage_status_report(jira_client, filter_id, webhook):
     jira_filter = jira_client.filter(filter_id)
     issues = jira_client.search_issues(jira_filter.jql)
 
@@ -69,7 +69,7 @@ def main(jira_client, filter_id, webhook):
     _post_message(webhook, text)
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--jira-username", default=os.environ.get("JIRA_USERNAME"),
                         help="Jira username for accessing triage tickets")
@@ -82,4 +82,8 @@ if __name__ == "__main__":
 
     client = jira.JIRA(JIRA_SERVER, basic_auth=(args.jira_username, args.jira_password))
 
-    main(client, args.filter_id, args.webhook)
+    triage_status_report(client, args.filter_id, args.webhook)
+
+
+if __name__ == "__main__":
+    main()

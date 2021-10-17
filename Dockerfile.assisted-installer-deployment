@@ -1,0 +1,30 @@
+FROM quay.io/centos/centos:stream8
+
+RUN dnf update -y && dnf install -y \
+    jq \
+    gcc \
+    git \
+    make \
+    skopeo \
+    python39 \
+    python39-pip \
+    python39-devel \
+        && dnf clean all
+
+RUN alternatives --set python /usr/bin/python3.9
+
+RUN curl -fsSL https://get.docker.com -o get-docker.sh
+RUN sh get-docker.sh
+
+RUN pip3 install pip --upgrade
+
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install -r /tmp/requirements.txt
+
+COPY dev-requirements.txt /tmp/dev-requirements.txt
+RUN pip install -r /tmp/dev-requirements.txt
+
+WORKDIR /home/assisted-installer-deployment
+COPY . .
+
+RUN pip install .
