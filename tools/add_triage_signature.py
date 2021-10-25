@@ -204,7 +204,9 @@ class Signature(abc.ABC):
     def _update_triaging_ticket(self, key, comment, should_update=False):
         report = "\n"
         report += self._identifing_string + "\n"
-        report += comment
+        if comment is not None:
+            report += comment
+
         jira_comment = self.find_signature_comment(key)
         signature_name = type(self).__name__
         if self.dry_run_file is not None:
@@ -823,6 +825,9 @@ class ApiInvalidCertificateSignature(ErrorSignature):
                 logs_text += "\n additional {} relevant similar error log lines are found".format(
                     len(invalid_api_log_lines) - 5)
                 report = dedent("""{}""".format(ticket_inform + logs_text))
+            else:
+                report = None
+
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
