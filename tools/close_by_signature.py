@@ -8,7 +8,7 @@ import json
 
 from jira.exceptions import JIRAError
 
-from add_triage_signature import (
+from .add_triage_signature import (
     config_logger, get_credentials, get_jira_client, get_issues,
     SIGNATURES,
 )

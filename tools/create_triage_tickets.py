@@ -2,7 +2,6 @@
 
 # This script gets a list of the filed clusters from the assisted-logs-server
 # For each cluster, which does not already has a triaging Jira ticket, it creates one
-#
 
 import argparse
 import logging
@@ -14,8 +13,8 @@ import requests
 import jira
 from retry import retry
 
-import add_triage_signature as ats
-import close_by_signature
+from . import close_by_signature
+from .add_triage_signature import FailureDescription, days_ago, add_signatures
 
 
 DEFAULT_DAYS_TO_HANDLE = 30
@@ -87,8 +86,9 @@ def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
                                      components=[{'name': "Cloud-Triage"}],
                                      priority={'name': 'Blocker'},
                                      issuetype={'name': 'Bug'},
-                                     description=ats.FailureDescription(jclient).build_description(url,
-                                                                                                   cluster_md))
+                                     description=FailureDescription(jclient).build_description(
+                                         url,
+                                         cluster_md))
 
     logger.info("issue created: %s", new_issue)
     add_watchers(jclient, new_issue)
@@ -122,7 +122,7 @@ def main(arg):
 
     for failure in failed_clusters:
         date = failure["name"].split("_")[0]
-        if not arg.all and ats.days_ago(date) > DEFAULT_DAYS_TO_HANDLE:
+        if not arg.all and days_ago(date) > DEFAULT_DAYS_TO_HANDLE:
             continue
 
         res = requests.get("{}/files/{}/metadata.json".format(LOGS_COLLECTOR, failure['name']))
@@ -133,7 +133,7 @@ def main(arg):
             new_issue = create_jira_ticket(jclient, summaries, failure['name'], cluster)
             if new_issue is not None:
                 logs_url = "{}/files/{}".format(LOGS_COLLECTOR, failure['name'])
-                ats.add_signatures(jclient, logs_url, new_issue.key)
+                add_signatures(jclient, logs_url, new_issue.key)
 
     if not args.filters_json:
         return
