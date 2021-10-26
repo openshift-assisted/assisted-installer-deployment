@@ -1,15 +1,11 @@
+#!/usr/bin/env python3
 import argparse
 import logging
-import os
+import pathlib
 import subprocess
 
 import yaml
 from retry import retry
-
-parser = argparse.ArgumentParser()
-parser.add_argument("--deployment", help="deployment yaml file to update", type=str,
-                    default=os.path.join(os.path.dirname(__file__), "../assisted-installer.yaml"))
-args = parser.parse_args()
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)-10s %(filename)s:%(lineno)d %(message)s')
 logger = logging.getLogger(__name__)
@@ -24,19 +20,31 @@ def does_image_exist(pull_spec: str) -> bool:
     return subprocess.call(cmd, stdout=subprocess.DEVNULL) == 0
 
 
-def main():
-    with open(args.deployment, "r") as f:
+def validate_deployment_file(path):
+    with open(path, "r") as f:
         deployment = yaml.safe_load(f)
 
-    for _, val in deployment.items():
+    for val in deployment.values():
         hash = val["revision"]
         for image in val["images"]:
             pull_spec = f"{DEFAULT_REGISTRY}/{image}:{hash}"
 
             if not does_image_exist(pull_spec):
-                raise ValueError(f"Image {pull_spec} couldn't be found.")
+                raise ValueError(f"Image {pull_spec} couldn't be found")
 
             logger.info(f"Image {pull_spec} was found")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--deployment",
+        default=pathlib.Path(__file__).parent.parent / "assisted-installer.yaml",
+        help="deployment yaml file to update", type=str,
+    )
+    args = parser.parse_args()
+
+    validate_deployment_file(args.deployment)
 
 
 if __name__ == "__main__":
