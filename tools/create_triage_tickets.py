@@ -13,8 +13,8 @@ import requests
 import jira
 from retry import retry
 
-from . import close_by_signature
-from .add_triage_signature import FailureDescription, days_ago, add_signatures
+import close_by_signature
+from add_triage_signature import FailureDescription, days_ago, add_signatures
 
 
 DEFAULT_DAYS_TO_HANDLE = 30
