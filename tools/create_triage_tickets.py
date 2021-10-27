@@ -91,7 +91,9 @@ def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
                                          cluster_md))
 
     logger.info("issue created: %s", new_issue)
-    add_watchers(jclient, new_issue)
+    # (mko 27/10/2021) Disabling adding watchers due to the HTTP 400 error raised when creating
+    #                  AITRIAGE tickets from Jenkins using this script.
+    # add_watchers(jclient, new_issue)
     return new_issue
 
 
