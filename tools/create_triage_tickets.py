@@ -14,7 +14,7 @@ import jira
 from retry import retry
 
 import close_by_signature
-from add_triage_signature import FailureDescription, days_ago, add_signatures
+from add_triage_signature import FailureDescription, days_ago, add_signatures, custom_field_name, CF_DOMAIN
 
 
 DEFAULT_DAYS_TO_HANDLE = 30
@@ -66,6 +66,14 @@ def get_all_triage_tickets(jclient):
 def add_watchers(jclient, issue):
     for watcher in DEFAULT_WATCHERS:
         jclient.add_watcher(issue.key, watcher)
+
+
+def close_internal_user_ticket(jclient, issue_key):
+    issue = jclient.issue(issue_key)
+    if issue.raw['fields'].get(custom_field_name(CF_DOMAIN)) == "redhat.com":
+        logger.info("closing internal user's issue: %s", issue_key)
+        jclient.transition_issue(issue, close_by_signature.TARGET_TRANSITION_ID)
+        jclient.add_comment(issue, "Automatically closing the issue for internal Red Hat user.")
 
 
 def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
@@ -136,6 +144,7 @@ def main(arg):
             if new_issue is not None:
                 logs_url = "{}/files/{}".format(LOGS_COLLECTOR, failure['name'])
                 add_signatures(jclient, logs_url, new_issue.key)
+                close_internal_user_ticket(jclient, new_issue.key)
 
     if not args.filters_json:
         return
