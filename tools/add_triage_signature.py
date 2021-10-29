@@ -635,11 +635,13 @@ class StorageDetailSignature(Signature):
         if exit_code != 0:
             output.append("non-zero smartctl exit code: " + ", ".join(flag.name for flag in cls.SmartctlExitCode
                                                                       if flag in cls.SmartctlExitCode(exit_code)))
-            if cls.SmartctlExitCode(exit_code) == cls.SmartctlExitCode.SOME_ATA_COMMAND_FAILED_OR_SMART_CHECKSUM_ERROR:
-                if "smart_status" not in smart:
+            if "smart_status" not in smart:
+                if cls.SmartctlExitCode(exit_code) == cls.SmartctlExitCode.SOME_ATA_COMMAND_FAILED_OR_SMART_CHECKSUM_ERROR:
                     output.append(
                         "{color:green}*this typically happens on virtual disks*{color} that don't actually have S.M.A.R.T. information,"
                         " but may also happen due to other reasons")
+                if cls.SmartctlExitCode(exit_code) == cls.SmartctlExitCode.COMMANDLINE_DID_NOT_PARSE:
+                    output.append("{color:green}*this is not a disk problem*{color} but the smartctl runtime issue")
 
         for message in smartctl.get("messages", []):
             severity = message.get("severity", "unknown")
