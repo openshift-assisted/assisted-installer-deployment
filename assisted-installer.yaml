@@ -1,10 +1,10 @@
 openshift/assisted-installer:
-  revision: 149411cf81ec722e7d9ccaae4f3e4f430cd034cd
+  revision: a7cfe1dd666dc06c0a94a00c4cb8906dc87a3fb9
   images:
   - assisted-installer-controller
   - assisted-installer
 openshift/assisted-service:
-  revision: b227df11416eb2729a65a2eddda89602d235e9bb
+  revision: c775a6486a9d44e6cc1b7c73ab17186efb27006b
   images:
   - assisted-service
 openshift-assisted/assisted-ui:
