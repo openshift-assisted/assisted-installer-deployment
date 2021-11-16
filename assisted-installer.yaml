@@ -1,5 +1,5 @@
 openshift/assisted-installer:
-  revision: 78994c76f194dfd796b2fc92eb3fe71ccf5d3eb3
+  revision: 2cdb77683a090f01787688023186112b5712d45b
   images:
   - assisted-installer-controller
   - assisted-installer
@@ -18,15 +18,15 @@ openshift/assisted-installer-agent:
 
 # Downstream images:
 # - assisted-installer:
-#     hash: 78994c76f194dfd796b2fc92eb3fe71ccf5d3eb3
-#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-rhel8:v1.0.0-106
-#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-rhel8:v1.0.0-106
-#     production image name: registry.redhat.io/openshift4/assisted-installer-rhel8:v1.0.0-106
+#     hash: 2cdb77683a090f01787688023186112b5712d45b
+#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-rhel8:v1.0.0-112
+#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-rhel8:v1.0.0-112
+#     production image name: registry.redhat.io/openshift4/assisted-installer-rhel8:v1.0.0-112
 # - assisted-installer-controller:
-#     hash: 78994c76f194dfd796b2fc92eb3fe71ccf5d3eb3
-#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-reporter-rhel8:v1.0.0-138
-#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-reporter-rhel8:v1.0.0-138
-#     production image name: registry.redhat.io/openshift4/assisted-installer-reporter-rhel8:v1.0.0-138
+#     hash: 2cdb77683a090f01787688023186112b5712d45b
+#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-reporter-rhel8:v1.0.0-145
+#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-reporter-rhel8:v1.0.0-145
+#     production image name: registry.redhat.io/openshift4/assisted-installer-reporter-rhel8:v1.0.0-145
 # - assisted-installer-agent:
 #     hash: 60ac74ef05e45fd612222f3bd17f0b148d346d98
 #     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v1.0.0-76
