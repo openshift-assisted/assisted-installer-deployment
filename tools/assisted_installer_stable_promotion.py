@@ -28,8 +28,7 @@ parser.add_argument("--tag", help="image tagging", type=str)
 parser.add_argument("--version-tag", help="promote to a version based tag. Will not add tag with date", action='store_true')
 args = parser.parse_args()
 
-timestamped_tag = "{tag}.{timestamp}".format(
-    tag=args.tag, timestamp=datetime.now().strftime("%d.%m.%Y-%H.%M"))
+timestamped_tag = f'{args.tag}.{datetime.now().strftime("%d.%m.%Y-%H.%M")}'
 
 
 def main():
@@ -44,7 +43,7 @@ def main():
 def tag_manifest_images(tags):
     with open(args.deployment, "r") as f:
         deployment = yaml.safe_load(f)
-    for rep, rep_data in deployment.items():
+    for rep_data in deployment.values():
         for image in rep_data["images"]:
             image_full_name = IMAGE_FORMAT.format(image_name=image, tag=rep_data["revision"])
             try:
@@ -54,18 +53,17 @@ def tag_manifest_images(tags):
 
 
 def tag_image(image, tags):
-    for t in tags:
-        logging.info("Tagging image {image} to {tag}".format(
-            image=image, tag=t))
-        tagged_image = "{image}:{tag}".format(image=image.rsplit(":")[0], tag=t)
-        subprocess.check_output("skopeo copy docker://{} docker://{}".format(image, tagged_image), shell=True)
+    for tag in tags:
+        logging.info(f"Tagging image {image} to {tag}")
+        tagged_image = f'{image.rsplit(":")[0]}:{tag}'
+        subprocess.check_output(f"skopeo copy docker://{image} docker://{tagged_image}", shell=True)
 
 
 def tag_repo(tags):
-    for t in tags:
-        logging.info("Tagging repo with {tag}".format(tag=t))
-        subprocess.check_output("git tag {tag} -f".format(tag=t), shell=True)
-        subprocess.check_output("git push origin {tag} -f".format(tag=t), shell=True)
+    for tag in tags:
+        logging.info(f"Tagging repo with {tag}")
+        subprocess.check_output(f"git tag {tag} -f", shell=True)
+        subprocess.check_output(f"git push origin {tag}", shell=True)
 
 
 if __name__ == "__main__":

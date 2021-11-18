@@ -1,5 +1,8 @@
-build-container-image: build
+build-container-image: assisted-installer-deployment
 env_file:
  - skipper.env
 make:
   makefile: Makefile
+volumes:
+  - $PWD/assisted-installer.yaml:/assisted-installer.yaml:rw
+  - $HOME/.netrc:/root/.netrc:ro
