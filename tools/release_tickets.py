@@ -25,6 +25,10 @@ REPO_URL_TEMPLATE = "https://github.com/{}"
 ISSUES_REGEX = re.compile(r'((MGMT-|OCPBUGSM-|BZ-|Bug )[0-9]+)')
 BZ_BUGS_PREFIX = "Bug "
 
+# Only for those statuses on issue-type Bug, we should make changes
+JIRA_BUG_STATUSES = ['Done', 'QE Review', 'POST', 'MODIFIED',
+                     'Closed', 'Verified', 'Release Pending']
+
 BZ_REFERENCE_FIELD = "customfield_12316840"
 DEFAULT_NETRC_FILE = "~/.netrc"
 BZ_SERVER = "https://bugzilla.redhat.com"
@@ -191,7 +195,7 @@ def filter_issues_to_modify(issues, ignore_issues):
         ignore_issues = []
     filtered_issues = []
     for i in issues:
-        if i.key not in ignore_issues and i.fields.status.name in ['Done', 'QE Review']:
+        if i.key not in ignore_issues and i.fields.status.name in JIRA_BUG_STATUSES:
             filtered_issues.append(i)
     return filtered_issues
 
@@ -316,6 +320,10 @@ def update_fix_versions_for_all_issues(bzclient, jira_issues_to_modify, bz_issue
 
 
 def update_fixversion_for_jira_issue(issue, fix_version):
+    if issue.key.startswith("OCPBUGSM"):
+        logger.info("skip setting fixVersion on issue %s", issue.key)
+        return
+
     if len(issue.fields.fixVersions) != 1 or fix_version != issue.fields.fixVersions[0].name:
         logger.info("setting fixVersion %s to issue %s", fix_version, issue.key)
         issue.fields.fixVersions = [{'name': fix_version}]
