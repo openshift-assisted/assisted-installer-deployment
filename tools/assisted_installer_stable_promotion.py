@@ -63,7 +63,7 @@ def tag_repo(tags):
     for tag in tags:
         logging.info(f"Tagging repo with {tag}")
         subprocess.check_output(f"git tag {tag} -f", shell=True)
-        subprocess.check_output(f"git push origin {tag}", shell=True)
+        subprocess.check_output(f"git push origin {tag} -f", shell=True)
 
 
 if __name__ == "__main__":
