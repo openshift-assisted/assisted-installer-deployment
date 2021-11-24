@@ -4,8 +4,8 @@
 
 You can release a new version by creating a tag in all the assisted-installer repositories.
 
-1. Update the assited-installer.yaml with the relevant git hash.
-2. Build the docker image, locally
+1. Update the assisted-installer.yaml with the relevant git hash.
+2. Build the docker image, locally:
 
 ```bash
 make local-update
