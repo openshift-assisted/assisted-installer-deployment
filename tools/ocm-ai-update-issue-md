@@ -44,7 +44,7 @@ if [[ -z "$START_TAG" ]]; then
     echo "A start container tag with -s|--start-tag to fetch the commit info from. Will use the begining of the ocm-2.3 branch in each repo" >&2
 fi
 
-declare -r QUAY_REPOS=(assisted-service assisted-installer assisted-installer-controller assisted-installer-agent)
+declare -r QUAY_REPOS=(assisted-service assisted-installer assisted-installer-controller assisted-installer-agent assisted-image-service)
 declare -A END_GIT_SHA=()
 declare -A START_GIT_SHA=()
 

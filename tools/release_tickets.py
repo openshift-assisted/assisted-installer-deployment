@@ -347,7 +347,7 @@ def get_login(user_password, server):
 
 
 if __name__ == "__main__":
-    VALID_REPOS = ['assisted-installer', 'assisted-service', 'assisted-installer-agent', 'assisted-ui']
+    VALID_REPOS = ['assisted-installer', 'assisted-service', 'assisted-installer-agent', 'assisted-ui', 'assisted-image-service']
     parser = argparse.ArgumentParser()
     loginGroup = parser.add_argument_group(title="login options")
     loginArgs = loginGroup.add_mutually_exclusive_group()
