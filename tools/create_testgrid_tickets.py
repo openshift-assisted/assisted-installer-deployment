@@ -13,6 +13,9 @@ from urllib.parse import urlparse
 import requests
 import jira
 from retry import retry
+from add_triage_signature import (
+    get_credentials_from_netrc, get_jira_client,
+)
 
 DEFAULT_WATCHERS = ["mkowalsk"]
 
@@ -32,17 +35,6 @@ JIRA_DESCRIPTION = """
 *Last Test failure:* https://prow.ci.openshift.org/view/gcs/origin-ci-test/logs/{test_id}/{last_fail}
 {tests_list}
 """
-
-
-def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
-    cred = netrc.netrc(os.path.expanduser(netrc_file))
-    username, _, password = cred.authenticators(server)
-    return username, password
-
-
-def get_jira_client(username, password):
-    logger.info("log-in with username: %s", username)
-    return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
 
 
 def format_summary(failure_data):

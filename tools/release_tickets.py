@@ -15,6 +15,9 @@ import yaml
 import jira
 import bugzilla
 from tabulate import tabulate
+from add_triage_signature import (
+    get_credentials_from_netrc, get_jira_client,
+)
 
 
 logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
@@ -36,17 +39,6 @@ JIRA_SERVER = "https://issues.redhat.com/"
 REPORT_FORMAT_CSV = "csv_report"
 REPORT_FORMAT_MARKDOWN = "markdown_report"
 REPORT_FORMAT_STD = "std_report"
-
-
-def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
-    cred = netrc.netrc(os.path.expanduser(netrc_file))
-    username, _, password = cred.authenticators(server)
-    return username, password
-
-
-def get_jira_client(username, password):
-    logger.info("log-in to Jira with username: %s", username)
-    return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
 
 
 def get_bz_client(username, password):

@@ -1055,9 +1055,30 @@ def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
     return username, password
 
 
-def get_jira_client(username, password):
-    logger.info("log-in with username: %s", username)
-    return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
+def get_credentials(user_password, use_netrc):
+    if user_password is None:
+        username, password = get_credentials_from_netrc(urlparse(JIRA_SERVER).hostname, use_netrc)
+    else:
+        try:
+            [username, password] = user_password.split(":", 1)
+        except Exception:
+            logger.error("Failed to parse user:password")
+            raise
+
+    return username, password
+
+
+def get_jira_client(_, access_token):
+    '''
+    This function accepts two parameters for compatibility reasons, i.e.
+    the old (username, password) now became (_, access_token).
+
+    That allows a seamless transition in all the places calling this function
+    by requiring them to only change the value of the password field without
+    changing the whole signature.
+    '''
+    logger.info("log-in with token")
+    return jira.JIRA(JIRA_SERVER, token_auth=access_token)
 
 
 ############################
@@ -1165,19 +1186,6 @@ def process_issues(jclient, issues, update, update_signature):
 
         add_signatures(jclient, url, issue.key, should_update=update,
                        signatures=update_signature)
-
-
-def get_credentials(user_password, use_netrc):
-    if user_password is None:
-        username, password = get_credentials_from_netrc(urlparse(JIRA_SERVER).hostname, use_netrc)
-    else:
-        try:
-            [username, password] = user_password.split(":", 1)
-        except Exception:
-            logger.error("Failed to parse user:password")
-            raise
-
-    return username, password
 
 
 def main(args):

@@ -12,9 +12,11 @@ from urllib.parse import urlparse
 import requests
 import jira
 from retry import retry
-
 import close_by_signature
-from add_triage_signature import FailureDescription, days_ago, add_signatures, custom_field_name, CF_DOMAIN
+from add_triage_signature import (
+    FailureDescription, days_ago, add_signatures, custom_field_name, CF_DOMAIN,
+    get_credentials_from_netrc, get_jira_client,
+)
 
 
 DEFAULT_DAYS_TO_HANDLE = 30
@@ -25,17 +27,6 @@ LOGS_COLLECTOR = "http://assisted-logs-collector.usersys.redhat.com"
 JIRA_SERVER = "https://issues.redhat.com/"
 DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SUMMARY = "cloud.redhat.com failure: {failure_id}"
-
-
-def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
-    cred = netrc.netrc(os.path.expanduser(netrc_file))
-    username, _, password = cred.authenticators(server)
-    return username, password
-
-
-def get_jira_client(username, password):
-    logger.info("log-in with username: %s", username)
-    return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
 
 
 def format_summary(failure_data):
