@@ -13,14 +13,12 @@ import netrc
 import logging
 import textwrap
 import pprint
-from urllib.parse import urlparse
 from collections import Counter
 from tabulate import tabulate
-import jira
 import json
 
+from utils import get_jira_client, get_login_credentials
 
-JIRA_SERVER = "https://issues.redhat.com/"
 
 FIELD_SPRINT = 'customfield_12310940'
 FIELD_CONTRIBUTORS = 'customfield_12315950'
@@ -542,15 +540,13 @@ def handle_sprint_update(args, jiraTool, issues):
 
 
 def main(args):
-    if args.user_password is None:
-        username, password = jira_netrc_login(urlparse(JIRA_SERVER).hostname, args.netrc)
-    else:
-        try:
-            username, password = args.user_password.split(":", 1)
-        except Exception as e:
-            raise ValueError("Failed to parse user:password") from e
-
-    j = jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
+    username, password = get_login_credentials(args.user_password)
+    j = get_jira_client(
+        access_token=args.jira_access_token,
+        username=username,
+        password=password,
+        netrc_file=args.netrc,
+    )
 
     max_results = args.max_results
     if args.max_results == MAX_RESULTS and args.linked_issues:
@@ -657,6 +653,8 @@ def build_parser():
     loginArgs.add_argument("--netrc", default="~/.netrc", help="netrc file")
     loginArgs.add_argument("-up", "--user-password", required=False,
                            help="Username and password in the format of user:pass")
+    loginArgs.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
+                           help="PAT (personal access token) for accessing Jira")
     selectorsGroup = parser.add_argument_group(title="Issues selection")
     selectors = selectorsGroup.add_mutually_exclusive_group(required=True)
     selectors.add_argument("-s", "--search-query", required=False, help="Search query to use")

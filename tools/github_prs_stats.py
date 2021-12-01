@@ -1,18 +1,11 @@
+#!/usr/bin/env python3
 from datetime import datetime
-import numpy
-import netrc
-from github import Github, GithubException
-import os
+import statistics
 import argparse
 
-DEFAULT_NETRC_FILE = "~/.netrc"
+from github import Github, GithubException
 
-
-def get_credentials_from_netrc(netrc_file=DEFAULT_NETRC_FILE):
-    cred = netrc.netrc(os.path.expanduser(netrc_file))
-
-    username, _, password = cred.authenticators("github.com")
-    return username, password
+from utils import get_credentials_from_netrc
 
 
 def add_pr_duration(pr):
@@ -33,7 +26,10 @@ def add_pr_duration(pr):
 
 
 def main(args):
-    username, password = get_credentials_from_netrc(args.netrc)
+    username, password = get_credentials_from_netrc(
+        hostname="github.com",
+        netrc_file=args.netrc,
+    )
     gclient = Github(username, password)
 
     try:
@@ -74,7 +70,7 @@ def print_stats(stats, hours_resolution=False):
 
         max_duration = max(pr_open_durations) / resolution
         min_duration = min(pr_open_durations) / resolution
-        median_duration = numpy.median(numpy.array(pr_open_durations)) / resolution
+        median_duration = statistics.median(pr_open_durations) / resolution
 
         print("| %22s | %14.4f | %14.4f | %14.4f | %14.4f | %14d |" %
               (user, average_duration, median_duration, max_duration, min_duration, pr_count))
@@ -86,7 +82,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--repo", required=True, help="repo name. For example 'openshift/assisted-service'")
     parser.add_argument("-s", "--status", default="open", choices=valid_status, help="PR status to filter")
-    parser.add_argument("--netrc", default=DEFAULT_NETRC_FILE, help="netrc file")
+    parser.add_argument("--netrc", required=False, help="netrc file")
     parser.add_argument("-H", "--hours-resolution", action="store_true", help="Output stats in resolution of hours")
     args = parser.parse_args()
 

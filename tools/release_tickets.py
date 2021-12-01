@@ -8,13 +8,13 @@ import re
 import os
 import sys
 import logging
-import netrc
 from urllib.parse import urlparse
 from collections import defaultdict
 import yaml
-import jira
 import bugzilla
 from tabulate import tabulate
+
+from utils import get_jira_client, get_credentials_from_netrc, get_login_credentials
 
 
 logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
@@ -36,17 +36,6 @@ JIRA_SERVER = "https://issues.redhat.com/"
 REPORT_FORMAT_CSV = "csv_report"
 REPORT_FORMAT_MARKDOWN = "markdown_report"
 REPORT_FORMAT_STD = "std_report"
-
-
-def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
-    cred = netrc.netrc(os.path.expanduser(netrc_file))
-    username, _, password = cred.authenticators(server)
-    return username, password
-
-
-def get_jira_client(username, password):
-    logger.info("log-in to Jira with username: %s", username)
-    return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
 
 
 def get_bz_client(username, password):
@@ -336,14 +325,14 @@ def update_fixversion_for_jira_issue(issue, fix_version):
 
 
 def get_login(user_password, server):
-    if user_password is None:
-        username, password = get_credentials_from_netrc(urlparse(server).hostname, args.netrc)
-    else:
-        try:
-            [username, password] = user_password.split(":", 1)
-        except Exception:
-            logger.error("Failed to parse user:password")
-    return username, password
+    username, password = get_login_credentials(user_password)
+    if username and password:
+        return username, password
+
+    return get_credentials_from_netrc(
+        hostname=urlparse(server).hostname,
+        netrc_file=args.netrc,
+    )
 
 
 if __name__ == "__main__":
@@ -353,6 +342,8 @@ if __name__ == "__main__":
     loginArgs = loginGroup.add_mutually_exclusive_group()
     loginArgs.add_argument("--netrc", default="~/.netrc", required=False, help="netrc file")
     loginArgs.add_argument("-jup", "--jira-user-password", required=False, help="Jira username and password in the format of user:pass")
+    loginArgs.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
+                           help="PAT (personal access token) for accessing Jira")
     loginArgs.add_argument("-bup", "--bugzilla-user-password", required=False, help="Bugzilla username and password in the format of user:pass")
     selectionGroup = parser.add_argument_group(title="Issues selection")
     selectionGroup.add_argument("-f", "--from-version", help="From version", type=str, required=False)
@@ -397,10 +388,15 @@ if __name__ == "__main__":
     if args.verbose:
         logger.setLevel(logging.DEBUG)
 
-    jusername, jpassword = get_login(args.jira_user_password, JIRA_SERVER)
     busername, bpassword = get_login(args.bugzilla_user_password, BZ_SERVER)
-    jclient = get_jira_client(jusername, jpassword)
     bzclient = get_bz_client(busername, bpassword)
+
+    username, password = get_login_credentials(args.jira_user_password)
+    jclient = get_jira_client(
+        access_token=args.jira_access_token,
+        username=username,
+        password=password,
+    )
 
     main(jclient, bzclient, args.from_version, args.to_version, args.report_format, specific_issue=args.issue,
          fix_version=args.fixed_in_value, should_update=args.update_ticket_fixed_in, is_dry_run=args.dry_run,

@@ -6,17 +6,14 @@ import argparse
 import functools
 import json
 import logging
-import netrc
 import os
 import re
-
 import itertools
 import sys
 import tempfile
 from collections import OrderedDict, defaultdict
 from datetime import datetime
 from textwrap import dedent
-from urllib.parse import urlparse
 from enum import Flag, auto
 
 import colorlog
@@ -27,6 +24,8 @@ import requests
 import tqdm
 from fuzzywuzzy import fuzz
 from tabulate import tabulate
+
+from utils import get_jira_client, get_login_credentials
 
 DEFAULT_DAYS_TO_HANDLE = 30
 CF_USER = "12319044"
@@ -1040,24 +1039,12 @@ class AgentStepFailureSignature(Signature):
 ############################
 # Common functionality
 ############################
-DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SERVER = "https://issues.redhat.com"
 SIGNATURES = [AllInstallationAttemptsSignature, ApiInvalidCertificateSignature, FailureDetails,
               FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
               StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature,
               MediaDisconnectionSignature, ConsoleTimeoutSignature, AgentStepFailureSignature,
               CNIConfigurationError]
-
-
-def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
-    cred = netrc.netrc(os.path.expanduser(netrc_file))
-    username, _, password = cred.authenticators(server)
-    return username, password
-
-
-def get_jira_client(username, password):
-    logger.info("log-in with username: %s", username)
-    return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
 
 
 ############################
@@ -1167,23 +1154,14 @@ def process_issues(jclient, issues, update, update_signature):
                        signatures=update_signature)
 
 
-def get_credentials(user_password, use_netrc):
-    if user_password is None:
-        username, password = get_credentials_from_netrc(urlparse(JIRA_SERVER).hostname, use_netrc)
-    else:
-        try:
-            [username, password] = user_password.split(":", 1)
-        except Exception:
-            logger.error("Failed to parse user:password")
-            raise
-
-    return username, password
-
-
 def main(args):
-    username, password = get_credentials(args.user_password, args.netrc)
-
-    jclient = get_jira_client(username, password)
+    username, password = get_login_credentials(args.user_password)
+    jclient = get_jira_client(
+        access_token=args.jira_access_token,
+        username=username,
+        password=password,
+        netrc_file=args.netrc,
+    )
 
     issues = get_issues(jclient, args.issue, args.search_query, args.recent_issues)
 
@@ -1249,6 +1227,8 @@ You can run this script without affecting the tickets by using the --dry-run fla
     login_args = login_group.add_mutually_exclusive_group()
     login_args.add_argument("--netrc", default="~/.netrc", required=False, help="netrc file")
     login_args.add_argument("-up", "--user-password", required=False, help="Username and password in the format of user:pass")
+    login_args.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
+                            help="PAT (personal access token) for accessing Jira")
 
     selectors_group = parser.add_argument_group(title="Issues selection")
     selectors = selectors_group.add_mutually_exclusive_group(required=True)

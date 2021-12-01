@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 import logging
@@ -8,9 +9,9 @@ import json
 
 from jira.exceptions import JIRAError
 
+import utils
 from add_triage_signature import (
-    config_logger, get_credentials, get_jira_client, get_issues,
-    SIGNATURES,
+    config_logger, get_issues, SIGNATURES,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,8 @@ def parse_args():
         required=False,
         help='netrc file',
     )
+    login_args.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
+                            help="PAT (personal access token) for accessing Jira")
     login_args.add_argument(
         '-up', '--user-password',
         required=False,
@@ -291,8 +294,13 @@ def run_using_cli(args):
     logger.debug('Starting issue resolver task using CLI with args=%s',
                  pprint.pformat(args.__dict__))
 
-    username, password = get_credentials(args.user_password, args.netrc)
-    jira = get_jira_client(username, password)
+    username, password = utils.get_login_credentials(args.user_password)
+    jira = utils.get_jira_client(
+        access_token=args.jira_access_token,
+        username=username,
+        password=password,
+        netrc_file=args.netrc,
+    )
 
     if args.filters_json:
         filters_json = read_filters_file(args.filters_json)
