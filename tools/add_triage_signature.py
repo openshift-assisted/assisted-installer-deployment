@@ -470,9 +470,9 @@ class HostsExtraDetailSignature(Signature):
             hosts.append(OrderedDict(
                 id=host['id'],
                 hostname=inventory['hostname'],
-                requested_hostname=host.get('requested_hostname', ""),
+                requested_hostname=host.get('requested_hostname', "N/A"),
                 last_contacted=format_time(host['checked_in_at']),
-                installation_disk=host.get('installation_disk_path', ""),
+                installation_disk=host.get('installation_disk_path', "N/A"),
                 product_name=inventory['system_vendor'].get('product_name', "Unavailable"),
                 manufacturer=inventory['system_vendor'].get('manufacturer', "Unavailable"),
                 virtual_host=inventory['system_vendor'].get('virtual', False),
@@ -706,13 +706,13 @@ class StorageDetailSignature(Signature):
             disks = inventory['disks']
             disks_details = defaultdict(list)
             for d in disks:
-                disk_type = d.get('drive_type', "")
+                disk_type = d.get('drive_type', "N/A")
                 disks_details['type'].append(disk_type)
-                disks_details['bootable'].append(str(d.get('bootable', "NA")))
-                disks_details['name'].append(d.get('name', ""))
-                disks_details['path'].append(d.get('path', ""))
-                disks_details['by-path'].append(d.get('by_path', ""))
-                disks_details['smart'].append((self._parse_smart(d.get('smart', ""))
+                disks_details['bootable'].append(str(d.get('bootable', "N/A")))
+                disks_details['name'].append(d.get('name', "N/A"))
+                disks_details['path'].append(d.get('path', "N/A"))
+                disks_details['by-path'].append(d.get('by_path', "N/A"))
+                disks_details['smart'].append((self._parse_smart(d.get('smart', "N/A"))
                                                if disk_type != 'ODD' else
                                                "{color:green}*N/A for optical drives*{color}"))
             hosts.append(OrderedDict({
