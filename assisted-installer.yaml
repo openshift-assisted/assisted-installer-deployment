@@ -15,6 +15,10 @@ openshift/assisted-installer-agent:
   revision: 1b51ecd2786c0f56ceb8f2051fe0af4dae1f7173
   images:
   - assisted-installer-agent
+openshift/assisted-image-service:
+  revision: a6f4e9968f11ac730523a38fe17bac0661a885ed
+  images:
+  - assisted-image-service
 
 # Downstream images:
 # - assisted-installer:
