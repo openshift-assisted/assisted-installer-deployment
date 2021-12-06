@@ -13,7 +13,7 @@ import jira
 import requests
 
 import close_by_signature
-from add_triage_signature import FailureDescription, days_ago, add_signatures, custom_field_name, CF_DOMAIN
+from add_triage_signature import FailureDescription, days_ago, add_signatures, custom_field_name, CF_DOMAIN, CF_IGNORED_DOMAINS
 from utils import get_jira_client, get_login_credentials
 
 
@@ -55,12 +55,12 @@ def add_watchers(jclient, issue):
         jclient.add_watcher(issue.key, watcher)
 
 
-def close_internal_user_ticket(jclient, issue_key):
+def close_custom_domain_user_ticket(jclient, issue_key):
     issue = jclient.issue(issue_key)
-    if issue.raw['fields'].get(custom_field_name(CF_DOMAIN)) == "redhat.com":
-        logger.info("closing internal user's issue: %s", issue_key)
+    if issue.raw['fields'].get(custom_field_name(CF_DOMAIN)) in CF_IGNORED_DOMAINS:
+        logger.info("closing custom user's issue: %s", issue_key)
         jclient.transition_issue(issue, close_by_signature.TARGET_TRANSITION_ID)
-        jclient.add_comment(issue, "Automatically closing the issue for internal Red Hat user.")
+        jclient.add_comment(issue, "Automatically closing the issue for the specified domain.")
 
 
 def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
@@ -129,7 +129,7 @@ def main(args):
             if new_issue is not None:
                 logs_url = "{}/files/{}".format(LOGS_COLLECTOR, failure['name'])
                 add_signatures(jclient, logs_url, new_issue.key)
-                close_internal_user_ticket(jclient, new_issue.key)
+                close_custom_domain_user_ticket(jclient, new_issue.key)
 
     if not args.filters_json:
         return
