@@ -3,18 +3,18 @@
 # This script gets a list of the filed clusters from the assisted-logs-server
 # For each cluster, which does not already has a triaging Jira ticket, it creates one
 
+import os
 import argparse
 import logging
-import netrc
-import os
 import sys
-from urllib.parse import urlparse
-import requests
-import jira
 from retry import retry
+
+import jira
+import requests
 
 import close_by_signature
 from add_triage_signature import FailureDescription, days_ago, add_signatures, custom_field_name, CF_DOMAIN
+from utils import get_jira_client, get_login_credentials
 
 
 DEFAULT_DAYS_TO_HANDLE = 30
@@ -22,20 +22,7 @@ DEFAULT_WATCHERS = ["mkowalsk"]
 
 
 LOGS_COLLECTOR = "http://assisted-logs-collector.usersys.redhat.com"
-JIRA_SERVER = "https://issues.redhat.com/"
-DEFAULT_NETRC_FILE = "~/.netrc"
 JIRA_SUMMARY = "cloud.redhat.com failure: {failure_id}"
-
-
-def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
-    cred = netrc.netrc(os.path.expanduser(netrc_file))
-    username, _, password = cred.authenticators(server)
-    return username, password
-
-
-def get_jira_client(username, password):
-    logger.info("log-in with username: %s", username)
-    return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
 
 
 def format_summary(failure_data):
@@ -106,16 +93,14 @@ def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
 
 
 @retry(exceptions=jira.exceptions.JIRAError, tries=3, delay=10)
-def main(arg):
-    if arg.user_password is None:
-        username, password = get_credentials_from_netrc(urlparse(JIRA_SERVER).hostname, arg.netrc)
-    else:
-        try:
-            [username, password] = arg.user_password.split(":", 1)
-        except Exception:
-            logger.error("Failed to parse user:password")
-
-    jclient = get_jira_client(username, password)
+def main(args):
+    username, password = get_login_credentials(args.user_password)
+    jclient = get_jira_client(
+        access_token=args.jira_access_token,
+        username=username,
+        password=password,
+        netrc_file=args.netrc,
+    )
 
     try:
         res = requests.get("{}/files/".format(LOGS_COLLECTOR))
@@ -132,7 +117,7 @@ def main(arg):
 
     for failure in failed_clusters:
         date = failure["name"].split("_")[0]
-        if not arg.all and days_ago(date) > DEFAULT_DAYS_TO_HANDLE:
+        if not args.all and days_ago(date) > DEFAULT_DAYS_TO_HANDLE:
             continue
 
         res = requests.get("{}/files/{}/metadata.json".format(LOGS_COLLECTOR, failure['name']))
@@ -159,6 +144,8 @@ if __name__ == "__main__":
     loginArgs.add_argument("--netrc", default="~/.netrc", required=False, help="netrc file")
     loginArgs.add_argument("-up", "--user-password", required=False,
                            help="Username and password in the format of user:pass")
+    loginArgs.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
+                           help="PAT (personal access token) for accessing Jira")
     parser.add_argument("-a", "--all", action="store_true",
                         help="Try creating Triage Tickets for all failures. " +
                         "Default is just for failures in the past 30 days")

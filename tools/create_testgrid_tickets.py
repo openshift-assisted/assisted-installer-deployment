@@ -5,14 +5,14 @@ For each failure, which does not already has an open triage Jira ticket, it crea
 """
 import argparse
 import logging
-import netrc
-import os
 import sys
 import re
-from urllib.parse import urlparse
+import os
 import requests
 import jira
 from retry import retry
+
+from utils import get_jira_client, get_login_credentials
 
 DEFAULT_WATCHERS = ["mkowalsk"]
 
@@ -32,17 +32,6 @@ JIRA_DESCRIPTION = """
 *Last Test failure:* https://prow.ci.openshift.org/view/gcs/origin-ci-test/logs/{test_id}/{last_fail}
 {tests_list}
 """
-
-
-def get_credentials_from_netrc(server, netrc_file=DEFAULT_NETRC_FILE):
-    cred = netrc.netrc(os.path.expanduser(netrc_file))
-    username, _, password = cred.authenticators(server)
-    return username, password
-
-
-def get_jira_client(username, password):
-    logger.info("log-in with username: %s", username)
-    return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
 
 
 def format_summary(failure_data):
@@ -143,16 +132,14 @@ def get_failed_tests():
 
 
 @retry(exceptions=jira.exceptions.JIRAError, tries=3, delay=10)
-def main(arg):
-    if arg.user_password is None:
-        username, password = get_credentials_from_netrc(urlparse(JIRA_SERVER).hostname, arg.netrc)
-    else:
-        try:
-            [username, password] = arg.user_password.split(":", 1)
-        except Exception:
-            logger.error("Failed to parse user:password")
-
-    jclient = get_jira_client(username, password)
+def main(args):
+    username, password = get_login_credentials(args.user_password)
+    jclient = get_jira_client(
+        access_token=args.jira_access_token,
+        username=username,
+        password=password,
+        netrc_file=args.netrc,
+    )
 
     try:
         failed_tests = get_failed_tests()
@@ -172,6 +159,8 @@ if __name__ == "__main__":
     loginArgs.add_argument("--netrc", default="~/.netrc", required=False, help="netrc file")
     loginArgs.add_argument("-up", "--user-password", required=False,
                            help="Username and password in the format of user:pass")
+    loginArgs.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
+                           help="PAT (personal access token) for accessing Jira")
     parser.add_argument("-v", "--verbose", action="store_true", help="Output verbose logging")
     args = parser.parse_args()
 

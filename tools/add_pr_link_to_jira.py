@@ -4,12 +4,9 @@
 
 import argparse
 import os
-import jira
-import netrc
 import logging
-from urllib.parse import urlparse
 
-JIRA_SERVER = "https://issues.redhat.com/"
+import utils
 
 
 logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
@@ -23,13 +20,6 @@ def log_exception(msg):
         logger.exception(msg)
     else:
         logger.error(msg)
-
-
-def jira_netrc_login(netrcFile):
-    cred = netrc.netrc(os.path.expanduser(netrcFile))
-    username, _, password = cred.authenticators(urlparse(JIRA_SERVER).hostname)
-    logger.info("log-in with username: %s", username)
-    return jira.JIRA(JIRA_SERVER, basic_auth=(username, password))
 
 
 # when trying to add a remote link, the method tries to get the application links, which only Jira admin
@@ -51,6 +41,8 @@ PR_LINK_COMMENT_FORMAT = PR_LINK_PREFIX + "{}"
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--netrc", default="~/.netrc", help="netrc file")
+    parser.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
+                        help="PAT (personal access token) for accessing Jira")
     parser.add_argument("-i", "--issue", required=True, help="Issue key")
     parser.add_argument("-l", "--pr-link", required=True, help="PR link")
     parser.add_argument("-v", "--verbose", action="store_true", help="Output verbose logging")
@@ -60,7 +52,12 @@ if __name__ == "__main__":
         isVerbose = True
         logging.getLogger("__main__").setLevel(logging.DEBUG)
 
-    j = jira_netrc_login(args.netrc)
+    username, password = utils.get_login_credentials(args.jira_user_password)
+    j = utils.get_jira_client(
+        access_token=args.jira_access_token,
+        username=username,
+        password=password,
+    )
     j1 = monkeyPatchApplicationLinks(j)
 
     issue = j1.issue(args.issue)
