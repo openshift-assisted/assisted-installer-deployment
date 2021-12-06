@@ -7,7 +7,7 @@ from typing import List
 
 import requests
 
-from .utils import get_jira_client
+from utils import get_jira_client
 
 FILTER_ID = 12380672
 
