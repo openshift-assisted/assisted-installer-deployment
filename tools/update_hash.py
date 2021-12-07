@@ -16,6 +16,7 @@ def update_hash(deployment_yaml, repo, hash):
 
     with open(deployment_yaml, "r") as f:
         deployment = yaml.load(f)
+
     if repo not in deployment:
         sys.exit("repo {} is not located in the deployment file".format(repo))
     if hash == deployment[repo]:
