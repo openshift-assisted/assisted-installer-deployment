@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)-10s %(filename)s:%(
 logger = logging.getLogger(__name__)
 logging.getLogger("__main__").setLevel(logging.INFO)
 
-DEFAULT_REGISTRY = "quay.io/ocpmetal"
+DEFAULT_REGISTRY = "quay.io/edge-infrastructure"
 
 
 @retry(exceptions=subprocess.SubprocessError, tries=3, delay=10)
@@ -27,7 +27,12 @@ def validate_deployment_file(path):
     for val in deployment.values():
         hash = val["revision"]
         for image in val["images"]:
-            pull_spec = f"{DEFAULT_REGISTRY}/{image}:{hash}"
+            if image.startswith("quay.io/ocpmetal/"):
+                pull_spec = f"{image}:{hash}"
+            elif image.startswith("quay.io/edge-infrastructure"):
+                pull_spec = f"{image}:latest-{hash}"
+            else:
+                raise ValueError(f"Unknown repository of image {image}")
 
             if not does_image_exist(pull_spec):
                 raise ValueError(f"Image {pull_spec} couldn't be found")
