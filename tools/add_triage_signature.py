@@ -551,6 +551,8 @@ class CNIConfigurationError(ErrorSignature):
         """
         Given a host object, get the IP addresses of neighboring hosts. These are extracted from the given host's "connectivity" stanza.
         """
+        if host["connectivity"] is None:
+            return []
         try:
             return [(remote_host['host_id'], remote_host['l3_connectivity'][0]['remote_ip_address'])
                     for remote_host in
