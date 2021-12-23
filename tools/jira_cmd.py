@@ -9,7 +9,6 @@ import sys
 import re
 import csv
 import argparse
-import netrc
 import logging
 import textwrap
 import pprint
@@ -17,7 +16,9 @@ from collections import Counter
 from tabulate import tabulate
 import json
 
-from utils import get_jira_client, get_login_credentials
+import jira
+
+import consts
 
 
 FIELD_SPRINT = 'customfield_12310940'
@@ -49,13 +50,6 @@ def log_exception(msg):
         logger.exception(msg)
     else:
         logger.error(msg)
-
-
-def jira_netrc_login(server, netrcFile):
-    cred = netrc.netrc(os.path.expanduser(netrcFile))
-    username, _, password = cred.authenticators(server)
-    logger.info("log-in with username: %s", username)
-    return username, password
 
 
 def get_raw_field(issue, fieldName):
@@ -540,13 +534,7 @@ def handle_sprint_update(args, jiraTool, issues):
 
 
 def main(args):
-    username, password = get_login_credentials(args.user_password)
-    j = get_jira_client(
-        access_token=args.jira_access_token,
-        username=username,
-        password=password,
-        netrc_file=args.netrc,
-    )
+    j = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token)
 
     max_results = args.max_results
     if args.max_results == MAX_RESULTS and args.linked_issues:
@@ -650,9 +638,6 @@ def build_parser():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     loginGroup = parser.add_argument_group(title="Jira login options")
     loginArgs = loginGroup.add_mutually_exclusive_group()
-    loginArgs.add_argument("--netrc", default="~/.netrc", help="netrc file")
-    loginArgs.add_argument("-up", "--user-password", required=False,
-                           help="Username and password in the format of user:pass")
     loginArgs.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
                            help="PAT (personal access token) for accessing Jira")
     selectorsGroup = parser.add_argument_group(title="Issues selection")

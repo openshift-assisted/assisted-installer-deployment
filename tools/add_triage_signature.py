@@ -25,7 +25,7 @@ import tqdm
 from fuzzywuzzy import fuzz
 from tabulate import tabulate
 
-from utils import get_jira_client, get_login_credentials
+import consts
 
 DEFAULT_DAYS_TO_HANDLE = 30
 CF_USER = "12319044"
@@ -1158,13 +1158,7 @@ def process_issues(jclient, issues, update, update_signature):
 
 
 def main(args):
-    username, password = get_login_credentials(args.user_password)
-    jclient = get_jira_client(
-        access_token=args.jira_access_token,
-        username=username,
-        password=password,
-        netrc_file=args.netrc,
-    )
+    jclient = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token)
 
     issues = get_issues(jclient, args.issue, args.search_query, args.recent_issues)
 
@@ -1226,12 +1220,8 @@ You can run this script without affecting the tickets by using the --dry-run fla
     signature_names = [s.__name__ for s in SIGNATURES]
     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    login_group = parser.add_argument_group(title="Login options")
-    login_args = login_group.add_mutually_exclusive_group()
-    login_args.add_argument("--netrc", default="~/.netrc", required=False, help="netrc file")
-    login_args.add_argument("-up", "--user-password", required=False, help="Username and password in the format of user:pass")
-    login_args.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
-                            help="PAT (personal access token) for accessing Jira")
+    parser.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
+                        help="PAT (personal access token) for accessing Jira")
 
     selectors_group = parser.add_argument_group(title="Issues selection")
     selectors = selectors_group.add_mutually_exclusive_group(required=True)
