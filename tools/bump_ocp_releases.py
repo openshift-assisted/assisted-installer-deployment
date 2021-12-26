@@ -24,11 +24,11 @@ PR_MENTION = ["romfreiman", "celebdor", "gamli75"]
 
 OCP_INFO_CALL = (
     r"curl https://api.openshift.com/api/upgrades_info/v1/graph\?channel\=fast-{version}\&arch\={architecture}"
-    r" | jq '[.nodes[]] | sort_by(.version | split(\".\") | map(tonumber))[-1]'"
+    " | jq '[.nodes[]] | sort_by(.version | split(\".\") | map(tonumber))[-1]'"
 )
 OCP_INFO_FC_CALL = (
     r"curl https://api.openshift.com/api/upgrades_info/v1/graph\?channel\=candidate-{version}\&arch\={architecture}"
-    "| jq '[.nodes[]] | max_by(.version)'"
+    " | jq '[.nodes[]] | max_by(.version)'"
 )
 
 RHCOS_RELEASES = "https://mirror.openshift.com/pub/openshift-v4/{architecture}/dependencies/rhcos/{minor}"
