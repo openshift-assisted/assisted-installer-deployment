@@ -24,6 +24,7 @@ TRACKED_REPOSITORIES = list(itertools.chain(
             "assisted-image-service",
             "assisted-installer",
             "assisted-installer-agent",
+            "cluster-api-provider-agent",
         )),
     itertools.product(
         ("openshift-assisted",), (
