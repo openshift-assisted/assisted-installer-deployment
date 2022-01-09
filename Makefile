@@ -17,8 +17,7 @@ autopep8:
 	autopep8 --recursive --in-place .
 
 pylint:
-	mkdir -p reports
-	PYLINTHOME=reports/ pylint release/
+	pylint release/
 
 ###########
 # Release #
