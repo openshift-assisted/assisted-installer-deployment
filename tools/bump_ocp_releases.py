@@ -111,7 +111,9 @@ def clone_assisted_service(github_user, github_password, tmp_dir):
     return clone_dir
 
 
-def commit_and_push_version_update_changes(clone_dir, title):
+def commit_and_push_version_update_changes(clone_dir, title, github_user):
+    sh.git.config("user.name", github_user, _cwd=clone_dir)
+    sh.git.config("user.email", "infrastructure-operator@redhat.com", _cwd=clone_dir)
     sh.git.commit(all=True, message=title, _cwd=clone_dir)
 
     branch = f"bump/{uuid.uuid4()}"
@@ -229,7 +231,7 @@ def bump_ocp_releases(username, password, dry_run):
                 logger.info("Already created PR %s for changes: %s", pull_request.html_url, updates_made_str)
                 return
 
-        create_github_pr(github_client, clone_dir, updates_made, title)
+        create_github_pr(github_client, clone_dir, updates_made, title, username)
 
 
 def update_release_images_json(default_release_images_json, updates_made, updates_made_str, dry_run, clone_dir):
@@ -321,9 +323,9 @@ def update_os_images_json(default_os_images_json, updates_made, updates_made_str
     return updates_made, updates_made_str
 
 
-def create_github_pr(github_client, clone_dir, updates_made, title):
+def create_github_pr(github_client, clone_dir, updates_made, title, github_user):
     commit_message = f"NO-ISSUE: {title}\n\n{get_release_notes(updates_made)}"
-    branch = commit_and_push_version_update_changes(clone_dir, commit_message)
+    branch = commit_and_push_version_update_changes(clone_dir, commit_message, github_user)
 
     body = get_pr_body(updates_made)
     open_pr(github_client, title, body, branch)
