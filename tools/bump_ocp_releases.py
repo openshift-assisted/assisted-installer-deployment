@@ -6,6 +6,7 @@ import copy
 import netrc
 import logging
 import argparse
+import pathlib
 import tempfile
 import textwrap
 import subprocess
@@ -15,12 +16,13 @@ import bs4
 from distutils import version
 import github
 import requests
+import sh
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)-10s %(filename)s:%(lineno)d %(message)s')
 logger = logging.getLogger(__name__)
 logging.getLogger(__file__).setLevel(logging.INFO)
 
-PR_MENTION = ["romfreiman", "celebdor", "gamli75"]
+PR_MENTION = ["osherdp", "romfreiman", "celebdor", "gamli75"]
 
 OCP_INFO_CALL = (
     r"curl https://api.openshift.com/api/upgrades_info/v1/graph\?channel\=fast-{version}\&arch\={architecture}"
@@ -31,7 +33,7 @@ OCP_INFO_FC_CALL = (
     " | jq '[.nodes[]] | max_by(.version)'"
 )
 
-RHCOS_RELEASES = "https://mirror.openshift.com/pub/openshift-v4/{architecture}/dependencies/rhcos/{minor}"
+RHCOS_RELEASES = "https://mirror.openshift.com/pub/openshift-v4/{architecture}/dependencies/rhcos/{minor}/"
 RHCOS_PRE_RELEASE = "pre-release"
 
 # RHCOS version
@@ -47,9 +49,7 @@ DEFAULT_OS_IMAGES_FILE = os.path.join("data", "default_os_images.json")
 DEFAULT_RELEASE_IMAGES_FILE = os.path.join("data", "default_release_images.json")
 
 # assisted-service PR related constants
-ASSISTED_SERVICE_CLONE_DIR = "assisted-service"
-ASSISTED_SERVICE_GITHUB_REPO_ORGANIZATION = "openshift"
-ASSISTED_SERVICE_GITHUB_REPO = f"{ASSISTED_SERVICE_GITHUB_REPO_ORGANIZATION}/assisted-service"
+ASSISTED_SERVICE_GITHUB_REPO = "openshift/assisted-service"
 ASSISTED_SERVICE_GITHUB_REPO_URL_MASTER = f"https://raw.githubusercontent.com/{ASSISTED_SERVICE_GITHUB_REPO}/master"
 ASSISTED_SERVICE_UPSTREAM_URL = f"https://github.com/{ASSISTED_SERVICE_GITHUB_REPO}.git"
 
@@ -57,7 +57,6 @@ ASSISTED_SERVICE_MASTER_DEFAULT_OS_IMAGES_JSON_URL = \
     f"{ASSISTED_SERVICE_GITHUB_REPO_URL_MASTER}/{DEFAULT_OS_IMAGES_FILE}"
 ASSISTED_SERVICE_MASTER_DEFAULT_RELEASE_IMAGES_JSON_URL = \
     f"{ASSISTED_SERVICE_GITHUB_REPO_URL_MASTER}/{DEFAULT_RELEASE_IMAGES_FILE}"
-ASSISTED_SERVICE_OPENSHIFT_TEMPLATE_YAML = f"{ASSISTED_SERVICE_CLONE_DIR}/openshift/template.yaml"
 
 OCP_REPLACE_CONTEXT = ['"{version}"', "ocp-release:{version}"]
 
@@ -67,23 +66,6 @@ CPU_ARCHITECTURE_AMD64 = "amd64"
 CPU_ARCHITECTURE_X86_64 = "x86_64"
 CPU_ARCHITECTURE_ARM64 = "arm64"
 CPU_ARCHITECTURE_AARCH64 = "aarch64"
-
-
-def cmd(command, env=None, **kwargs):
-    logging.info(f"Running command {command} with env {env} kwargs {kwargs}")
-
-    if env is None:
-        env = os.environ
-    else:
-        env = {**os.environ, **env}
-
-    popen = subprocess.Popen(command, env=env, **kwargs)
-    stdout, stderr = popen.communicate()
-
-    if popen.returncode != 0:
-        raise subprocess.CalledProcessError(returncode=popen.returncode, cmd=command, output=stdout, stderr=stderr)
-
-    return stdout, stderr
 
 
 def get_rhcos_version_from_iso(minor_version, rhcos_latest_release, cpu_architecture):
@@ -110,48 +92,31 @@ def get_rhcos_version_from_iso(minor_version, rhcos_latest_release, cpu_architec
 
 def request_json_file(json_url):
     res = requests.get(json_url)
-    if not res.ok:
-        raise RuntimeError(
-            f"GET {json_url} failed status {res.status_code}")
-    return json.loads(res.text)
+    res.raise_for_status()
+    return res.json()
 
 
-def git_cmd(*args: str):
-    return subprocess.check_output(("git",) + args, cwd=ASSISTED_SERVICE_CLONE_DIR)
+def clone_assisted_service(github_user, github_password, tmp_dir):
+    clone_dir = tmp_dir / "assisted-service"
 
-
-def clone_assisted_service(github_user, github_password):
-    cmd(["rm", "-rf", ASSISTED_SERVICE_CLONE_DIR])
-
-    cmd([
-        "git",
-        "clone",
+    sh.git.clone(
         f"https://{github_user}:{github_password}@github.com/{github_user}/assisted-service.git",
-        ASSISTED_SERVICE_CLONE_DIR,
-    ])
+        clone_dir,
+    )
 
-    git_cmd("remote", "add", "upstream", ASSISTED_SERVICE_UPSTREAM_URL)
-    git_cmd("fetch", "upstream")
-    git_cmd("reset", "upstream/master", "--hard")
+    sh.git.remote.add("upstream", ASSISTED_SERVICE_UPSTREAM_URL, _cwd=clone_dir)
+    sh.git.fetch.upstream(_cwd=clone_dir)
+    sh.git.reset("upstream/master", hard=True, _cwd=clone_dir)
+
+    return clone_dir
 
 
-def commit_and_push_version_update_changes(title):
-    git_cmd("commit", "-a", "-m", title)
+def commit_and_push_version_update_changes(clone_dir, title):
+    sh.git.commit(all=True, message=title, _cwd=clone_dir)
+
     branch = f"bump/{uuid.uuid4()}"
-    git_cmd("push", "origin", f"HEAD:{branch}")
+    sh.git.push("origin", f"HEAD:{branch}", _cwd=clone_dir)
     return branch
-
-
-def verify_latest_config():
-    try:
-        cmd(["make", "generate-configuration"], cwd=ASSISTED_SERVICE_CLONE_DIR)
-        cmd(["make", "generate-bundle"], cwd=ASSISTED_SERVICE_CLONE_DIR)
-    except subprocess.CalledProcessError as e:
-        if e.returncode == 2:
-            # We run the command just for its side-effects, we don't care if it fails
-            return
-
-        raise
 
 
 def open_pr(github_client, title, body, branch):
@@ -205,10 +170,11 @@ def get_latest_rhcos_release_from_minor(minor_release: str, all_releases: list, 
 
 
 def get_all_releases(openshift_version, cpu_architecture):
+    logging.info("Getting all releases for version %s and architecture %s",
+                 openshift_version, cpu_architecture)
     path = RHCOS_RELEASES.format(minor=openshift_version, architecture=cpu_architecture)
     res = requests.get(path)
-    if not res.ok:
-        return None
+    res.raise_for_status()
 
     page = res.text
     soup = bs4.BeautifulSoup(page, 'html.parser')
@@ -220,45 +186,53 @@ def get_rhcos_release_from_default_version_json(rhcos_image_url):
     return rhcos_image_url.split('/')[-2]
 
 
-def main(username, password, dry_run):
+def bump_ocp_releases(username, password, dry_run):
     if dry_run:
         logger.info("On dry-run mode")
 
-    clone_assisted_service(username, password)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_dir = pathlib.Path(tmp_dir)
+        clone_dir = clone_assisted_service(username, password, tmp_dir)
 
-    default_release_images_json = request_json_file(ASSISTED_SERVICE_MASTER_DEFAULT_RELEASE_IMAGES_JSON_URL)
-    default_os_images_json = request_json_file(ASSISTED_SERVICE_MASTER_DEFAULT_OS_IMAGES_JSON_URL)
+        default_release_images_json = request_json_file(ASSISTED_SERVICE_MASTER_DEFAULT_RELEASE_IMAGES_JSON_URL)
+        default_os_images_json = request_json_file(ASSISTED_SERVICE_MASTER_DEFAULT_OS_IMAGES_JSON_URL)
 
-    updates_made = set()
-    updates_made_str = set()
+        updates_made = set()
+        updates_made_str = set()
 
-    update_release_images_json(default_release_images_json, updates_made, updates_made_str, dry_run)
-    update_os_images_json(default_os_images_json, updates_made, updates_made_str, dry_run)
+        update_release_images_json(default_release_images_json, updates_made, updates_made_str, dry_run, clone_dir)
+        update_os_images_json(default_os_images_json, updates_made, updates_made_str, dry_run, clone_dir)
 
-    if not updates_made:
-        return
-
-    verify_latest_config()
-
-    if dry_run:
-        logger.info(f"Bump OCP versions: {updates_made_str}")
-        logger.info(f"GitHub PR description:\n{get_pr_body(updates_made)}")
-        return
-
-    github_client = github.Github(username, password)
-
-    title = f'Bump OCP versions {", ".join(sorted(updates_made_str))}'
-
-    repo = github_client.get_repo(ASSISTED_SERVICE_GITHUB_REPO)
-    for pull_request in repo.get_pulls(state="open", base="master"):
-        if pull_request.title == title:
-            logger.info("Already created PR %s for changes: %s", pull_request.html_url, updates_made_str)
+        if not updates_made:
+            logger.info("No updates are needed, all is up to date!")
             return
 
-    create_github_pr(github_client, updates_made, title)
+        try:
+            sh.make("generate-configuration", _cwd=clone_dir)
+        except sh.ErrorReturnCode as e:
+            raise RuntimeError(f"Failed {e.full_cmd} with stderr: {e.stderr}") from e
+
+        if dry_run:
+            logger.info(f"Bump OCP versions: {updates_made_str}")
+            logger.info(f"GitHub PR description:\n{get_pr_body(updates_made)}")
+            git_diff = sh.git.diff(_env={"GIT_PAGER": "cat"}, _cwd=clone_dir)
+            logger.info(f"Git diff:\n{git_diff}")
+            return
+
+        github_client = github.Github(username, password)
+
+        title = f'Bump OCP versions {", ".join(sorted(updates_made_str))}'
+
+        repo = github_client.get_repo(ASSISTED_SERVICE_GITHUB_REPO)
+        for pull_request in repo.get_pulls(state="open", base="master"):
+            if pull_request.title == title:
+                logger.info("Already created PR %s for changes: %s", pull_request.html_url, updates_made_str)
+                return
+
+        create_github_pr(github_client, clone_dir, updates_made, title)
 
 
-def update_release_images_json(default_release_images_json, updates_made, updates_made_str, dry_run):
+def update_release_images_json(default_release_images_json, updates_made, updates_made_str, dry_run, clone_dir):
     updated_version_json = copy.deepcopy(default_release_images_json)
 
     for index, release_image in enumerate(default_release_images_json):
@@ -281,19 +255,19 @@ def update_release_images_json(default_release_images_json, updates_made, update
             updates_made_str.add(f"release {current_default_release_version} -> {latest_ocp_release_version}")
 
             logger.info(f"New latest ocp release available for {openshift_version}, "
-                        "{current_default_release_version} -> {latest_ocp_release_version}")
+                        f"{current_default_release_version} -> {latest_ocp_release_version}")
             updated_version_json[index]["version"] = latest_ocp_release_version
             updated_version_json[index]["url"] = updated_version_json[index]["url"].replace(current_default_release_version,
                                                                                             latest_ocp_release_version)
 
     if updates_made:
-        with open(os.path.join(ASSISTED_SERVICE_CLONE_DIR, DEFAULT_RELEASE_IMAGES_FILE), 'w') as outfile:
+        with clone_dir.joinpath(DEFAULT_RELEASE_IMAGES_FILE).open("w") as outfile:
             json.dump(updated_version_json, outfile, indent=4)
 
     return updates_made, updates_made_str
 
 
-def update_os_images_json(default_os_images_json, updates_made, updates_made_str, dry_run):
+def update_os_images_json(default_os_images_json, updates_made, updates_made_str, dry_run, clone_dir):
     updated_version_json = copy.deepcopy(default_os_images_json)
 
     for index, os_image in enumerate(default_os_images_json):
@@ -310,8 +284,11 @@ def update_os_images_json(default_os_images_json, updates_made, updates_made_str
         rhcos_latest_of_releases = get_all_releases(openshift_version, cpu_architecture)
         pre_release = False
         if not rhcos_latest_of_releases:
+            logging.info("Found no release candidate for version %s, fetching pre-releases",
+                         openshift_version)
             rhcos_latest_of_releases = get_all_releases(RHCOS_PRE_RELEASE, cpu_architecture)
             pre_release = True
+
         rhcos_latest_release = get_latest_rhcos_release_from_minor(openshift_version, rhcos_latest_of_releases, pre_release)
 
         if rhcos_default_release != rhcos_latest_release:
@@ -338,15 +315,15 @@ def update_os_images_json(default_os_images_json, updates_made, updates_made_str
             updated_version_json[index]["version"] = rhcos_version_from_iso
 
     if updates_made:
-        with open(os.path.join(ASSISTED_SERVICE_CLONE_DIR, DEFAULT_OS_IMAGES_FILE), 'w') as outfile:
+        with clone_dir.joinpath(DEFAULT_OS_IMAGES_FILE).open("w") as outfile:
             json.dump(updated_version_json, outfile, indent=4)
 
     return updates_made, updates_made_str
 
 
-def create_github_pr(github_client, updates_made, title):
+def create_github_pr(github_client, clone_dir, updates_made, title):
     commit_message = f"NO-ISSUE: {title}\n\n{get_release_notes(updates_made)}"
-    branch = commit_and_push_version_update_changes(commit_message)
+    branch = commit_and_push_version_update_changes(clone_dir, commit_message)
 
     body = get_pr_body(updates_made)
     open_pr(github_client, title, body, branch)
@@ -385,7 +362,7 @@ def get_github_credentials_from_netrc():
     return credentials[0], credentials[2]
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-gup",
@@ -413,4 +390,8 @@ if __name__ == "__main__":
         except ValueError as e:
             raise ValueError("Failed to parse user:password") from e
 
-    main(username, password, args.dry_run)
+    bump_ocp_releases(username, password, args.dry_run)
+
+
+if __name__ == "__main__":
+    main()

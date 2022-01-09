@@ -11,10 +11,11 @@ RUN dnf update -y && dnf install -y \
     python39-devel \
         && dnf clean all
 
-RUN alternatives --set python /usr/bin/python3.9
+# required for generating configuration in assisted-service repo
+RUN curl https://mirror.openshift.com/pub/openshift-v4/clients/butane/latest/butane --output /usr/local/bin/butane \
+    && chmod +x /usr/local/bin/butane
 
-RUN curl -fsSL https://get.docker.com -o get-docker.sh
-RUN sh get-docker.sh
+RUN alternatives --set python /usr/bin/python3.9
 
 RUN pip3 install pip --upgrade
 
