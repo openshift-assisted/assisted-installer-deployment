@@ -188,7 +188,7 @@ def get_rhcos_release_from_default_version_json(rhcos_image_url):
     return rhcos_image_url.split('/')[-2]
 
 
-def bump_ocp_releases(username, password, dry_run):
+def bump_ocp_releases(username, password, dry_run, bypass_iso_download):
     if dry_run:
         logger.info("On dry-run mode")
 
@@ -202,8 +202,8 @@ def bump_ocp_releases(username, password, dry_run):
         updates_made = set()
         updates_made_str = set()
 
-        update_release_images_json(default_release_images_json, updates_made, updates_made_str, dry_run, clone_dir)
-        update_os_images_json(default_os_images_json, updates_made, updates_made_str, dry_run, clone_dir)
+        update_release_images_json(default_release_images_json, updates_made, updates_made_str, clone_dir)
+        update_os_images_json(default_os_images_json, updates_made, updates_made_str, clone_dir, bypass_iso_download)
 
         if not updates_made:
             logger.info("No updates are needed, all is up to date!")
@@ -234,7 +234,7 @@ def bump_ocp_releases(username, password, dry_run):
         create_github_pr(github_client, clone_dir, updates_made, title, username)
 
 
-def update_release_images_json(default_release_images_json, updates_made, updates_made_str, dry_run, clone_dir):
+def update_release_images_json(default_release_images_json, updates_made, updates_made_str, clone_dir):
     updated_version_json = copy.deepcopy(default_release_images_json)
 
     for index, release_image in enumerate(default_release_images_json):
@@ -269,7 +269,7 @@ def update_release_images_json(default_release_images_json, updates_made, update
     return updates_made, updates_made_str
 
 
-def update_os_images_json(default_os_images_json, updates_made, updates_made_str, dry_run, clone_dir):
+def update_os_images_json(default_os_images_json, updates_made, updates_made_str, clone_dir, bypass_iso_download):
     updated_version_json = copy.deepcopy(default_os_images_json)
 
     for index, os_image in enumerate(default_os_images_json):
@@ -309,7 +309,7 @@ def update_os_images_json(default_os_images_json, updates_made, updates_made_str
             updated_version_json[index]["url"] = rhcos_image
             updated_version_json[index]["rootfs_url"] = rhcos_rootfs
 
-            if dry_run:
+            if bypass_iso_download:
                 rhcos_version_from_iso = "8888888"
             else:
                 minor_version = RHCOS_PRE_RELEASE if pre_release else openshift_version
@@ -377,6 +377,11 @@ def main():
         action='store_true',
         help="Do not apply any changes, but rather print what would have been applied",
     )
+    parser.add_argument(
+        "--bypass-iso-download",
+        action='store_true',
+        help="Avoid downloading RHCOS iso to fetch build version",
+    )
     args = parser.parse_args()
 
     if args.github_user_password is None:
@@ -392,7 +397,7 @@ def main():
         except ValueError as e:
             raise ValueError("Failed to parse user:password") from e
 
-    bump_ocp_releases(username, password, args.dry_run)
+    bump_ocp_releases(username, password, args.dry_run, args.bypass_iso_download)
 
 
 if __name__ == "__main__":
