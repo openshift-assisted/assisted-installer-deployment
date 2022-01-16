@@ -2,7 +2,6 @@ import argparse
 import subprocess
 import yaml
 import os
-import yamlordereddictloader
 import update_hash
 
 parser = argparse.ArgumentParser()
@@ -16,11 +15,11 @@ def main():
     full_release = args.full or os.environ.get("NIGHTLY_RELEASE", "false") == "true"
 
     with open(args.deployment, "r") as f:
-        deployment = yaml.load(f, Loader=yamlordereddictloader.Loader)
+        deployment = yaml.safe_load(f)
 
     for rep in deployment:
         if full_release:
-            hash = subprocess.check_output("git ls-remote https://github.com/{}.git HEAD | cut -f 1".format(rep), shell=True)[:-1]
+            hash = subprocess.check_output(f"git ls-remote https://github.com/{rep}.git HEAD | cut -f 1", shell=True)[:-1]
             hash = hash.decode("utf-8")
         else:
             hash = os.environ.get(rep, None)
