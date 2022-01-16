@@ -5,9 +5,11 @@ import argparse
 import dataclasses
 from typing import List
 
+import jira
 import requests
 
-from utils import get_jira_client
+import consts
+
 
 FILTER_ID = 12380672
 
@@ -73,20 +75,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
                         help="PAT (personal access token) for accessing Jira")
-    parser.add_argument("--jira-username", default=os.environ.get("JIRA_USERNAME"),
-                        help="Jira username for accessing triage tickets")
-    parser.add_argument("--jira-password", default=os.environ.get("JIRA_PASSWORD"),
-                        help="Jira password for accessing triage tickets")
     parser.add_argument("--webhook", default=os.environ.get("WEBHOOK"),
                         help="Slack channel url to post information. Not specifying implies dry-run")
     parser.add_argument("--filter-id", default=FILTER_ID, help="Jira filter id")
     args = parser.parse_args()
 
-    client = get_jira_client(
-        access_token=args.jira_access_token,
-        username=args.jira_username,
-        password=args.jira_password,
-    )
+    client = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token)
 
     triage_status_report(client, args.filter_id, args.webhook)
 

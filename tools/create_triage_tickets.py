@@ -14,7 +14,7 @@ import requests
 
 import close_by_signature
 from add_triage_signature import FailureDescription, days_ago, add_signatures, custom_field_name, CF_DOMAIN, CF_IGNORED_DOMAINS
-from utils import get_jira_client, get_login_credentials
+import consts
 
 
 DEFAULT_DAYS_TO_HANDLE = 30
@@ -94,13 +94,7 @@ def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
 
 @retry(exceptions=jira.exceptions.JIRAError, tries=3, delay=10)
 def main(args):
-    username, password = get_login_credentials(args.user_password)
-    jclient = get_jira_client(
-        access_token=args.jira_access_token,
-        username=username,
-        password=password,
-        netrc_file=args.netrc,
-    )
+    jclient = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token)
 
     try:
         res = requests.get("{}/files/".format(LOGS_COLLECTOR))
@@ -141,9 +135,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     loginGroup = parser.add_argument_group(title="login options")
     loginArgs = loginGroup.add_mutually_exclusive_group()
-    loginArgs.add_argument("--netrc", default="~/.netrc", required=False, help="netrc file")
-    loginArgs.add_argument("-up", "--user-password", required=False,
-                           help="Username and password in the format of user:pass")
     loginArgs.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
                            help="PAT (personal access token) for accessing Jira")
     parser.add_argument("-a", "--all", action="store_true",

@@ -6,7 +6,9 @@ import argparse
 import os
 import logging
 
-import utils
+import jira
+
+import consts
 
 
 logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
@@ -40,7 +42,6 @@ PR_LINK_COMMENT_FORMAT = PR_LINK_PREFIX + "{}"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--netrc", default="~/.netrc", help="netrc file")
     parser.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
                         help="PAT (personal access token) for accessing Jira")
     parser.add_argument("-i", "--issue", required=True, help="Issue key")
@@ -52,12 +53,7 @@ if __name__ == "__main__":
         isVerbose = True
         logging.getLogger("__main__").setLevel(logging.DEBUG)
 
-    username, password = utils.get_login_credentials(args.jira_user_password)
-    j = utils.get_jira_client(
-        access_token=args.jira_access_token,
-        username=username,
-        password=password,
-    )
+    j = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token)
     j1 = monkeyPatchApplicationLinks(j)
 
     issue = j1.issue(args.issue)
