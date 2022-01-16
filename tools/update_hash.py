@@ -26,6 +26,7 @@ def update_hash(deployment_yaml, repo, hash):
     deployment[repo]["revision"] = hash
     with open(deployment_yaml, "w") as f:
         yaml.dump(deployment, f)
+
     print("updated {} repo with {} hash".format(repo, hash))
 
 
