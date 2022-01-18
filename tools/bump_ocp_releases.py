@@ -9,6 +9,7 @@ import argparse
 import pathlib
 import tempfile
 import textwrap
+import semver
 import subprocess
 import uuid
 
@@ -30,7 +31,7 @@ OCP_INFO_CALL = (
 )
 OCP_INFO_FC_CALL = (
     r"curl https://api.openshift.com/api/upgrades_info/v1/graph\?channel\=candidate-{version}\&arch\={architecture}"
-    " | jq '[.nodes[]] | max_by(.version)'"
+    " | jq '[.nodes[]]'"
 )
 
 RHCOS_RELEASES = "https://mirror.openshift.com/pub/openshift-v4/{architecture}/dependencies/rhcos/{minor}/"
@@ -60,7 +61,7 @@ ASSISTED_SERVICE_MASTER_DEFAULT_RELEASE_IMAGES_JSON_URL = \
 
 OCP_REPLACE_CONTEXT = ['"{version}"', "ocp-release:{version}"]
 
-SKIPPED_MAJOR_RELEASE = ["4.6", "4.10"]
+SKIPPED_MAJOR_RELEASE = ["4.6"]
 
 CPU_ARCHITECTURE_AMD64 = "amd64"
 CPU_ARCHITECTURE_X86_64 = "x86_64"
@@ -81,7 +82,7 @@ def get_rhcos_version_from_iso(minor_version, rhcos_latest_release, cpu_architec
         except FileNotFoundError:
             pass
 
-        subprocess.check_output(fr"isoinfo -i {tmp_live_iso_file.name} -x /ZIPL.PRM\;1 > zipl.prm", shell=True, cwd="/tmp")
+        subprocess.check_output(fr"/usr/bin/isoinfo -i {tmp_live_iso_file.name} -x /ZIPL.PRM\;1 > zipl.prm", shell=True, cwd="/tmp")
         with open("/tmp/zipl.prm", 'r') as f:
             zipl_info = f.read()
         result = RHCOS_VERSION_FROM_ISO_REGEX.search(zipl_info)
@@ -150,8 +151,13 @@ def get_release_data(minor_release, cpu_architecture):
     release_data = subprocess.check_output(OCP_INFO_CALL.format(version=minor_release, architecture=cpu_architecture), shell=True)
     release_data = json.loads(release_data)
     if not release_data:
-        release_data = subprocess.check_output(OCP_INFO_FC_CALL.format(version=minor_release, architecture=cpu_architecture), shell=True)
-        release_data = json.loads(release_data)
+        releases = subprocess.check_output(OCP_INFO_FC_CALL.format(version=minor_release, architecture=cpu_architecture), shell=True)
+        releases = json.loads(releases)
+        versions = []
+        for release in releases:
+            versions.append(release['version'])
+        latest_version = max(versions, key=semver.VersionInfo.parse)
+        release_data = [r for r in releases if r['version'] == latest_version][0]
     return release_data
 
 
@@ -283,7 +289,11 @@ def update_os_images_json(default_os_images_json, updates_made, updates_made_str
 
         # Get all releases for minor versions. If not available, fallback to pre-releases.
         cpu_architecture = os_image["cpu_architecture"]
-        rhcos_latest_of_releases = get_all_releases(openshift_version, cpu_architecture)
+        try:
+            rhcos_latest_of_releases = get_all_releases(openshift_version, cpu_architecture)
+        except requests.exceptions.HTTPError:
+            # No releases found - should fallback to pre-releases
+            rhcos_latest_of_releases = None
         pre_release = False
         if not rhcos_latest_of_releases:
             logging.info("Found no release candidate for version %s, fetching pre-releases",

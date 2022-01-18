@@ -9,6 +9,7 @@ RUN dnf update -y && dnf install -y \
     python39 \
     python39-pip \
     python39-devel \
+    genisoimage \
         && dnf clean all
 
 # required for generating configuration in assisted-service repo
