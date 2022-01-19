@@ -1,8 +1,13 @@
 FROM quay.io/centos/centos:stream8
 
+ENV GOPATH=/root/go
+ENV GOROOT=/usr/lib/golang
+ENV PATH=$PATH:$GOROOT/bin:$GOPATH/bin
+
 RUN dnf update -y && dnf install -y \
     jq \
     gcc \
+    golang \
     git \
     make \
     skopeo \
@@ -11,10 +16,6 @@ RUN dnf update -y && dnf install -y \
     python39-devel \
     genisoimage \
         && dnf clean all
-
-# required for generating configuration in assisted-service repo
-RUN curl https://mirror.openshift.com/pub/openshift-v4/clients/butane/latest/butane --output /usr/local/bin/butane \
-    && chmod +x /usr/local/bin/butane
 
 RUN alternatives --set python /usr/bin/python3.9
 
@@ -25,6 +26,10 @@ RUN pip install -r /tmp/requirements.txt
 
 COPY dev-requirements.txt /tmp/dev-requirements.txt
 RUN pip install -r /tmp/dev-requirements.txt
+
+# required for generating configuration/bundle in assisted-service repo
+COPY ./setup_env.sh ./
+RUN ./setup_env.sh assisted_service
 
 WORKDIR /home/assisted-installer-deployment
 COPY . .
