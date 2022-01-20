@@ -217,6 +217,9 @@ def bump_ocp_releases(username, password, dry_run, bypass_iso_download):
 
         try:
             sh.make("generate-configuration", _cwd=clone_dir)
+            # Ensure GOPATH is using current user HOME folder
+            os.environ['GOPATH'] = os.environ['HOME'] + "/go"
+            sh.make("generate-bundle", _cwd=clone_dir)
         except sh.ErrorReturnCode as e:
             raise RuntimeError(f"Failed {e.full_cmd} with stderr: {e.stderr}") from e
 
