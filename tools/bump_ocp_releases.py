@@ -62,6 +62,7 @@ ASSISTED_SERVICE_MASTER_DEFAULT_RELEASE_IMAGES_JSON_URL = \
 OCP_REPLACE_CONTEXT = ['"{version}"', "ocp-release:{version}"]
 
 SKIPPED_MAJOR_RELEASE = ["4.6"]
+MAJOR_MINOR_VERSION_REGEX = re.compile(r"^([1-9]\d*|0)(\.(([1-9]\d*)|0))$")
 
 CPU_ARCHITECTURE_AMD64 = "amd64"
 CPU_ARCHITECTURE_X86_64 = "x86_64"
@@ -251,6 +252,9 @@ def update_release_images_json(default_release_images_json, updates_made, update
         if openshift_version in SKIPPED_MAJOR_RELEASE:
             logger.info(f"Skipping {openshift_version} listed in the skip list")
             continue
+        if not MAJOR_MINOR_VERSION_REGEX.match(openshift_version):
+            logger.info(f"Skipping {openshift_version} (avoid updating x.y.z versions)")
+            continue
 
         cpu_architecture = release_image["cpu_architecture"]
         latest_ocp_release_version = get_latest_release_from_minor(openshift_version, cpu_architecture)
@@ -285,6 +289,9 @@ def update_os_images_json(default_os_images_json, updates_made, updates_made_str
         openshift_version = os_image["openshift_version"]
         if openshift_version in SKIPPED_MAJOR_RELEASE:
             logger.info(f"Skipping {openshift_version} listed in the skip list")
+            continue
+        if not MAJOR_MINOR_VERSION_REGEX.match(openshift_version):
+            logger.info(f"Skipping {openshift_version} (avoid updating x.y.z versions)")
             continue
 
         rhcos_image_url = os_image['url']
