@@ -105,7 +105,7 @@ def filter_jobs(response: requests.Response) -> typing.Iterator[Job]:
             completion_time=status.get("completionTime"),
         )
 
-        if job.type != JobType.PERIODIC:
+        if job.type != JobType.PERIODIC and not job.name.startswith("rehearse"):
             yield job
 
 
