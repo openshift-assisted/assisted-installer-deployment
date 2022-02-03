@@ -185,7 +185,7 @@ def filter_issues_to_modify(issues, ignore_issues):
         ignore_issues = []
     filtered_issues = []
     for i in issues:
-        if i.key not in ignore_issues and i.fields.status.name in JIRA_BUG_STATUSES:
+        if i.key not in ignore_issues and i.fields.status.name in JIRA_BUG_STATUSES and len(i.fields.fixVersions) == 0:
             filtered_issues.append(i)
     return filtered_issues
 
@@ -268,7 +268,7 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
 
 
 def format_fix_version(version):
-    return "OCP-Metal-{}".format(version)
+    return f"AI {version.replace('v', '')}"
 
 
 def update_fix_versions_for_all_issues(bzclient, jira_issues_to_modify, bz_issues_to_modify, fix_version, is_dry_run=False):
@@ -300,7 +300,6 @@ def update_fix_versions_for_all_issues(bzclient, jira_issues_to_modify, bz_issue
     else:
         if is_dry_run:
             for i in jira_issues:
-                # __import__('ipdb').set_trace()
                 logger.info("Dry-run: Updating Jira tickets %s (%s, %s) with fixed_in %s", i.key,
                             i.fields.status.name, i.fields.fixVersions, fix_version)
         else:
@@ -330,7 +329,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     loginGroup = parser.add_argument_group(title="login options")
     loginArgs = loginGroup.add_mutually_exclusive_group()
-    loginArgs.add_argument("--netrc", default="~/.netrc", required=False, help="netrc file")
+    loginArgs.add_argument("--netrc", default="/root/.netrc", required=False, help="netrc file")
     loginArgs.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
                            help="PAT (personal access token) for accessing Jira")
     loginArgs.add_argument("-bup", "--bugzilla-user-password", required=False, help="Bugzilla username and password in the format of user:pass")
