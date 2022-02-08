@@ -80,18 +80,12 @@ def get_rhcos_version_from_iso(minor_version, rhcos_latest_release, cpu_architec
             response.raise_for_status()
             shutil.copyfileobj(response.raw, tmp_live_iso_file)
 
-        try:
-            os.remove("/tmp/zipl.prm")
-        except FileNotFoundError:
-            pass
+        command = sh.isoinfo(i=tmp_live_iso_file.name, x=r"/ZIPL.PRM;1", _cwd="/tmp")
 
-        sh.isoinfo(i=tmp_live_iso_file.name, x=r"/ZIPL.PRM\;1", _out="/tmp/zipl.prm", _cwd="/tmp")
-        with open("/tmp/zipl.prm", 'r') as f:
-            zipl_info = f.read()
-
-        result = RHCOS_VERSION_FROM_ISO_REGEX.search(zipl_info)
+        result = RHCOS_VERSION_FROM_ISO_REGEX.search(command.stdout.decode())
         rhcos_version_from_iso = result.group(1)
         logger.info(f"Found rhcos_version_from_iso: {rhcos_version_from_iso}")
+
     return rhcos_version_from_iso.split()[0]
 
 
