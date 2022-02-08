@@ -10,6 +10,7 @@ import pathlib
 import tempfile
 import textwrap
 import semver
+import shutil
 import subprocess
 import uuid
 
@@ -44,7 +45,6 @@ RHCOS_LIVE_ISO_URL = (
 )
 
 RHCOS_VERSION_FROM_ISO_REGEX = re.compile("coreos.liveiso=rhcos-(.*) ")
-DOWNLOAD_LIVE_ISO_CMD = "curl {live_iso_url} -o {out_file}"
 
 DEFAULT_OS_IMAGES_FILE = os.path.join("data", "default_os_images.json")
 DEFAULT_RELEASE_IMAGES_FILE = os.path.join("data", "default_release_images.json")
@@ -76,16 +76,19 @@ def get_rhcos_version_from_iso(minor_version, rhcos_latest_release, cpu_architec
         cpu_architecture = CPU_ARCHITECTURE_AARCH64
     live_iso_url = RHCOS_LIVE_ISO_URL.format(minor=minor_version, version=rhcos_latest_release, architecture=cpu_architecture)
     with tempfile.NamedTemporaryFile() as tmp_live_iso_file:
-        subprocess.check_output(
-            DOWNLOAD_LIVE_ISO_CMD.format(live_iso_url=live_iso_url, out_file=tmp_live_iso_file.name), shell=True)
+        with requests.get(live_iso_url, stream=True) as response:
+            response.raise_for_status()
+            shutil.copyfileobj(response.raw, tmp_live_iso_file)
+
         try:
             os.remove("/tmp/zipl.prm")
         except FileNotFoundError:
             pass
 
-        subprocess.check_output(fr"/usr/bin/isoinfo -i {tmp_live_iso_file.name} -x /ZIPL.PRM\;1 > zipl.prm", shell=True, cwd="/tmp")
+        sh.isoinfo(i=tmp_live_iso_file.name, x=r"/ZIPL.PRM\;1", _out="/tmp/zipl.prm", _cwd="/tmp")
         with open("/tmp/zipl.prm", 'r') as f:
             zipl_info = f.read()
+
         result = RHCOS_VERSION_FROM_ISO_REGEX.search(zipl_info)
         rhcos_version_from_iso = result.group(1)
         logger.info(f"Found rhcos_version_from_iso: {rhcos_version_from_iso}")
