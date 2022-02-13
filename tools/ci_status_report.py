@@ -183,7 +183,7 @@ def ci_status_report(channel: str, auth_bearer: str) -> None:
                 headers={"Authorization": f"Bearer {auth_bearer}"},
                 files={
                     "file": (image.name, image),
-                    "initial_comment": (None, "Daily jobs status"),
+                    "initial_comment": (None, "Daily jobs status (only presubmit jobs)"),
                     "channels": (None, channel),
                 }
             )
