@@ -301,7 +301,9 @@ class HostsStatusSignature(Signature):
                 progress=host['progress']['current_stage'],
                 status=host['status'],
                 role=role,
-                status_info=str(info)))
+                status_info=str(info),
+                logs_info=host['logs_info'],
+                last_checked_in_at=format_time(host['checked_in_at'])))
 
         report = "h2. Cluster Status\n"
         report += "*status:* {}\n".format(cluster['status'])
