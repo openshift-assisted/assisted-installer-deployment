@@ -17,7 +17,7 @@ autopep8:
 	autopep8 --recursive --in-place .
 
 pylint:
-	pylint release/
+	pylint release/ tools/check_ai_images.py
 
 ###########
 # Release #

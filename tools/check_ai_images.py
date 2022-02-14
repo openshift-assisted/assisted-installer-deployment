@@ -21,23 +21,23 @@ def does_image_exist(pull_spec: str) -> bool:
 
 
 def validate_deployment_file(path):
-    with open(path, "r") as f:
-        deployment = yaml.safe_load(f)
+    with open(path, "r") as snapshot_file:
+        deployment = yaml.safe_load(snapshot_file)
 
     for val in deployment.values():
-        hash = val["revision"]
+        revision_hash = val["revision"]
         for image in val["images"]:
             if image.startswith("quay.io/ocpmetal/"):
-                pull_spec = f"{image}:{hash}"
+                pull_spec = f"{image}:{revision_hash}"
             elif image.startswith("quay.io/edge-infrastructure"):
-                pull_spec = f"{image}:latest-{hash}"
+                pull_spec = f"{image}:latest-{revision_hash}"
             else:
                 raise ValueError(f"Unknown repository of image {image}")
 
             if not does_image_exist(pull_spec):
                 raise ValueError(f"Image {pull_spec} couldn't be found")
 
-            logger.info(f"Image {pull_spec} was found")
+            logger.info("Image %s was found", pull_spec)
 
 
 def main():
