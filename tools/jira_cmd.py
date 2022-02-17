@@ -202,7 +202,7 @@ class JiraTool():
             res = self._jira.create_issue_link("relates to", ticket, to_ticket)
             res.raise_for_status()
         except Exception:
-            logger.exceptio("Error linking to %s", to_ticket.key)
+            logger.exception("Error linking to %s", to_ticket.key)
 
     def update_issue_fields(self, issue, fields_dict):
         if isDryRun:
