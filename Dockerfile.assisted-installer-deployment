@@ -7,7 +7,7 @@ ENV PATH=$PATH:$GOROOT/bin:$GOPATH/bin
 RUN dnf update -y && dnf install -y \
     jq \
     gcc \
-    golang-1.16* \
+    golang-1.17* \
     git \
     make \
     skopeo \
