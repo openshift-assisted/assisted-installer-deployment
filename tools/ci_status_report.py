@@ -93,6 +93,7 @@ def filter_jobs(response: requests.Response) -> typing.Iterator[Job]:
             continue
 
         status = document["status"]
+        url = status.get("url", None)
         job = Job(
             type=JobType(spec["type"]),
             name=spec["job"].replace("pull-ci-openshift-", ""),
@@ -100,7 +101,7 @@ def filter_jobs(response: requests.Response) -> typing.Iterator[Job]:
             repository=repository,
             base_ref=base_ref,
             state=JobState(status["state"]),
-            url=status["url"],
+            url=url,
             start_time=status["startTime"],
             completion_time=status.get("completionTime"),
         )
