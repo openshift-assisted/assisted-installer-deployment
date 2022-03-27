@@ -13,6 +13,9 @@ lint: flake8 pylint
 flake8:
 	flake8 .
 
+unit-test:
+	pytest tools/
+
 autopep8:
 	autopep8 --recursive --in-place .
 
