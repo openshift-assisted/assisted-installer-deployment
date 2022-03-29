@@ -4,7 +4,7 @@ ENV GOPATH=/root/go
 ENV GOROOT=/usr/lib/golang
 ENV PATH=$PATH:$GOROOT/bin:$GOPATH/bin
 
-RUN dnf update -y && dnf install -y \
+RUN dnf install -y \
     jq \
     gcc \
     golang-1.17* \
