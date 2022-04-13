@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)-10s %(filename)s:%(
 logger = logging.getLogger(__name__)
 logging.getLogger(__file__).setLevel(logging.INFO)
 
-PR_MENTION = ["osherdp", "romfreiman", "celebdor", "gamli75"]
+PR_MENTION = ["osherdp", "romfreiman", "gamli75"]
 
 OCP_INFO_CALL = (
     r"curl https://api.openshift.com/api/upgrades_info/v1/graph\?channel\=fast-{version}\&arch\={architecture}"
