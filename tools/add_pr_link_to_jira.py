@@ -53,7 +53,7 @@ if __name__ == "__main__":
         isVerbose = True
         logging.getLogger("__main__").setLevel(logging.DEBUG)
 
-    j = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token)
+    j = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
     j1 = monkeyPatchApplicationLinks(j)
 
     issue = j1.issue(args.issue)

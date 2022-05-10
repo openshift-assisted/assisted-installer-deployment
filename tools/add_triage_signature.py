@@ -1160,7 +1160,7 @@ def process_issues(jclient, issues, update, update_signature):
 
 
 def main(args):
-    jclient = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token)
+    jclient = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
 
     issues = get_issues(jclient, args.issue, args.search_query, args.recent_issues)
 
