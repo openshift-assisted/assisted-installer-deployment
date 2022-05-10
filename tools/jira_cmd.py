@@ -534,7 +534,7 @@ def handle_sprint_update(args, jiraTool, issues):
 
 
 def main(args):
-    j = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token)
+    j = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
 
     max_results = args.max_results
     if args.max_results == MAX_RESULTS and args.linked_issues:

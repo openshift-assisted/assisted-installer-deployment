@@ -382,7 +382,7 @@ if __name__ == "__main__":
     )
     bzclient = get_bz_client(busername, bpassword)
 
-    jclient = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token)
+    jclient = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
 
     main(jclient, bzclient, args.from_version, args.to_version, args.report_format, specific_issue=args.issue,
          fix_version=args.fixed_in_value, should_update=args.update_ticket_fixed_in, is_dry_run=args.dry_run,

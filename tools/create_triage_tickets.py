@@ -94,7 +94,7 @@ def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
 
 @retry(exceptions=jira.exceptions.JIRAError, tries=3, delay=10)
 def main(args):
-    jclient = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token)
+    jclient = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
 
     try:
         res = requests.get("{}/files/".format(LOGS_COLLECTOR))

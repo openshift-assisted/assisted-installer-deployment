@@ -80,7 +80,7 @@ def main():
     parser.add_argument("--filter-id", default=FILTER_ID, help="Jira filter id")
     args = parser.parse_args()
 
-    client = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token)
+    client = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
 
     triage_status_report(client, args.filter_id, args.webhook)
 

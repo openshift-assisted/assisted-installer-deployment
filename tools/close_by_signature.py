@@ -282,7 +282,7 @@ def run_using_cli(args):
     logger.debug('Starting issue resolver task using CLI with args=%s',
                  pprint.pformat(args.__dict__))
 
-    jira_client = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token)
+    jira_client = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
 
     if args.filters_json:
         filters_json = read_filters_file(args.filters_json)
