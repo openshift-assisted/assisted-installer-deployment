@@ -3,7 +3,7 @@ from datetime import datetime
 import statistics
 import argparse
 
-from github import Github, GithubException
+from github import Github
 
 from utils import get_credentials_from_netrc
 
@@ -25,21 +25,17 @@ def add_pr_duration(pr):
     return user, duration
 
 
-def main(args):
+def main(repos, status, netrc, hours_resolution):
     username, password = get_credentials_from_netrc(
         hostname="github.com",
-        netrc_file=args.netrc,
+        netrc_file=netrc,
     )
     gclient = Github(username, password)
 
-    try:
-        repo = gclient.get_repo(args.repo)
-    except GithubException:
-        print("Error: cannot find repository: {}".format(args.repo))
-        return
+    repos = [gclient.get_repo(repo) for repo in repos]
 
-    prs = repo.get_pulls(state=args.status)
-    print("number of PRs: {}".format(prs.totalCount))
+    prs = [pr for repo in repos for pr in repo.get_pulls(state=status) if pr.merged_at is not None]
+    print(f"number of PRs: {len(prs)}")
 
     stats = {}
     for pr in prs:
@@ -49,7 +45,7 @@ def main(args):
         else:
             stats[user] = [duration]
 
-    print_stats(stats, args.hours_resolution)
+    print_stats(stats, hours_resolution)
 
 
 def print_stats(stats, hours_resolution=False):
@@ -61,6 +57,8 @@ def print_stats(stats, hours_resolution=False):
     resolution = 60.0 * 60.0 * 24.0
     if hours_resolution:
         resolution = 60.0 * 60.0
+
+    stats = dict(sorted(stats.items(), key=lambda item: len(item[1])))
 
     for user in stats:
         pr_open_durations = stats[user]
@@ -74,16 +72,17 @@ def print_stats(stats, hours_resolution=False):
 
         print("| %22s | %14.4f | %14.4f | %14.4f | %14.4f | %14d |" %
               (user, average_duration, median_duration, max_duration, min_duration, pr_count))
+
     print("|------------------------|----------------|----------------|----------------|----------------|----------------|")
 
 
 if __name__ == "__main__":
-    valid_status = ['closed', 'open']
+    valid_status = ['closed', 'open', 'merged']
     parser = argparse.ArgumentParser()
-    parser.add_argument("-r", "--repo", required=True, help="repo name. For example 'openshift/assisted-service'")
+    parser.add_argument("-r", "--repos", required=True, help="repo names, separated by commas. For example 'openshift/assisted-service'")
     parser.add_argument("-s", "--status", default="open", choices=valid_status, help="PR status to filter")
     parser.add_argument("--netrc", required=False, help="netrc file")
     parser.add_argument("-H", "--hours-resolution", action="store_true", help="Output stats in resolution of hours")
     args = parser.parse_args()
 
-    main(args)
+    main(repos=args.repos.split(","), status=args.status, netrc=args.netrc, hours_resolution=args.hours_resolution)
