@@ -100,7 +100,7 @@ def image_exists(image_name, tag, required_sha):
     for image_tag, image_id in tag_to_image_id_map.items():
         # find a an image with the required_image_id
         if image_id == required_image_id:
-            # it the iamge_tag match the required_sha - return True
+            # if the image_tag match the required_sha - return True
             if image_tag == required_sha:
                 return True
     return False
@@ -111,7 +111,7 @@ def main():
     parser.add_argument('-t', '--tag', help='The tag to create', type=str, required=True)
     tag_options = parser.add_mutually_exclusive_group()
     tag_options.add_argument('-d', '--delete', help='Delete the tag from all repos', action="store_true")
-    tag_options.add_argument('-f', '--force', help='Override the tag if previosly exists', action="store_true")
+    tag_options.add_argument('-f', '--force', help='Override the tag if previously exists', action="store_true")
     tag_options.add_argument('-c', '--check', help='Check if the repository images with the given tag exists', action="store_true")
     parser.add_argument('-m', '--manifest', help='Path to manifest file', type=str, default="./assisted-installer.yaml")
     args = parser.parse_args()
