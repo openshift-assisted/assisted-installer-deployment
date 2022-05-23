@@ -82,7 +82,7 @@ class GitApiUtils():
 
     @staticmethod
     def _get_credentials_from_netrc(netrc_path=None):
-        '''Get the user credentials from .netrc file'''
+        """Get the user credentials from .netrc file"""
         ncfile = netrc.netrc(netrc_path or os.path.expanduser('~/.netrc'))
         credentials = ncfile.authenticators("github.com")
 
