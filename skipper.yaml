@@ -6,3 +6,4 @@ make:
 volumes:
   - $PWD/assisted-installer.yaml:/assisted-installer.yaml:rw
   - $HOME/.netrc:/root/.netrc:ro
+  - $HOME/.ssh/known_hosts:/root/.ssh/known_hosts:ro
