@@ -9,6 +9,7 @@ import json
 
 import jira
 from jira.exceptions import JIRAError
+import retry
 
 import consts
 from add_triage_signature import (
@@ -167,6 +168,7 @@ def filter_and_generate_issues(jira_client, filters, issues):
                 break
 
 
+@retry.retry(exceptions=JIRAError, tries=3, delay=2)  # being resilient to 401 statuses
 def get_issue_comments(jira_client, issue):
     if issue is None:
         return None
