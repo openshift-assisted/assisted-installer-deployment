@@ -61,7 +61,7 @@ ASSISTED_SERVICE_MASTER_DEFAULT_RELEASE_IMAGES_JSON_URL = \
 
 OCP_REPLACE_CONTEXT = ['"{version}"', "ocp-release:{version}"]
 
-SKIPPED_MAJOR_RELEASE = ["4.6"]
+SKIPPED_MAJOR_RELEASE = ["4.6", "4.7"]
 MAJOR_MINOR_VERSION_REGEX = re.compile(r"^([1-9]\d*|0)(\.(([1-9]\d*)|0))$")
 
 CPU_ARCHITECTURE_AMD64 = "amd64"
