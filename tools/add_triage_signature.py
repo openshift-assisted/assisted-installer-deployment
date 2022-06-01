@@ -449,6 +449,14 @@ class FailureDetails(Signature):
 
                 update_fields["labels"] = labels
 
+        # TODO(mko) Once UMN is properly implemented as a feature flag in the assisted-service, i.e.
+        #           in the https://github.com/openshift/assisted-service/blob/master/internal/usage/consts.go
+        #           we are manually extracting it from the cluster config and setting a feature flag
+        #           so that JIRA issues can be filtered already now.
+        if 'user_managed_networking' in cluster_md:
+            if cluster_md['user_managed_networking'] is True or cluster_md['user_managed_networking'] == 'true':
+                update_fields["labels"].append("FEATURE-User-Managed-Networking")
+
         logger.info("Updating fields of %s", issue_key)
         self._update_fields(issue_key, update_fields)
 
