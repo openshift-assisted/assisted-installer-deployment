@@ -310,28 +310,30 @@ def update_os_images_json(default_os_images_json, updates_made, updates_made_str
 
         rhcos_latest_release = get_latest_rhcos_release_from_minor(openshift_version, rhcos_latest_of_releases, pre_release)
 
-        if rhcos_default_release != rhcos_latest_release:
-            updates_made.add(openshift_version)
-            updates_made_str.add(f"rhcos {rhcos_default_release} -> {rhcos_latest_release}")
+        if rhcos_latest_release is None or rhcos_default_release == rhcos_latest_release:
+            continue
 
-            logger.info(f"New latest rhcos release available, {rhcos_default_release} -> {rhcos_latest_release}")
-            # Update rhcos image/rootfs with latest version
-            rhcos_image = updated_version_json[index]["url"].replace(rhcos_default_release, rhcos_latest_release)
-            rhcos_rootfs = updated_version_json[index]["rootfs_url"].replace(rhcos_default_release, rhcos_latest_release)
-            if not pre_release:
-                # Replace 'pre-release' with minor version
-                rhcos_image = rhcos_image.replace(RHCOS_PRE_RELEASE, openshift_version)
-                rhcos_rootfs = rhcos_rootfs.replace(RHCOS_PRE_RELEASE, openshift_version)
-            # Update json
-            updated_version_json[index]["url"] = rhcos_image
-            updated_version_json[index]["rootfs_url"] = rhcos_rootfs
+        updates_made.add(openshift_version)
+        updates_made_str.add(f"rhcos {rhcos_default_release} -> {rhcos_latest_release}")
 
-            if bypass_iso_download:
-                rhcos_version_from_iso = "8888888"
-            else:
-                minor_version = RHCOS_PRE_RELEASE if pre_release else openshift_version
-                rhcos_version_from_iso = get_rhcos_version_from_iso(minor_version, rhcos_latest_release, cpu_architecture)
-            updated_version_json[index]["version"] = rhcos_version_from_iso
+        logger.info(f"New latest rhcos release available, {rhcos_default_release} -> {rhcos_latest_release}")
+        # Update rhcos image/rootfs with latest version
+        rhcos_image = updated_version_json[index]["url"].replace(rhcos_default_release, rhcos_latest_release)
+        rhcos_rootfs = updated_version_json[index]["rootfs_url"].replace(rhcos_default_release, rhcos_latest_release)
+        if not pre_release:
+            # Replace 'pre-release' with minor version
+            rhcos_image = rhcos_image.replace(RHCOS_PRE_RELEASE, openshift_version)
+            rhcos_rootfs = rhcos_rootfs.replace(RHCOS_PRE_RELEASE, openshift_version)
+        # Update json
+        updated_version_json[index]["url"] = rhcos_image
+        updated_version_json[index]["rootfs_url"] = rhcos_rootfs
+
+        if bypass_iso_download:
+            rhcos_version_from_iso = "8888888"
+        else:
+            minor_version = RHCOS_PRE_RELEASE if pre_release else openshift_version
+            rhcos_version_from_iso = get_rhcos_version_from_iso(minor_version, rhcos_latest_release, cpu_architecture)
+        updated_version_json[index]["version"] = rhcos_version_from_iso
 
     if updates_made:
         with clone_dir.joinpath(DEFAULT_OS_IMAGES_FILE).open("w") as outfile:
