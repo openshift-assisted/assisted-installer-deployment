@@ -1,5 +1,7 @@
 # assisted-installer-deployment
 
+bla bla
+
 ## Release a new version
 
 You can release a new version by creating a tag in all the assisted-installer repositories.
