@@ -1,3 +1,5 @@
+.PHONY: all clean lint flake8 unit-test autopep8 pylint snapshot verify_snapshot tag_images release
+
 all: lint
 
 clean:
@@ -35,3 +37,6 @@ verify_snapshot:
 
 tag_images:
 	skipper run python3 tools/assisted_installer_stable_promotion.py --tag ${TAG} --version-tag
+
+release:
+	skipper run release -- --tag ${TAG}
