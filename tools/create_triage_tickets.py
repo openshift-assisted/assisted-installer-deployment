@@ -19,6 +19,7 @@ import consts
 
 DEFAULT_DAYS_TO_HANDLE = 30
 DEFAULT_WATCHERS = ["mkowalsk"]
+SKIPPED_OCP_RELEASES = ["4.11"]
 
 
 LOGS_COLLECTOR = "http://assisted-logs-collector.usersys.redhat.com"
@@ -73,6 +74,10 @@ def create_jira_ticket(jclient, existing_tickets, failure_id, cluster_md):
 
     major, minor, *_ = cluster_md['openshift_version'].split(".")
     ocp_key = f"{major}.{minor}"
+
+    if ocp_key in SKIPPED_OCP_RELEASES:
+        logger.debug(f"skipping creation of ticket, because OCP release is {ocp_key}")
+        return None
 
     ticket_affected_version_field = 'OpenShift {}'.format(ocp_key)
     new_issue = jclient.create_issue(project="AITRIAGE",
