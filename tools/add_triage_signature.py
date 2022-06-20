@@ -32,7 +32,7 @@ CF_USER = "12319044"
 CF_DOMAIN = "12319045"
 CF_CLUSTER_ID = "12316349"
 CF_FUNCTION_IMPACT = "12317358"
-CF_IGNORED_DOMAINS = {"redhat.com", "juniper.net"}
+CF_IGNORED_DOMAINS = {"redhat.com", "juniper.net", "nissho-ele.co.jp"}
 
 
 logger = logging.getLogger(__name__)
