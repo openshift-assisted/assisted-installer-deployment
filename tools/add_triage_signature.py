@@ -464,7 +464,7 @@ class FailureDetails(Signature):
         #       it in Jira using labels. For this reason we are extracting it manually from the cluster payload.
         if 'platform' in cluster_md:
             if 'type' in cluster_md['platform']:
-                update_fields["labels"].append("FEATURE-Platform-%s", cluster_md['platform']['type'])
+                update_fields["labels"].append(f"FEATURE-Platform-{cluster_md['platform']['type']}")
 
         logger.info("Updating fields of %s", issue_key)
         self._update_fields(issue_key, update_fields)
@@ -1070,8 +1070,8 @@ SIGNATURES = [AllInstallationAttemptsSignature, ApiInvalidCertificateSignature, 
 ############################
 # Signature runner functionality
 ############################
-LOGS_URL_FROM_DESCRIPTION_OLD = re.compile(r".*logs:\* \[(http.*)\]")
-LOGS_URL_FROM_DESCRIPTION_NEW = re.compile(r".*\* \[[lL]ogs\|(http.*)\]")
+LOGS_URL_FROM_DESCRIPTION_OLD = re.compile(r".*\* \[[lL]ogs\|(http.*)\]")
+LOGS_URL_FROM_DESCRIPTION_NEW = re.compile(r".*\* \[Installation logs\|(http.*)\]")
 
 
 def search_patterns_in_string(string, patterns):
