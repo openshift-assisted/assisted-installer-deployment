@@ -42,6 +42,7 @@ JIRA_DESCRIPTION = """
 h1. Cluster Info
 
 *Cluster ID:* [{cluster_id}|https://issues.redhat.com/issues/?jql=project%20%3D%20AITRIAGE%20AND%20component%20%3D%20Cloud-Triage%20and%20cf%5B{cf_cluster_id}%5D%20~%20"{cluster_id}"]
+*OpenShift Cluster ID:* {OCP_cluster_id}
 *Username:* [{username}|https://issues.redhat.com/issues/?jql=project%20%3D%20AITRIAGE%20AND%20component%20%3D%20Cloud-Triage%20and%20cf%5B{cf_user}%5D%20~%20"{username}"]
 *Email domain:* [{domain}|https://issues.redhat.com/issues/?jql=project%20%3D%20AITRIAGE%20AND%20component%20%3D%20Cloud-Triage%20and%20cf%5B{cf_domain}%5D%20~%20"{domain}"]
 *Created_at:* {created_at}
