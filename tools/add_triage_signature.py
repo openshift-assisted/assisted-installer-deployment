@@ -348,7 +348,7 @@ class FailureDescription(Signature):
                         "logs_url": self._logs_url_to_ui(url).strip('/') + '/',
                         "domain": cluster_md['email_domain'],
                         "openshift_version": cluster_md['openshift_version'],
-                        "platform_type": cluster_md['platform']['type'],
+                        "platform_type": cluster_md.get('platform', {}).get('type', 'N/A'),
                         "created_at": format_time(cluster_md['created_at']),
                         "installation_started_at": format_time(cluster_md['install_started_at']),
                         "failed_on": format_time(cluster_md['status_updated_at']),
