@@ -50,6 +50,7 @@ h1. Cluster Info
 *status:* {status}
 *status_info:* {status_info}
 *OpenShift version:* {openshift_version}
+*Platform type:* {platform_type}
 *Olm Operators:* {operators}
 *Configured features:* {features}
 
@@ -347,6 +348,7 @@ class FailureDescription(Signature):
                         "logs_url": self._logs_url_to_ui(url).strip('/') + '/',
                         "domain": cluster_md['email_domain'],
                         "openshift_version": cluster_md['openshift_version'],
+                        "platform_type": cluster_md.get('platform', {}).get('type', 'N/A'),
                         "created_at": format_time(cluster_md['created_at']),
                         "installation_started_at": format_time(cluster_md['install_started_at']),
                         "failed_on": format_time(cluster_md['status_updated_at']),
@@ -456,6 +458,12 @@ class FailureDetails(Signature):
         if 'user_managed_networking' in cluster_md:
             if cluster_md['user_managed_networking'] is True or cluster_md['user_managed_networking'] == 'true':
                 update_fields["labels"].append("FEATURE-User-Managed-Networking")
+
+        # (mko) Platform is not implemented as a separate feature flag, but we want to be able to filter
+        #       it in Jira using labels. For this reason we are extracting it manually from the cluster payload.
+        if 'platform' in cluster_md:
+            if 'type' in cluster_md['platform']:
+                update_fields["labels"].append("FEATURE-Platform-%s", cluster_md['platform']['type'])
 
         logger.info("Updating fields of %s", issue_key)
         self._update_fields(issue_key, update_fields)
