@@ -1074,8 +1074,13 @@ SIGNATURES = [AllInstallationAttemptsSignature, ApiInvalidCertificateSignature, 
 ############################
 # Signature runner functionality
 ############################
-LOGS_URL_FROM_DESCRIPTION_OLD = re.compile(r".*\* \[[lL]ogs\|(http.*)\]")
-LOGS_URL_FROM_DESCRIPTION_NEW = re.compile(r".*\* \[Installation logs\|(http.*)\]")
+# These regexes help us extract the URL of the logs from the ticket descriptions
+# Multiple patterns maintained for backwards compatibility with older tickets
+LOGS_URL_REGEXES = [
+    re.compile(r".*\* \[Installation logs - requires VPN\|(http.*)\]"),
+    re.compile(r".*\* \[Installation logs\|(http.*)\]"),
+    re.compile(r".*\* \[[lL]ogs\|(http.*)\]"),
+]
 
 
 def search_patterns_in_string(string, patterns):
@@ -1123,14 +1128,17 @@ def get_issue(jclient, issue_key):
 
 
 def get_logs_url_from_issue(issue):
-    m = LOGS_URL_FROM_DESCRIPTION_NEW.search(issue.fields.description)
+    for logs_url_pattern in LOGS_URL_REGEXES:
+        m = logs_url_pattern.search(issue.fields.description)
 
-    if m is None:
-        logger.debug("Cannot find new format of URL for logs in %s", issue.key)
-        m = LOGS_URL_FROM_DESCRIPTION_OLD.search(issue.fields.description)
-        if m is None:
-            logger.debug("Cannot find old format of URL for logs in %s", issue.key)
-            return None
+        if m is not None:
+            break
+
+        logger.debug(f"Cannot find {logs_url_pattern} format of URL for logs in %s, trying an older pattern", issue.key)
+    else:
+        logger.warn("All patterns exhausted, no logs URL found. Giving up on this ticket", issue.key)
+        return None
+
     return m.groups()[0]
 
 
