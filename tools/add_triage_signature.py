@@ -966,6 +966,43 @@ class MediaDisconnectionSignature(ErrorSignature):
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
+class CoreOSInstallerErrorSignature(ErrorSignature):
+    '''
+    The signature looks for coreos-installer errors, usually due to bad disks
+    '''
+
+    ERROR_PATTERN = r'coreos-installer install .* Error exit status'
+
+    def __init__(self, jira_client):
+        super().__init__(jira_client, signature_label="coreos_installer_error",
+                         comment_identifying_string="h1. CoreOS Installer error")
+
+    def _update_ticket(self, url, issue_key, should_update=False):
+        url = self._logs_url_to_api(url)
+        md = get_metadata_json(url)
+        cluster = md['cluster']
+
+        hosts = list()
+        for host in cluster['hosts']:
+            status_info = host['status_info']
+            if search_patterns_in_string(status_info, self.ERROR_PATTERN):
+                hosts.append(
+                    OrderedDict(
+                        id=host["id"],
+                        hostname=self._get_hostname(host),
+                        status_info=f"{{color:red}}{status_info}{{color}}",
+                    )
+                )
+
+        if len(hosts) != 0:
+            report = dedent("""
+            CoreOS installer errors were found.
+            It usually indicates that an error occurred on writing image on disk.
+            """)
+            report += self._generate_table_for_report(hosts)
+            self._update_triaging_ticket(issue_key, report, should_update=should_update)
+
+
 class ConsoleTimeoutSignature(ErrorSignature):
     """
     This signature looks for 'waiting for console' error in cluster's status_info.
@@ -1252,7 +1289,8 @@ SIGNATURES = [AllInstallationAttemptsSignature, ApiInvalidCertificateSignature, 
               FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
               StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature,
               MediaDisconnectionSignature, ConsoleTimeoutSignature, AgentStepFailureSignature,
-              CNIConfigurationError, MustGatherAnalysis, OSInstallationTime]
+              CNIConfigurationError, MustGatherAnalysis, OSInstallationTime,
+              CoreOSInstallerErrorSignature]
 
 
 ############################
