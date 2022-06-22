@@ -1593,6 +1593,49 @@ class WrongBootOrderSignature(ErrorSignature):
             self._update_triaging_ticket(report)
 
 
+class ReleasePullErrorSignature(ErrorSignature):
+    """
+    This signature finds tickets for clusters where release image cannot be pulled by bootstrap node
+    """
+
+    ERROR_PATTERN = re.compile(r"release-image-download\.sh\[.+\]: Pull failed")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Release image cannot be pulled:",
+            label="release_pull_error",
+        )
+
+    def _process_ticket(self, url, issue_key):
+
+        md = get_metadata_json(url)
+
+        cluster = md["cluster"]
+        cluster_id = cluster["id"]
+
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+
+        report = ""
+        for host in cluster["hosts"]:
+            host_id = host["id"]
+
+            try:
+                journal_logs = get_host_log_file(triage_logs_tar, host_id, "journal.logs")
+            except FileNotFoundError:
+                continue
+
+            if self.ERROR_PATTERN.findall(journal_logs):
+                report += dedent(
+                    f"""
+                h2. Release image cannot be pulled on {host_id} ({self._get_hostname(host)})"""
+                )
+
+        if len(report) != 0:
+            self._update_triaging_ticket(report)
+
+
 ############################
 # Common functionality
 ############################
@@ -1618,6 +1661,7 @@ ALL_SIGNATURES = [
     NonstandardNetworkType,
     FlappingValidations,
     WrongBootOrderSignature,
+    ReleasePullErrorSignature,
 ]
 
 ############################
