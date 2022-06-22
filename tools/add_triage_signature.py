@@ -57,7 +57,7 @@ h1. Cluster Info
 
 *links:*
 * [Cluster on prod - must be logged in as read-only admin|https://console.redhat.com/openshift/assisted-installer/clusters/{cluster_id}]
-** {color:#de350b}*If you find logs on prod that are missing from the Installation logs link below, please upload them as Jira attachments ASAP*{color}
+** {{color:#de350b}}*If you find logs on prod that are missing from the Installation logs link below, please upload them as Jira attachments ASAP*{{color}}
 * [Installation logs - requires VPN|{logs_url}]
 * [Kraken - cluster live telemetry|https://kraken.psi.redhat.com/clusters/{OCP_cluster_id}]
 * [Elastic - installation events|https://kibana-assisted.apps.app-sre-prod-04.i5h0.p1.openshiftapps.com/_dashboards/app/discover?security_tenant=global#/?_g=(filters:!(),query:(language:kuery,query:''),refreshInterval:(pause:!t,value:0),time:(from:now-1M,to:now))&_a=(columns:!(message,cluster.id,cluster.email_domain,cluster.platform.type),filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,index:bd9dadc0-7bfa-11eb-95b8-d13a1970ae4d,key:cluster.id,negate:!f,params:(query:'{cluster_id}'),type:phrase),query:(match_phrase:(cluster.id:'{cluster_id}')))),index:bd9dadc0-7bfa-11eb-95b8-d13a1970ae4d,interval:auto,query:(language:kuery,query:''),sort:!())]
