@@ -1534,6 +1534,62 @@ class FlappingValidations(ErrorSignature):
             )
 
 
+class WrongBootOrderSignature(ErrorSignature):
+    """
+    This signature creates a report of hosts which should be manually rebooted from the installation disk.
+    """
+
+    ERROR_PATTERN = "a manual booting from installation disk"
+    EVENT_PATTERN = "please boot the host"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Wrong boot order:",
+            label="wrong_boot_order",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        md = get_metadata_json(url)
+
+        cluster = md["cluster"]
+        status_info = cluster["status_info"]
+
+        if self.ERROR_PATTERN not in status_info:
+            return
+
+        cluster_id = cluster["id"]
+        report = ""
+        events = get_events_json(url, cluster_id)
+        reboot_events_by_host = defaultdict(list)
+        for event in events:
+            if self.EVENT_PATTERN in event["message"]:
+                reboot_events_by_host[event["host_id"]].append(event)
+
+        hosts = []
+        for host in cluster["hosts"]:
+            events = reboot_events_by_host[host["id"]]
+            if len(events) != 0:
+                hosts.append(
+                    OrderedDict(
+                        id=host["id"],
+                        hostname=self._get_hostname(host),
+                        message=events[0]["message"],
+                    )
+                )
+
+        if len(hosts) > 0:
+            report = dedent(
+                """
+            Events for rebooting the host from the installation disk were found.
+            It usually indicates a wrong boot order that should be addressed by the user.
+            """
+            )
+            report += self._generate_table_for_report(hosts)
+            self._update_triaging_ticket(report)
+
+
 ############################
 # Common functionality
 ############################
@@ -1558,6 +1614,7 @@ ALL_SIGNATURES = [
     SNOMachineCidrSignature,
     NonstandardNetworkType,
     FlappingValidations,
+    WrongBootOrderSignature,
 ]
 
 ############################
