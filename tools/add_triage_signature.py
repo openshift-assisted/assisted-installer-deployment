@@ -987,7 +987,10 @@ class AgentStepFailureSignature(Signature):
 
     @classmethod
     def _filter_message(cls, msg) -> bool:
-        filtered_strings = ["dhclient was timed out"]
+        filtered_strings = [
+            "dhclient was timed out",
+            ".scope: no such file or directory"
+        ]
         return any(s in msg['stderr'] for s in filtered_strings)
 
     @classmethod
