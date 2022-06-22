@@ -878,7 +878,7 @@ class MediaDisconnectionSignature(ErrorSignature):
     Eventually, the signature will include common i/o errors and the number of times they appeared
     '''
 
-    ERRORS_PATTERNS = 'media was likely disconnected'
+    ERRORS_PATTERNS = 'Unable to read from the discovery media'
 
     def __init__(self, jira_client):
         super().__init__(jira_client, signature_label="media_disconnect",
