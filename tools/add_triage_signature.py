@@ -974,7 +974,7 @@ class AgentStepFailureSignature(Signature):
     )
 
     MSG_PATTERN = re.compile(
-        r'Step execution failed \(exit code (?P<exit_code>\d+)\): <(?P<step_id>[a-z\-0-9]+)>, '
+        r'Step execution failed \(exit code (?P<exit_code>\-?\d+)\): <(?P<step_id>[a-z\-0-9]+)>, '
         r'command: <(?P<command>.+?)>, args: <\[(?P<args>.+?)\]>\. '
         r'Output:\\nstdout:\\n(?P<stdout>.*)\\n\\nstderr:\\n(?P<stderr>.*)\\n'
     )
