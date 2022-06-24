@@ -1,0 +1,2 @@
+git+https://gitlab.cee.redhat.com/ccx/ccx-ocp-core.git
+git+https://gitlab.cee.redhat.com/ccx/ccx-rules-ocp.git

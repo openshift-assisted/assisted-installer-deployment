@@ -10,6 +10,7 @@ import os
 import re
 import itertools
 import sys
+import subprocess
 import tempfile
 from collections import OrderedDict, defaultdict
 from datetime import datetime
@@ -144,6 +145,17 @@ def get_journal(triage_logs_tar, host_ip, journal_file):
     )
 
 
+class FailedToGetMustgatherException(Exception):
+    pass
+
+
+def get_mustgather(triage_logs_tar):
+    try:
+        return triage_logs_tar.get("controller_logs.tar.gz/must-gather.tar.gz", mode="rb")
+    except Exception as e:
+        raise FailedToGetMustgatherException from e
+
+
 ############################
 # Common functionality
 ############################
@@ -230,6 +242,13 @@ class Signature(abc.ABC):
     def _update_fields(self, key, fields_dict):
         i = self._jclient.issue(key)
         i.update(fields=fields_dict)
+
+    def _upload_attachment(self, key, file):
+        if self.dry_run_file is not None:
+            return
+
+        i = self._jclient
+        i.add_attachment(issue=key, attachment=file)
 
     @staticmethod
     def _generate_table_for_report(hosts):
@@ -1061,6 +1080,46 @@ class AgentStepFailureSignature(Signature):
             self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
+class MustGatherAnalysis(Signature):
+    """
+    This signature analyses must-gather collected after the failure of the installation.
+    """
+
+    def __init__(self, jira_client):
+        super().__init__(jira_client, comment_identifying_string="h1. Must-gather Analysis:")
+
+    def _update_ticket(self, url, issue_key, should_update=False):
+        url = self._logs_url_to_api(url)
+        md = get_metadata_json(url)
+        cluster_id = md['cluster']['id']
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+
+        try:
+            mustgather = get_mustgather(triage_logs_tar)
+        except FailedToGetMustgatherException:
+            return
+
+        with tempfile.NamedTemporaryFile(suffix=".tar.gz") as tmp_mustgather:
+            logger.debug(f"Writing must-gather as {tmp_mustgather.name}")
+            try:
+                tmp_mustgather.write(mustgather)
+                tmp_mustgather.flush()
+                report = subprocess.run(["insights", "run", "-p", "ccx_rules_ocp", tmp_mustgather.name], stdout=subprocess.PIPE)
+                with tempfile.NamedTemporaryFile(prefix="insights-report-", suffix=".txt") as tmp_report:
+                    try:
+                        logger.debug(f"Writing Insights report as {tmp_report.name}")
+                        tmp_report.write(report.stdout)
+                        tmp_report.flush()
+                        self._upload_attachment(issue_key, tmp_report.name)
+                    except Exception:
+                        logger.exception(f"Error while writing and uploading {tmp_report.name}")
+            except Exception:
+                logger.exception(f"Error while handling must-gather in {tmp_mustgather.name}")
+
+        report = "*Insights report:* See {} attachment\n".format(tmp_report.name)
+        self._update_triaging_ticket(issue_key, report, should_update=should_update)
+
+
 ############################
 # Common functionality
 ############################
@@ -1069,7 +1128,7 @@ SIGNATURES = [AllInstallationAttemptsSignature, ApiInvalidCertificateSignature, 
               FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
               StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature,
               MediaDisconnectionSignature, ConsoleTimeoutSignature, AgentStepFailureSignature,
-              CNIConfigurationError]
+              CNIConfigurationError, MustGatherAnalysis]
 
 
 ############################
