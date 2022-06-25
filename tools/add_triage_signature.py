@@ -109,8 +109,8 @@ def get_metadata_json(cluster_url):
 
 
 @functools.lru_cache(maxsize=1000)
-def get_events_json(cluster_url, cluster_id):
-    res = requests.get(f"{cluster_url}/cluster_{cluster_id}_events.json")
+def get_events_json(logs_url, cluster_id):
+    res = requests.get(f"{logs_url}/cluster_{cluster_id}_events.json")
     res.raise_for_status()
     return res.json()
 
@@ -143,6 +143,20 @@ def get_journal(triage_logs_tar, host_ip, journal_file):
     return triage_logs_tar.get(
         f"*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/control-plane/{host_ip}/journals/{journal_file}"
     )
+
+
+def get_events_by_host(logs_url, cluster_id):
+    events_by_host = defaultdict(list)
+    for event in get_events_json(logs_url, cluster_id):
+        if "host_id" not in event:
+            # Cluster-level event, no host_id associated with it
+            continue
+        events_by_host[event["host_id"]].append(event)
+    return events_by_host
+
+
+def get_event_timestamp(event):
+    return dateutil.parser.isoparse(event["event_time"])
 
 
 class FailedToGetMustgatherException(Exception):
@@ -521,15 +535,15 @@ class HostsExtraDetailSignature(Signature):
 
 
 class InstallationDiskFIOSignature(Signature):
+    fio_regex = re.compile(r'\(fdatasync duration:\s(\d+)\sms\)')
+
     def __init__(self, jira_client):
         super().__init__(jira_client, comment_identifying_string="h1. Host slow installation disks:")
 
-    @staticmethod
-    def _get_fio_events(events):
-        fio_regex = re.compile(r'\(fdatasync duration:\s(\d+)\sms\)')
-
+    @classmethod
+    def _get_fio_events(cls, events):
         def get_duration(event):
-            matches = fio_regex.findall(event["message"])
+            matches = cls.fio_regex.findall(event["message"])
             if len(matches) == 0:
                 return None
 
@@ -548,7 +562,7 @@ class InstallationDiskFIOSignature(Signature):
         cluster = md['cluster']
 
         cluster_id = cluster['id']
-        events = get_events_json(cluster_url=url, cluster_id=cluster_id)
+        events = get_events_json(url, cluster_id)
         fio_events = self._get_fio_events(events)
 
         fio_events_by_host = defaultdict(list)
@@ -1120,6 +1134,95 @@ class MustGatherAnalysis(Signature):
         self._update_triaging_ticket(issue_key, report, should_update=should_update)
 
 
+class OSInstallationTime(Signature):
+    writing_image_start_event_regex = re.compile(r'.*reached installation stage Writing image to disk$')
+    writing_image_end_event_regex = re.compile(r'.*reached installation stage Writing image to disk: 100%$')
+
+    unknown_message = "{color:darkgreen}OS installation time duration could not be determined for this host{color:darkgreen}"
+    slow_message = "{{color:red}}OS installation to disk was rather slow, it took {} seconds{{color}}"
+    fast_message = "{{color:darkgreen}}OS installation to disk was relatively okay, it took {} seconds{{color}}"
+
+    slow_threshold_seconds = 300
+
+    class NoEventFound(Exception):
+        pass
+
+    def __init__(self, jira_client):
+        super().__init__(jira_client, comment_identifying_string="h1. OS Installation Time:")
+
+    @classmethod
+    def _get_last_event(cls, all_events, regex):
+        """
+        Returns the last event out of all_events that matches the given regex.
+
+        We want to get the last event because sometimes the list of all events
+        for a triage ticket contains events from previous installations. The
+        last ones however, are always relevant to the ticket in question.
+        """
+        try:
+            *_, last = (
+                event
+                for event in all_events
+                if regex.match(event["message"]) is not None
+            )
+        except ValueError:
+            raise cls.NoEventFound
+
+        return last
+
+    @classmethod
+    def _get_start_event_timestamp(cls, all_events):
+        return get_event_timestamp(cls._get_last_event(all_events, cls.writing_image_start_event_regex))
+
+    @classmethod
+    def _get_end_event_timestamp(cls, all_events):
+        return get_event_timestamp(cls._get_last_event(all_events, cls.writing_image_end_event_regex))
+
+    @classmethod
+    def host_entry(cls, host, host_events):
+        entry = OrderedDict(
+            id=host['id'],
+            hostname=cls._get_hostname(host),
+            duration=cls.unknown_message,
+            installation_disk=host.get('installation_disk_path', ""),
+        )
+
+        try:
+            total_duration_seconds = (
+                cls._get_end_event_timestamp(host_events)
+                -
+                cls._get_start_event_timestamp(host_events)
+            ).total_seconds()
+        except cls.NoEventFound:
+            return entry
+
+        if total_duration_seconds <= 0:
+            # Negative writing to disk duration. This could happen if writing
+            # to disk never completed in this ticket's particular installation
+            # but it did complete in previous runs of the same cluster.
+            return entry
+
+        entry["duration"] = (
+            cls.slow_message if total_duration_seconds > cls.slow_threshold_seconds else cls.fast_message
+        ).format(total_duration_seconds)
+
+        return entry
+
+    def _update_ticket(self, url, issue_key, should_update=False):
+        logs_url = self._logs_url_to_api(url)
+        cluster = get_metadata_json(logs_url)['cluster']
+        events_by_host = get_events_by_host(logs_url, cluster['id'])
+        host_entries = [self.host_entry(host, events_by_host[host["id"]]) for host in cluster['hosts']]
+
+        # Only report if we have at least one slow host
+        if any("slow" in host["duration"] for host in host_entries):
+            self._update_triaging_ticket(
+                key=issue_key,
+                comment=self._generate_table_for_report(host_entries),
+                should_update=should_update
+            )
+
+
 ############################
 # Common functionality
 ############################
@@ -1128,7 +1231,7 @@ SIGNATURES = [AllInstallationAttemptsSignature, ApiInvalidCertificateSignature, 
               FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
               StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature,
               MediaDisconnectionSignature, ConsoleTimeoutSignature, AgentStepFailureSignature,
-              CNIConfigurationError, MustGatherAnalysis]
+              CNIConfigurationError, MustGatherAnalysis, OSInstallationTime]
 
 
 ############################
