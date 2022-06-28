@@ -1285,12 +1285,25 @@ class OSInstallationTime(Signature):
 # Common functionality
 ############################
 JIRA_SERVER = "https://issues.redhat.com"
-SIGNATURES = [AllInstallationAttemptsSignature, ApiInvalidCertificateSignature, FailureDetails,
-              FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
-              StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature,
-              MediaDisconnectionSignature, ConsoleTimeoutSignature, AgentStepFailureSignature,
-              CNIConfigurationError, MustGatherAnalysis, OSInstallationTime,
-              CoreOSInstallerErrorSignature]
+SIGNATURES = [
+    AllInstallationAttemptsSignature,
+    ApiInvalidCertificateSignature,
+    FailureDetails,
+    FailureDescription,
+    ComponentsVersionSignature,
+    HostsStatusSignature,
+    HostsExtraDetailSignature,
+    StorageDetailSignature,
+    InstallationDiskFIOSignature,
+    LibvirtRebootFlagSignature,
+    MediaDisconnectionSignature,
+    ConsoleTimeoutSignature,
+    AgentStepFailureSignature,
+    CNIConfigurationError,
+    MustGatherAnalysis,
+    OSInstallationTime,
+    CoreOSInstallerErrorSignature,
+]
 
 
 ############################
