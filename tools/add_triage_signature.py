@@ -4,22 +4,23 @@
 import abc
 import argparse
 import functools
+import itertools
 import json
 import logging
 import os
 import re
-import itertools
-import sys
 import subprocess
+import sys
 import tempfile
 import yaml
 import ipaddress
 from collections import OrderedDict, defaultdict
 from datetime import datetime
-from textwrap import dedent
 from enum import Flag, auto
+from textwrap import dedent
 
 import colorlog
+import consts
 import dateutil.parser
 import jira
 import nestedarchive
@@ -28,15 +29,18 @@ import tqdm
 from fuzzywuzzy import fuzz
 from tabulate import tabulate
 
-import consts
-
 DEFAULT_DAYS_TO_HANDLE = 30
-CF_USER = "12319044"
-CF_DOMAIN = "12319045"
-CF_CLUSTER_ID = "12316349"
-CF_FUNCTION_IMPACT = "12317358"
-CF_IGNORED_DOMAINS = {"redhat.com", "juniper.net", "nissho-ele.co.jp"}
 
+FIELD_LABELS = "labels"
+CUSTOM_FIELD_USER = "12319044"
+CUSTOM_FIELD_DOMAIN = "12319045"
+CUSTOM_FIELD_CLUSTER_ID = "12316349"
+CUSTOM_FIELD_FUNCTION_IMPACT = "12317358"
+CUSTOM_FIELD_IGNORED_DOMAINS = {
+    "redhat.com",
+    "juniper.net",
+    "nissho-ele.co.jp",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +78,7 @@ def custom_field_name(custom_field):
 
 def config_logger(verbose):
     handler = colorlog.StreamHandler()
-    handler.setFormatter(colorlog.ColoredFormatter('%(log_color)s%(levelname)-10s %(message)s'))
+    handler.setFormatter(colorlog.ColoredFormatter("%(log_color)s%(levelname)-10s %(message)s"))
 
     logger = logging.getLogger("__main__")
     logger.setLevel(logging.INFO)
@@ -181,7 +185,10 @@ class FailedToGetMustgatherException(Exception):
 
 def get_mustgather(triage_logs_tar):
     try:
-        return triage_logs_tar.get("controller_logs.tar.gz/must-gather.tar.gz", mode="rb")
+        return triage_logs_tar.get(
+            "controller_logs.tar.gz/must-gather.tar.gz",
+            mode="rb",
+        )
     except Exception as e:
         raise FailedToGetMustgatherException from e
 
@@ -190,51 +197,63 @@ def get_mustgather(triage_logs_tar):
 # Common functionality
 ############################
 class Signature(abc.ABC):
-    dry_run_file = None
-
-    def __init__(self, jira_client, comment_identifying_string, old_comment_string=None):
-        self._jclient = jira_client
+    def __init__(
+        self,
+        jira_client,
+        issue_key,
+        comment_identifying_string,
+        dry_run_file=None,
+        should_reevaluate=False,
+        old_comment_string=None,
+    ):
+        self._jira_client = jira_client
         self._identifing_string = comment_identifying_string
         self._old_identifing_string = old_comment_string
+        self.dry_run_file = dry_run_file
+        self.should_reevaluate = dry_run_file
+        self.issue_key = issue_key
 
-    def update_ticket(self, url, issue_key, should_update=False):
+    def process_ticket(self, url, issue_key):
         try:
-            self._update_ticket(url, issue_key, should_update=should_update)
+            self._process_ticket(self._logs_url_to_api(url), issue_key)
         except FailedToGetMetadataException as e:
             browse_url = get_ticket_browse_url(issue_key)
-            logger.error(
-                f"Error getting metadata for {browse_url} at {url}: {e.__cause__}, it may have been deleted"
-            )
+            logger.error(f"Error getting metadata for {browse_url} at {url}: {e.__cause__}, it may have been deleted")
         except FailedToGetLogsTarException as e:
             if e.__cause__.response.status_code == 404:
                 logger.warning(
-                    f"{get_ticket_browse_url(issue_key)} doesn't have a log tar, skipping {type(self).__name__}")
+                    f"{get_ticket_browse_url(issue_key)} doesn't have a log tar, skipping {type(self).__name__}"
+                )
                 return
             raise
         except Exception:
             logger.exception("error updating ticket %s", issue_key)
 
     @abc.abstractmethod
-    def _update_ticket(self, url, issue_key, should_update=False):
+    def _process_ticket(self, url, issue_key):
         pass
 
-    def _add_signature_label(self, key, labels):
-        issue_labels = self._jclient.issue(key).fields.__dict__[custom_field_name(CF_FUNCTION_IMPACT)]
-        if issue_labels is None:
-            issue_labels = []
-        is_changed = False
-        for label in labels:
-            if label not in issue_labels:
-                is_changed = True
-                issue_labels.append(label)
-        if is_changed:
-            self._update_fields(key, {custom_field_name(CF_FUNCTION_IMPACT): issue_labels})
+    def _add_labels_to_field(self, issue_key, labels_to_add, field_name):
+        field_existing_labels = self._jira_client.issue(issue_key).fields.__dict__[field_name] or []
+        new_labels = [label for label in labels_to_add if label not in field_existing_labels]
+
+        if len(new_labels) != 0:
+            self._update_fields(
+                issue_key,
+                {FIELD_LABELS: field_existing_labels + new_labels},
+            )
+
+    def _add_signature_function_impact(self, issue_key, labels_to_add):
+        self._add_labels_to_field(custom_field_name(CUSTOM_FIELD_FUNCTION_IMPACT))
+
+    def _add_signature_labels(self, issue_key, labels_to_add):
+        self._add_labels_to_field(FIELD_LABELS)
 
     def find_signature_comment(self, key=None, comments=None):
         assert key or comments
 
         if comments is None:
-            comments = self._jclient.comments(key)
+            comments = self._jira_client.comments(key)
 
         for comment in comments:
             if self._identifing_string in comment.body:
@@ -242,42 +261,55 @@ class Signature(abc.ABC):
 
             if self._old_identifing_string and self._old_identifing_string in comment.body:
                 return comment
+
         return None
 
-    def _update_triaging_ticket(self, key, comment, should_update=False):
+    def _update_triaging_ticket(self, comment):
         report = "\n"
         report += self._identifing_string + "\n"
         if comment is not None:
             report += comment
 
-        jira_comment = self.find_signature_comment(key)
+        jira_comment = self.find_signature_comment(self.issue_key)
         signature_name = type(self).__name__
         if self.dry_run_file is not None:
             self.dry_run_file.write(report)
             return
 
         if jira_comment is None:
-            logger.info("Adding new '%s' comment to %s", signature_name, key)
-            self._jclient.add_comment(key, report)
-        elif should_update:
-            logger.info("Updating existing '%s' comment of %s", signature_name, key)
+            logger.info(
+                "Adding new '%s' comment to %s",
+                signature_name,
+                self.issue_key,
+            )
+            self._jira_client.add_comment(self.issue_key, report)
+        elif self.should_reevaluate:
+            logger.info(
+                "Updating existing '%s' comment of %s",
+                signature_name,
+                self.issue_key,
+            )
             jira_comment.update(body=report)
         else:
-            logger.debug("Not updating existing '%s' comment of %s", signature_name, key)
+            logger.debug(
+                "Not updating existing '%s' comment of %s",
+                signature_name,
+                self.issue_key,
+            )
 
     def _update_description(self, key, new_description):
-        i = self._jclient.issue(key)
+        i = self._jira_client.issue(key)
         i.update(fields={"description": new_description})
 
     def _update_fields(self, key, fields_dict):
-        i = self._jclient.issue(key)
+        i = self._jira_client.issue(key)
         i.update(fields=fields_dict)
 
     def _upload_attachment(self, key, file):
         if self.dry_run_file is not None:
             return
 
-        i = self._jclient
+        i = self._jira_client
         i.add_attachment(issue=key, attachment=file)
 
     @staticmethod
@@ -286,99 +318,140 @@ class Signature(abc.ABC):
 
     @staticmethod
     def _logs_url_to_api(url):
-        '''
+        """
         the log server has two formats for the url
         - URL for the UI  - http://assisted-logs-collector.usersys.redhat.com/#/2020-10-15_19:10:06_347ce6e8-bb4d-4751-825f-5e92e24da0d9/
         - URL for the API - http://assisted-logs-collector.usersys.redhat.com/files/2020-10-15_19:10:06_347ce6e8-bb4d-4751-825f-5e92e24da0d9/
         This function will return an API URL, regardless of which URL is supplied
-        '''
-        return re.sub(r'(http://[^/]*/)#(/.*)', r'\1files\2', url)
+        """
+        return re.sub(r"(http://[^/]*/)#(/.*)", r"\1files\2", url)
 
     @staticmethod
     def _logs_url_to_ui(url):
-        '''
+        """
         the log server has two formats for the url
         - URL for the UI  - http://assisted-logs-collector.usersys.redhat.com/#/2020-10-15_19:10:06_347ce6e8-bb4d-4751-825f-5e92e24da0d9/
         - URL for the API - http://assisted-logs-collector.usersys.redhat.com/files/2020-10-15_19:10:06_347ce6e8-bb4d-4751-825f-5e92e24da0d9/
         This function will return an UI URL, regardless of which URL is supplied
-        '''
-        return re.sub(r'(http://[^/]*/)files(/.*)', r'\1#\2', url)
+        """
+        return re.sub(r"(http://[^/]*/)files(/.*)", r"\1#\2", url)
 
     @staticmethod
     def _get_hostname(host):
-        hostname = host.get('requested_hostname')
+        hostname = host.get("requested_hostname")
         if hostname:
             return hostname
 
-        inventory = json.loads(host['inventory'])
-        return inventory['hostname']
+        inventory = json.loads(host["inventory"])
+        return inventory["hostname"]
 
 
-class ErrorSignature(Signature):
-    def __init__(self, jira_client, signature_label, comment_identifying_string,
-                 old_comment_string=None):
-        Signature.__init__(self, jira_client, comment_identifying_string,
-                           old_comment_string=old_comment_string)
-        self._signature_label = signature_label
+class ErrorSignature(Signature, abc.ABC):
+    """
+    ErrorSignature is a Signature that also optionally adds function impact and
+    a custom label to a triage ticket when the child class calls
+    _update_triaging_ticket.
 
-    def _update_triaging_ticket(self, key, comment, should_update=False):
-        Signature._update_triaging_ticket(self, key, comment, should_update=should_update)
-        if should_update:
-            self._add_signature_label(key, ["SIGNATURE_"+self._signature_label])
+    The function impact and label are given during __init__.
+    The function impact and label are always prefixed by SIGNATURE_ to differentiate
+    them from regular labels.
+    """
+
+    def __init__(
+        self,
+        *args,
+        function_impact_label=None,
+        label=None,
+        **kwargs,
+    ):
+        Signature.__init__(self, *args, **kwargs)
+
+        self._function_impact_label = function_impact_label
+        self._label = label
+
+    def _update_triaging_ticket(self, comment):
+        super()._update_triaging_ticket(comment)
+
+        if self.should_reevaluate and self.dry_run_file is None:
+            if self._function_impact_label is not None:
+                self._add_signature_function_impact(
+                    self.issue_key,
+                    ["SIGNATURE_" + self._function_impact_label],
+                )
+
+            if self._label is not None:
+                self._add_signature_labels(
+                    self.issue_key,
+                    ["SIGNATURE_" + self._label],
+                )
 
 
 class HostsStatusSignature(Signature):
-    def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Install status:",
-                         old_comment_string="h1. Host details:")
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Install status:",
+            old_comment_string="h1. Host details:",
+        )
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-
-        url = self._logs_url_to_api(url)
+    def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
         installconfig = get_installconfig_yaml(url)
 
-        cluster = md['cluster']
+        cluster = md["cluster"]
 
         hosts = []
-        for host in cluster['hosts']:
-            info = host['status_info']
-            role = host['role']
-            inventory = json.loads(host['inventory'])
-            if host.get('bootstrap', False):
-                role = 'bootstrap'
-            hosts.append(OrderedDict(
-                id=host['id'],
-                hostname=self._get_hostname(host),
-                progress=host['progress']['current_stage'],
-                status=host['status'],
-                role=role,
-                boot_mode=inventory.get('boot', {}).get('current_boot_mode', 'N/A'),
-                status_info=str(info),
-                logs_info=host.get('logs_info', ""),
-                last_checked_in_at=format_time(host.get('checked_in_at', str(datetime.min)))))
+        for host in cluster["hosts"]:
+            info = host["status_info"]
+            role = host["role"]
+            inventory = json.loads(host["inventory"])
+            if host.get("bootstrap", False):
+                role = "bootstrap"
+            hosts.append(
+                OrderedDict(
+                    id=host["id"],
+                    hostname=self._get_hostname(host),
+                    progress=host["progress"]["current_stage"],
+                    status=host["status"],
+                    role=role,
+                    boot_mode=inventory.get("boot", {}).get("current_boot_mode", "N/A"),
+                    status_info=str(info),
+                    logs_info=host.get("logs_info", ""),
+                    last_checked_in_at=format_time(
+                        host.get(
+                            "checked_in_at",
+                            str(datetime.min),
+                        )
+                    ),
+                )
+            )
 
         report = "h2. Cluster Status\n"
-        report += "*status:* {}\n".format(cluster['status'])
-        report += "*status_info:* {}\n".format(cluster['status_info'])
+        report += "*status:* {}\n".format(cluster["status"])
+        report += "*status_info:* {}\n".format(cluster["status_info"])
         report = "h2. Install-config Status\n"
         report += "*baseDomain:* {}\n".format(installconfig["baseDomain"])
         report += "*networkType:* {}\n".format(installconfig["networking"]["networkType"])
         report += "h2. Hosts status\n"
         report += self._generate_table_for_report(hosts)
-        self._update_triaging_ticket(issue_key, report, should_update=should_update)
+        self._update_triaging_ticket(report)
 
 
 class FailureDescription(Signature):
-    def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="")
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs, comment_identifying_string="")
 
     def is_olm_operator(self, operator_name):
-        return operator_name.lower() in ["cnv", "lso", "ocs"]
+        return operator_name.lower() in [
+            "cnv",
+            "lso",
+            "ocs",
+        ]
 
     def format_features(self, features):
         if len(features) > 0:
-            return ', '.join(features)
+            return ", ".join(features)
         else:
             return "None"
 
@@ -390,7 +463,7 @@ class FailureDescription(Signature):
         For sake of display, operators and other features are listed
         separately
         """
-        feature_usage_field = cluster.get('feature_usage')
+        feature_usage_field = cluster.get("feature_usage")
         if not feature_usage_field:
             return "n/a", "n/a"
 
@@ -400,37 +473,39 @@ class FailureDescription(Signature):
         return self.format_features(operators), self.format_features(other_features)
 
     def build_description(self, url, cluster_md):
-        operators, other_features = self.build_feature_description(cluster_md)
-        cluster_data = {"cluster_id": cluster_md['id'],
-                        "logs_url": self._logs_url_to_ui(url).strip('/') + '/',
-                        "domain": cluster_md['email_domain'],
-                        "openshift_version": cluster_md['openshift_version'],
-                        "platform_type": cluster_md.get('platform', {}).get('type', 'N/A'),
-                        "created_at": format_time(cluster_md['created_at']),
-                        "installation_started_at": format_time(cluster_md['install_started_at']),
-                        "failed_on": format_time(cluster_md['status_updated_at']),
-                        "status": cluster_md['status'],
-                        "status_info": cluster_md['status_info'],
-                        "OCP_cluster_id": cluster_md['openshift_cluster_id'],
-                        "username": cluster_md['user_name'],
-                        "operators": operators,
-                        "features": other_features,
-                        "cf_user": CF_USER,
-                        "cf_cluster_id": CF_CLUSTER_ID,
-                        "cf_domain": CF_DOMAIN}
+        (
+            operators,
+            other_features,
+        ) = self.build_feature_description(cluster_md)
+        cluster_data = {
+            "cluster_id": cluster_md["id"],
+            "logs_url": self._logs_url_to_ui(url).strip("/") + "/",
+            "domain": cluster_md["email_domain"],
+            "openshift_version": cluster_md["openshift_version"],
+            "platform_type": cluster_md.get("platform", {}).get("type", "N/A"),
+            "created_at": format_time(cluster_md["created_at"]),
+            "installation_started_at": format_time(cluster_md["install_started_at"]),
+            "failed_on": format_time(cluster_md["status_updated_at"]),
+            "status": cluster_md["status"],
+            "status_info": cluster_md["status_info"],
+            "OCP_cluster_id": cluster_md["openshift_cluster_id"],
+            "username": cluster_md["user_name"],
+            "operators": operators,
+            "features": other_features,
+            "cf_user": CUSTOM_FIELD_USER,
+            "cf_cluster_id": CUSTOM_FIELD_CLUSTER_ID,
+            "cf_domain": CUSTOM_FIELD_DOMAIN,
+        }
 
         return format_description(cluster_data)
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-
-        if not should_update:
+    def _process_ticket(self, url, issue_key, should_reevaluate=False):
+        if not should_reevaluate:
             logger.debug("Not updating description of %s", issue_key)
             return
-
-        url = self._logs_url_to_api(url)
         md = get_metadata_json(url)
 
-        cluster = md['cluster']
+        cluster = md["cluster"]
 
         description = self.build_description(url, cluster)
 
@@ -446,23 +521,26 @@ class FailureDetails(Signature):
         domain
     """
 
-    def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="")
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs, comment_identifying_string="")
 
     def is_olm_operator(self, operator_name):
-        return operator_name.lower() in ["cnv", "lso", "ocs"]
+        return operator_name.lower() in [
+            "cnv",
+            "lso",
+            "ocs",
+        ]
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-
+    def _process_ticket(self, url, issue_key):
         def extract_cluster_md_from_existing_labels():
             label_prefix_to_property = {
                 "AI_CLUSTER_": "id",
                 "AI_DOMAIN_": "email_domain",
                 "AI_USER_": "user_name",
             }
-            r = re.compile(r'(AI_[^_]*_)(.*)')
+            r = re.compile(r"(AI_[^_]*_)(.*)")
 
-            i = self._jclient.issue(issue_key)
+            i = self._jira_client.issue(issue_key)
             cluster_md = {}
             for label in i.fields.labels:
                 m = r.match(label)
@@ -474,11 +552,10 @@ class FailureDetails(Signature):
                 cluster_md[label_prefix_to_property[prefix]] = value
             return cluster_md
 
-        url = self._logs_url_to_api(url)
         cluster_md = []
         try:
             md = get_metadata_json(url)
-            cluster_md = md['cluster']
+            cluster_md = md["cluster"]
         except Exception:
             # if we cannot find the failure logs on the log-server, we'll just use whatever information we
             # have in the 'labels' field of the ticket
@@ -489,22 +566,22 @@ class FailureDetails(Signature):
         update_fields = {
             "labels": [],
         }
-        if 'user_name' in cluster_md:
-            update_fields[custom_field_name(CF_USER)] = cluster_md['user_name']
-        if 'email_domain' in cluster_md:
-            update_fields[custom_field_name(CF_DOMAIN)] = cluster_md['email_domain']
-        if 'id' in cluster_md:
-            update_fields[custom_field_name(CF_CLUSTER_ID)] = cluster_md['id']
+        if "user_name" in cluster_md:
+            update_fields[custom_field_name(CUSTOM_FIELD_USER)] = cluster_md["user_name"]
+        if "email_domain" in cluster_md:
+            update_fields[custom_field_name(CUSTOM_FIELD_DOMAIN)] = cluster_md["email_domain"]
+        if "id" in cluster_md:
+            update_fields[custom_field_name(CUSTOM_FIELD_CLUSTER_ID)] = cluster_md["id"]
 
-        feature_usage_field = cluster_md.get('feature_usage')
+        feature_usage_field = cluster_md.get("feature_usage")
         if feature_usage_field:
             feature_usage = json.loads(feature_usage_field)
             operators = [feature for feature in feature_usage.keys() if self.is_olm_operator(feature)]
             other_features = [feature for feature in feature_usage.keys() if not self.is_olm_operator(feature)]
-            if len(operators+other_features) > 0:
+            if len(operators + other_features) > 0:
                 labels = []
-                for f in operators+other_features:
-                    labels.append("FEATURE-"+f.replace(" ", "-"))
+                for f in operators + other_features:
+                    labels.append("FEATURE-" + f.replace(" ", "-"))
 
                 update_fields["labels"] = labels
 
@@ -512,14 +589,14 @@ class FailureDetails(Signature):
         #           in the https://github.com/openshift/assisted-service/blob/master/internal/usage/consts.go
         #           we are manually extracting it from the cluster config and setting a feature flag
         #           so that JIRA issues can be filtered already now.
-        if 'user_managed_networking' in cluster_md:
-            if cluster_md['user_managed_networking'] is True or cluster_md['user_managed_networking'] == 'true':
+        if "user_managed_networking" in cluster_md:
+            if cluster_md["user_managed_networking"] is True or cluster_md["user_managed_networking"] == "true":
                 update_fields["labels"].append("FEATURE-User-Managed-Networking")
 
         # (mko) Platform is not implemented as a separate feature flag, but we want to be able to filter
         #       it in Jira using labels. For this reason we are extracting it manually from the cluster payload.
-        if 'platform' in cluster_md:
-            if 'type' in cluster_md['platform']:
+        if "platform" in cluster_md:
+            if "type" in cluster_md["platform"]:
                 update_fields["labels"].append(f"FEATURE-Platform-{cluster_md['platform']['type']}")
 
         logger.info("Updating fields of %s", issue_key)
@@ -527,40 +604,48 @@ class FailureDetails(Signature):
 
 
 class HostsExtraDetailSignature(Signature):
-    def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Host extra details:")
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Host extra details:",
+        )
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-
-        url = self._logs_url_to_api(url)
+    def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
 
-        cluster = md['cluster']
+        cluster = md["cluster"]
 
         hosts = []
-        for host in cluster['hosts']:
-            inventory = json.loads(host['inventory'])
-            hosts.append(OrderedDict(
-                id=host['id'],
-                hostname=inventory['hostname'],
-                requested_hostname=host.get('requested_hostname', "N/A"),
-                last_contacted=format_time(host['checked_in_at']),
-                installation_disk=host.get('installation_disk_path', "N/A"),
-                product_name=inventory['system_vendor'].get('product_name', "Unavailable"),
-                manufacturer=inventory['system_vendor'].get('manufacturer', "Unavailable"),
-                virtual_host=inventory['system_vendor'].get('virtual', False),
-                disks_count=len(inventory['disks'])
-            ))
+        for host in cluster["hosts"]:
+            inventory = json.loads(host["inventory"])
+            hosts.append(
+                OrderedDict(
+                    id=host["id"],
+                    hostname=inventory["hostname"],
+                    requested_hostname=host.get("requested_hostname", "N/A"),
+                    last_contacted=format_time(host["checked_in_at"]),
+                    installation_disk=host.get("installation_disk_path", "N/A"),
+                    product_name=inventory["system_vendor"].get("product_name", "Unavailable"),
+                    manufacturer=inventory["system_vendor"].get("manufacturer", "Unavailable"),
+                    virtual_host=inventory["system_vendor"].get("virtual", False),
+                    disks_count=len(inventory["disks"]),
+                )
+            )
 
         report = self._generate_table_for_report(hosts)
-        self._update_triaging_ticket(issue_key, report, should_update=should_update)
+        self._update_triaging_ticket(report)
 
 
 class InstallationDiskFIOSignature(Signature):
-    fio_regex = re.compile(r'\(fdatasync duration:\s(\d+)\sms\)')
+    fio_regex = re.compile(r"\(fdatasync duration:\s(\d+)\sms\)")
 
-    def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Host slow installation disks:")
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            *kwargs,
+            comment_identifying_string="h1. Host slow installation disks:",
+        )
 
     @classmethod
     def _get_fio_events(cls, events):
@@ -571,19 +656,14 @@ class InstallationDiskFIOSignature(Signature):
 
             return int(matches[0])
 
-        return (
-            (event, get_duration(event))
-            for event in events
-            if get_duration(event) is not None
-        )
+        return ((event, get_duration(event)) for event in events if get_duration(event) is not None)
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-        url = self._logs_url_to_api(url)
+    def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
 
-        cluster = md['cluster']
+        cluster = md["cluster"]
 
-        cluster_id = cluster['id']
+        cluster_id = cluster["id"]
         events = get_events_json(url, cluster_id)
         fio_events = self._get_fio_events(events)
 
@@ -592,32 +672,38 @@ class InstallationDiskFIOSignature(Signature):
             fio_events_by_host[event["host_id"]].append((event, fio_duration))
 
         hosts = []
-        for host in cluster['hosts']:
+        for host in cluster["hosts"]:
             host_fio_events = fio_events_by_host[host["id"]]
             if len(host_fio_events) != 0:
                 _events, host_fio_events_durations = zip(*fio_events_by_host[host["id"]])
                 fio_message = (
-                    "{color:red}Installation disk is too slow, fio durations: " +
-                    ", ".join(f"{duration}ms" for duration in host_fio_events_durations) +
-                    "{color}"
+                    "{color:red}Installation disk is too slow, fio durations: "
+                    + ", ".join(f"{duration}ms" for duration in host_fio_events_durations)
+                    + "{color}"
                 )
 
-                hosts.append(OrderedDict(
-                    id=host['id'],
-                    hostname=self._get_hostname(host),
-                    fio=fio_message,
-                    installation_disk=host.get('installation_disk_path', ""),
-                ))
+                hosts.append(
+                    OrderedDict(
+                        id=host["id"],
+                        hostname=self._get_hostname(host),
+                        fio=fio_message,
+                        installation_disk=host.get("installation_disk_path", ""),
+                    )
+                )
 
         if len(hosts) > 0:
             report = self._generate_table_for_report(hosts)
-            self._update_triaging_ticket(issue_key, report, should_update=should_update)
+            self._update_triaging_ticket(report)
 
 
 class CNIConfigurationError(ErrorSignature):
-    def __init__(self, jira_client):
-        super().__init__(jira_client, signature_label="missing_CNI",
-                         comment_identifying_string="h1. No CNI configuration")
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            function_impact_label="missing_CNI",
+            comment_identifying_string="h1. No CNI configuration",
+        )
 
     @staticmethod
     def _get_host_neighbors(host):
@@ -627,9 +713,13 @@ class CNIConfigurationError(ErrorSignature):
         if host["connectivity"] is None:
             return []
         try:
-            return [(remote_host['host_id'], remote_host['l3_connectivity'][0]['remote_ip_address'])
-                    for remote_host in
-                    json.loads(host["connectivity"])['remote_hosts']]
+            return [
+                (
+                    remote_host["host_id"],
+                    remote_host["l3_connectivity"][0]["remote_ip_address"],
+                )
+                for remote_host in json.loads(host["connectivity"])["remote_hosts"]
+            ]
         except KeyError:
             # Malformed host obect, ignore
             return []
@@ -643,15 +733,13 @@ class CNIConfigurationError(ErrorSignature):
         Collecting the neighboring hosts from each of the host objects into a set should hopefully
         give us all host IP addresses.
         """
-        return set(itertools.chain(*(cls._get_host_neighbors(host) for host in cluster['hosts'])))
+        return set(itertools.chain(*(cls._get_host_neighbors(host) for host in cluster["hosts"])))
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-        url = self._logs_url_to_api(url)
-
+    def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
 
-        cluster = md['cluster']
-        cluster_id = cluster['id']
+        cluster = md["cluster"]
+        cluster_id = cluster["id"]
 
         triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
 
@@ -659,7 +747,7 @@ class CNIConfigurationError(ErrorSignature):
 
         if len(host_ip_addresses) == 0:
             # Fallback because some clusters just have a weird metadata.json without even a `hosts` stanza...
-            host_ip_addresses = [('Unknown', '*')]
+            host_ip_addresses = [("Unknown", "*")]
 
         hosts = []
         threshold = 1000
@@ -667,31 +755,44 @@ class CNIConfigurationError(ErrorSignature):
         for host_id, host_ip in host_ip_addresses:
             try:
                 kubelet_journal = get_journal(triage_logs_tar, host_ip, "kubelet.log")
-                cni_errors = search_patterns_in_string(kubelet_journal, re.escape(
-                    "No CNI configuration file in /etc/kubernetes/cni/net.d/. Has your network provider started?"))
+                cni_errors = search_patterns_in_string(
+                    kubelet_journal,
+                    re.escape(
+                        "No CNI configuration file in /etc/kubernetes/cni/net.d/. Has your network provider started?"
+                    ),
+                )
 
                 if len(cni_errors) > threshold:
-                    hosts.append(OrderedDict({
-                        "Host ID": host_id,
-                        "Host IP": host_ip,
-                        "Number of errors": f"{len(cni_errors)} (threshold {threshold})",
-                        "First error": f"{{code}}{cni_errors[0]}{{code}}",
-                        "Last error": f"{{code}}{cni_errors[1]}{{code}}",
-                    }))
+                    hosts.append(
+                        OrderedDict(
+                            {
+                                "Host ID": host_id,
+                                "Host IP": host_ip,
+                                "Number of errors": f"{len(cni_errors)} (threshold {threshold})",
+                                "First error": f"{{code}}{cni_errors[0]}{{code}}",
+                                "Last error": f"{{code}}{cni_errors[1]}{{code}}",
+                            }
+                        )
+                    )
             except FileNotFoundError:
                 continue
 
         if len(hosts):
             report = self._generate_table_for_report(hosts)
-            self._update_triaging_ticket(issue_key, report, should_update=should_update)
+            self._update_triaging_ticket(report)
 
 
 class StorageDetailSignature(Signature):
-    def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Host storage details:")
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Host storage details:",
+        )
 
     class SmartctlExitCode(Flag):
         """Taken from `man smartctl` "EXIT STATUS" section"""
+
         COMMANDLINE_DID_NOT_PARSE = auto()
         DEVICE_OPEN_FAILED = auto()
         SOME_ATA_COMMAND_FAILED_OR_SMART_CHECKSUM_ERROR = auto()
@@ -708,13 +809,19 @@ class StorageDetailSignature(Signature):
         exit_code = smartctl["exit_status"]
 
         if exit_code != 0:
-            output.append("non-zero smartctl exit code: " + ", ".join(flag.name for flag in cls.SmartctlExitCode
-                                                                      if flag in cls.SmartctlExitCode(exit_code)))
+            output.append(
+                "non-zero smartctl exit code: "
+                + ", ".join(flag.name for flag in cls.SmartctlExitCode if flag in cls.SmartctlExitCode(exit_code))
+            )
             if "smart_status" not in smart:
-                if cls.SmartctlExitCode(exit_code) == cls.SmartctlExitCode.SOME_ATA_COMMAND_FAILED_OR_SMART_CHECKSUM_ERROR:
+                if (
+                    cls.SmartctlExitCode(exit_code)
+                    == cls.SmartctlExitCode.SOME_ATA_COMMAND_FAILED_OR_SMART_CHECKSUM_ERROR
+                ):
                     output.append(
                         "{color:green}*this typically happens on virtual disks*{color} that don't actually have S.M.A.R.T. information,"
-                        " but may also happen due to other reasons")
+                        " but may also happen due to other reasons"
+                    )
                 if cls.SmartctlExitCode(exit_code) == cls.SmartctlExitCode.COMMANDLINE_DID_NOT_PARSE:
                     output.append("{color:green}*this is not a disk problem*{color} but the smartctl runtime issue")
 
@@ -741,17 +848,26 @@ class StorageDetailSignature(Signature):
             if "hours" in smart["power_on_time"]:
                 hours = smart["power_on_time"]["hours"]
                 output.append(
-                    f"disk has been powered on for {hours // 24} days and {hours % 24} hours throughout its life")
+                    f"disk has been powered on for {hours // 24} days and {hours % 24} hours throughout its life"
+                )
 
         if "ata_smart_attributes" in smart:
             table = smart["ata_smart_attributes"].get("table", [])
-            interesting_attributes = ("Program_Fail_Count", "Erase_Fail_Count", "Offline_Uncorrectable")
-            table_filtered = [entry for entry in table if
-                              entry.get("name") in interesting_attributes and
-                              entry.get("raw")["value"] > 0]
+            interesting_attributes = (
+                "Program_Fail_Count",
+                "Erase_Fail_Count",
+                "Offline_Uncorrectable",
+            )
+            table_filtered = [
+                entry
+                for entry in table
+                if entry.get("name") in interesting_attributes and entry.get("raw")["value"] > 0
+            ]
 
-            output.extend(f'ata_smart_attribute *{entry["name"]}* has notable value *{entry["raw"]["value"]}*'
-                          for entry in table_filtered)
+            output.extend(
+                f'ata_smart_attribute *{entry["name"]}* has notable value *{entry["raw"]["value"]}*'
+                for entry in table_filtered
+            )
 
         if "nvme_smart_health_information_log" in smart:
             nvme_log = smart["nvme_smart_health_information_log"]
@@ -769,152 +885,177 @@ class StorageDetailSignature(Signature):
         except Exception as e:
             return f"S.M.A.R.T. JSON has an unexpected structure, error: {e}"
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-        url = self._logs_url_to_api(url)
+    def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
 
-        cluster = md['cluster']
+        cluster = md["cluster"]
 
         hosts = []
-        for host in cluster['hosts']:
-            inventory = json.loads(host['inventory'])
-            disks = inventory['disks']
+        for host in cluster["hosts"]:
+            inventory = json.loads(host["inventory"])
+            disks = inventory["disks"]
             disks_details = defaultdict(list)
             for d in disks:
-                disk_type = d.get('drive_type', "N/A")
-                disks_details['type'].append(disk_type)
-                disks_details['bootable'].append(str(d.get('bootable', "N/A")))
-                disks_details['name'].append(d.get('name', "N/A"))
-                disks_details['path'].append(d.get('path', "N/A"))
-                disks_details['by-path'].append(d.get('by_path', "N/A"))
-                disks_details['smart'].append((self._parse_smart(d.get('smart', "N/A"))
-                                               if disk_type != 'ODD' else
-                                               "{color:green}*N/A for optical drives*{color}"))
-            hosts.append(OrderedDict({
-                "Host ID": host['id'],
-                "Hostname": self._get_hostname(host),
-                "Disk Name": "\n".join(disks_details['name']),
-                "Disk Type": "\n".join(disks_details['type']),
-                "Disk Path": "\n".join(disks_details['path']),
-                "Disk Bootable": "\n".join(disks_details['bootable']),
-                "Disk by-path": "\n".join(disks_details['by-path']),
-                "S.M.A.R.T.": "\n".join(disks_details['smart']),
-            }))
+                disk_type = d.get("drive_type", "N/A")
+                disks_details["type"].append(disk_type)
+                disks_details["bootable"].append(str(d.get("bootable", "N/A")))
+                disks_details["name"].append(d.get("name", "N/A"))
+                disks_details["path"].append(d.get("path", "N/A"))
+                disks_details["by-path"].append(d.get("by_path", "N/A"))
+                disks_details["smart"].append(
+                    (
+                        self._parse_smart(d.get("smart", "N/A"))
+                        if disk_type != "ODD"
+                        else "{color:green}*N/A for optical drives*{color}"
+                    )
+                )
+            hosts.append(
+                OrderedDict(
+                    {
+                        "Host ID": host["id"],
+                        "Hostname": self._get_hostname(host),
+                        "Disk Name": "\n".join(disks_details["name"]),
+                        "Disk Type": "\n".join(disks_details["type"]),
+                        "Disk Path": "\n".join(disks_details["path"]),
+                        "Disk Bootable": "\n".join(disks_details["bootable"]),
+                        "Disk by-path": "\n".join(disks_details["by-path"]),
+                        "S.M.A.R.T.": "\n".join(disks_details["smart"]),
+                    }
+                )
+            )
 
         report = self._generate_table_for_report(hosts)
-        self._update_triaging_ticket(issue_key, report, should_update=should_update)
+        self._update_triaging_ticket(report)
 
 
 class SNOMachineCidrSignature(Signature):
     def __init__(self, jira_client):
         super().__init__(jira_client, comment_identifying_string="h1. Invalid machine cidr")
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-        url = self._logs_url_to_api(url)
+    def _update_ticket(self, url, issue_key):
         md = get_metadata_json(url)
 
-        cluster = md['cluster']
+        cluster = md["cluster"]
 
         if cluster.get("high_availability_mode") != "None":
             return
 
-        host = cluster['hosts'][0]
-        inventory = json.loads(host['inventory'])
+        host = cluster["hosts"][0]
+        inventory = json.loads(host["inventory"])
         # The first one is the machine_cidr that will be used for network configuration
         machine_cidr = ipaddress.ip_network(cluster["machine_networks"][0]["cidr"])
-        for route in inventory['routes']:
+        for route in inventory["routes"]:
             # currently only relevant for ipv4
-            if route.get('destination') == "0.0.0.0" \
-                    and route.get("gateway") and ipaddress.ip_address(route["gateway"]) in machine_cidr:
+            if (
+                route.get("destination") == "0.0.0.0"
+                and route.get("gateway")
+                and ipaddress.ip_address(route["gateway"]) in machine_cidr
+            ):
                 return
 
-        report = f"Machine cidr {machine_cidr} doesn't match any default route configured on the host. \n It will cause " \
-                 f"etcd certificate error (or some other) as kubelet and OVNKubernetes will not run with expected machine cidr.\n" \
-                 f"We hope it will be fixed after https://issues.redhat.com/browse/SDN-3053"
-        self._update_triaging_ticket(issue_key, report, should_update=should_update)
+        report = (
+            f"Machine cidr {machine_cidr} doesn't match any default route configured on the host. \n It will cause "
+            f"etcd certificate error (or some other) as kubelet and OVNKubernetes will not run with expected machine cidr.\n"
+            f"We hope it will be fixed after https://issues.redhat.com/browse/SDN-3053"
+        )
+
+        self._update_triaging_ticket(report)
 
 
 class ComponentsVersionSignature(Signature):
-    def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Components version information:")
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Components version information:",
+        )
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-
-        url = self._logs_url_to_api(url)
+    def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
 
         report = ""
-        release_tag = md.get('release_tag')
+        release_tag = md.get("release_tag")
         if release_tag:
             report = "Release tag: {}\n".format(release_tag)
 
-        versions = md.get('versions')
+        versions = md.get("versions")
         if versions:
             if "assisted-installer" in versions:
-                report += "assisted-installer: {}\n".format(versions['assisted-installer'])
+                report += "assisted-installer: {}\n".format(versions["assisted-installer"])
             if "assisted-installer-controller" in versions:
-                report += "assisted-installer-controller: {}\n".format(versions['assisted-installer-controller'])
+                report += "assisted-installer-controller: {}\n".format(versions["assisted-installer-controller"])
             if "discovery-agent" in versions:
-                report += "assisted-installer-agent: {}\n".format(versions['discovery-agent'])
+                report += "assisted-installer-agent: {}\n".format(versions["discovery-agent"])
 
         if report != "":
-            self._update_triaging_ticket(issue_key, report, should_update=should_update)
+            self._update_triaging_ticket(report)
 
 
 class LibvirtRebootFlagSignature(ErrorSignature):
-    def __init__(self, jira_client):
-        super().__init__(jira_client, signature_label="libvirt_reboot_flag",
-                         comment_identifying_string="h1. Potential hosts with libvirt _on_reboot_ flag issue (MGMT-2840):")
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            function_impact_label="libvirt_reboot_flag",
+            comment_identifying_string="h1. Potential hosts with libvirt _on_reboot_ flag issue (MGMT-2840):",
+        )
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-
-        url = self._logs_url_to_api(url)
+    def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
 
-        cluster = md['cluster']
+        cluster = md["cluster"]
 
         # this signature is not relevant for SNO
-        if len(cluster['hosts']) <= 1:
+        if len(cluster["hosts"]) <= 1:
             return
 
         # this signature is relevant only if all hosts, but the bootstrap is in 'Rebooting' stage
         hosts = []
-        for host in cluster['hosts']:
-            inventory = json.loads(host['inventory'])
+        for host in cluster["hosts"]:
+            inventory = json.loads(host["inventory"])
 
-            if (len(inventory['disks']) == 1 and "KVM" in inventory['system_vendor']['product_name'] and
-                    host['progress']['current_stage'] == 'Rebooting' and host['status'] == 'error'):
-                if host['role'] == 'bootstrap':
+            if (
+                len(inventory["disks"]) == 1
+                and "KVM" in inventory["system_vendor"]["product_name"]
+                and host["progress"]["current_stage"] == "Rebooting"
+                and host["status"] == "error"
+            ):
+                if host["role"] == "bootstrap":
                     return
 
-                hosts.append(OrderedDict(
-                    id=host['id'],
-                    hostname=self._get_hostname(host),
-                    role=host['role'],
-                    progress=host['progress']['current_stage'],
-                    status=host['status'],
-                    num_disks=len(inventory.get('disks', []))))
+                hosts.append(
+                    OrderedDict(
+                        id=host["id"],
+                        hostname=self._get_hostname(host),
+                        role=host["role"],
+                        progress=host["progress"]["current_stage"],
+                        status=host["status"],
+                        num_disks=len(inventory.get("disks", [])),
+                    )
+                )
 
-        if len(hosts)+1 == len(cluster['hosts']):
+        if len(hosts) + 1 == len(cluster["hosts"]):
             report = self._generate_table_for_report(hosts)
-            self._update_triaging_ticket(issue_key, report, should_update=should_update)
+            self._update_triaging_ticket(report)
 
 
 class ApiInvalidCertificateSignature(ErrorSignature):
 
     LOG_PATTERN = re.compile('time=".*" level=error msg=".*x509: certificate is valid.* not .*')
 
-    def __init__(self, jira_client):
-        super().__init__(jira_client, signature_label="api_invalid_certificate",
-                         comment_identifying_string="h1. Invalid SAN values on certificate for AI API")
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            function_impact_label="api_invalid_certificate",
+            comment_identifying_string="h1. Invalid SAN values on certificate for AI API",
+        )
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-        url = self._logs_url_to_api(url)
-
+    def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
 
-        cluster = md['cluster']
-        cluster_id = cluster['id']
+        cluster = md["cluster"]
+        cluster_id = cluster["id"]
         triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
 
         try:
@@ -929,54 +1070,61 @@ class ApiInvalidCertificateSignature(ErrorSignature):
 
             if len(invalid_api_log_lines) > 5:
                 logs_text += "\n additional {} relevant similar error log lines are found".format(
-                    len(invalid_api_log_lines) - 5)
+                    len(invalid_api_log_lines) - 5
+                )
                 report = dedent("""{}""".format(ticket_inform + logs_text))
             else:
                 report = None
 
-            self._update_triaging_ticket(issue_key, report, should_update=should_update)
+            self._update_triaging_ticket(report)
 
 
 class AllInstallationAttemptsSignature(Signature):
-    def __init__(self, jira_client):
-        self.jira_client = jira_client
-        super().__init__(jira_client, comment_identifying_string="h1. all installation attempts of a cluster")
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. all installation attempts of a cluster",
+        )
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-        url = self._logs_url_to_api(url)
+    def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
-        cluster = md['cluster']
-        cluster_id = cluster['id']
-        cluster_triage_tickets = self.jira_client.search_issues(
-            f"""project = AITRIAGE AND "Cluster ID" ~ {cluster_id}""")
+        cluster = md["cluster"]
+        cluster_id = cluster["id"]
+        cluster_triage_tickets = self._jira_client.search_issues(
+            f"""project = AITRIAGE AND "Cluster ID" ~ {cluster_id}"""
+        )
         for ticket in cluster_triage_tickets:
             if issue_key == ticket.key:
                 continue
 
-            self.jira_client.create_issue_link("is related to", issue_key, ticket.key)
+            self._jira_client.create_issue_link("is related to", issue_key, ticket.key)
 
 
 class MediaDisconnectionSignature(ErrorSignature):
-    '''
+    """
     The signature downloads cluster logs, and go over all the hosts logs files searching for a 'dmesg' file
     Then, it looks for i/o errors (disks, media) patterns and groups them per host
     Eventually, the signature will include common i/o errors and the number of times they appeared
-    '''
+    """
 
-    ERRORS_PATTERNS = 'Unable to read from the discovery media'
+    ERRORS_PATTERNS = "Unable to read from the discovery media"
 
-    def __init__(self, jira_client):
-        super().__init__(jira_client, signature_label="media_disconnect",
-                         comment_identifying_string="h1. Virtual media disconnection")
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            function_impact_label="media_disconnect",
+            comment_identifying_string="h1. Virtual media disconnection",
+        )
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-        url = self._logs_url_to_api(url)
+    def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
-        cluster = md['cluster']
+        cluster = md["cluster"]
 
         hosts = list()
-        for host in cluster['hosts']:
-            status_info = host['status_info']
+        for host in cluster["hosts"]:
+            status_info = host["status_info"]
             if self.ERRORS_PATTERNS in status_info:
                 hosts.append(
                     OrderedDict(
@@ -987,34 +1135,39 @@ class MediaDisconnectionSignature(ErrorSignature):
                 )
 
         if len(hosts) != 0:
-            report = dedent("""
+            report = dedent(
+                """
             Media disconnection events were found.
             It usually indicates that reading data from media disk cannot be made due to a network problem on PXE setup,
             bad contact with the media disk, or actual hardware disconnection.
-            """)
+            """
+            )
             report += self._generate_table_for_report(hosts)
-            self._update_triaging_ticket(issue_key, report, should_update=should_update)
+            self._update_triaging_ticket(report)
 
 
 class CoreOSInstallerErrorSignature(ErrorSignature):
-    '''
+    """
     The signature looks for coreos-installer errors, usually due to bad disks
-    '''
+    """
 
-    ERROR_PATTERN = r'coreos-installer install .* Error exit status'
+    ERROR_PATTERN = r"coreos-installer install .* Error exit status"
 
-    def __init__(self, jira_client):
-        super().__init__(jira_client, signature_label="coreos_installer_error",
-                         comment_identifying_string="h1. CoreOS Installer error")
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            signature_label="coreos_installer_error",
+            comment_identifying_string="h1. CoreOS Installer error",
+        )
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-        url = self._logs_url_to_api(url)
+    def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
-        cluster = md['cluster']
+        cluster = md["cluster"]
 
         hosts = list()
-        for host in cluster['hosts']:
-            status_info = host['status_info']
+        for host in cluster["hosts"]:
+            status_info = host["status_info"]
             if search_patterns_in_string(status_info, self.ERROR_PATTERN):
                 hosts.append(
                     OrderedDict(
@@ -1025,60 +1178,14 @@ class CoreOSInstallerErrorSignature(ErrorSignature):
                 )
 
         if len(hosts) != 0:
-            report = dedent("""
+            report = dedent(
+                """
             CoreOS installer errors were found.
             It usually indicates that an error occurred on writing image on disk.
-            """)
+            """
+            )
             report += self._generate_table_for_report(hosts)
-            self._update_triaging_ticket(issue_key, report, should_update=should_update)
-
-
-class ConsoleTimeoutSignature(ErrorSignature):
-    """
-    This signature looks for 'waiting for console' error in cluster's status_info.
-    If OpenShift version is 4.7 and hosts are VMware vms, outputs a warning.
-    Due to: https://bugzilla.redhat.com/1926345
-    """
-
-    def __init__(self, jira_client):
-        super().__init__(jira_client, signature_label="console_timeout_VMware_4.7",
-                         comment_identifying_string="h1. Console timeout - VMware hosts / OCP 4.7")
-
-    def _update_ticket(self, url, issue_key, should_update=False):
-        url = self._logs_url_to_api(url)
-
-        md = get_metadata_json(url)
-
-        def isVMware(host):
-            inventory = json.loads(host['inventory'])
-            product_name = inventory['system_vendor'].get('product_name')
-            return "VMware" in product_name
-
-        cluster = md['cluster']
-        status_info = cluster['status_info']
-        openshift_version = cluster['openshift_version']
-        report = ""
-        if ("waiting for console" in status_info and
-                "4.7" in openshift_version and
-                any(isVMware(host) for host in cluster['hosts'])):
-            # ISO conversion according to
-            # https://stackoverflow.com/questions/127803/how-do-i-parse-an-iso-8601-formatted-date#comment94022430_49784038
-            if datetime.fromisoformat(cluster['install_started_at'].replace('Z', '')) > datetime(2021, 5, 5):
-                report = "\n".join([
-                    "h2. Waiting for console timeout -possibly due to VMware hosts on OCP 4.7 ([bugzilla|https://bugzilla.redhat.com/1935539])-",
-                    "As of May 5th 2021, a fix has been pushed to production. That version contains the supposed fix. "
-                    "This means that the cause for the timeout in this ticket might not be due to this known bug - "
-                    "it might be caused by something else. Please investigate."
-                ])
-            else:
-                report = "\n".join([
-                    "h2. Waiting for console timeout probably due to VMware hosts on OCP 4.7",
-                    "You can mark it as caused by issue [MGMT-4454|https://issues.redhat.com/browse/MGMT-4454]",
-                    "Solution will be provided via [bugzilla|https://bugzilla.redhat.com/1935539] ticket",
-                ])
-
-        if report != "":
-            self._update_triaging_ticket(issue_key, report, should_update=should_update)
+            self._update_triaging_ticket(report)
 
 
 class AgentStepFailureSignature(Signature):
@@ -1095,26 +1202,30 @@ class AgentStepFailureSignature(Signature):
     )
 
     MSG_PATTERN = re.compile(
-        r'Step execution failed \(exit code (?P<exit_code>\-?\d+)\): <(?P<step_id>[a-z\-0-9]+)>, '
-        r'command: <(?P<command>.+?)>, args: <\[(?P<args>.+?)\]>\. '
-        r'Output:\\nstdout:\\n(?P<stdout>.*)\\n\\nstderr:\\n(?P<stderr>.*)\\n'
+        r"Step execution failed \(exit code (?P<exit_code>\-?\d+)\): <(?P<step_id>[a-z\-0-9]+)>, "
+        r"command: <(?P<command>.+?)>, args: <\[(?P<args>.+?)\]>\. "
+        r"Output:\\nstdout:\\n(?P<stdout>.*)\\n\\nstderr:\\n(?P<stderr>.*)\\n"
     )
 
     MAX_FAILURES_PER_HOST = 10
     MAX_LINE_LENGTH = 1000
     TRUNCATE_OUTPUT_LINES = 100
 
-    def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Agent step failures")
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Agent step failures",
+        )
 
     @classmethod
     def _filter_message(cls, msg) -> bool:
         filtered_strings = [
             "dhclient was timed out",
             ".scope: no such file or directory",
-            "You have to remove that container to be able to reuse that name"
+            "You have to remove that container to be able to reuse that name",
         ]
-        return any(s in msg['stderr'] for s in filtered_strings)
+        return any(s in msg["stderr"] for s in filtered_strings)
 
     @classmethod
     def _prepare_output(cls, output):
@@ -1129,22 +1240,20 @@ class AgentStepFailureSignature(Signature):
             half = cls.TRUNCATE_OUTPUT_LINES // 2
             output_lines = output_lines[:half] + ["**OUTPUT HAS BEEN TRUNCATED**"] + output_lines[-half:]
 
-        output_lines = [line for line in output_lines if line != "\\\""]
-        output_lines = [pre + line[:cls.MAX_LINE_LENGTH] + post for line in output_lines]
+        output_lines = [line for line in output_lines if line != '\\"']
+        output_lines = [pre + line[: cls.MAX_LINE_LENGTH] + post for line in output_lines]
 
         return "".join(output_lines)
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-        url = self._logs_url_to_api(url)
-
+    def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
 
-        cluster = md['cluster']
-        cluster_id = cluster['id']
+        cluster = md["cluster"]
+        cluster_id = cluster["id"]
 
         triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
 
-        report = ''
+        report = ""
         for host in cluster["hosts"]:
             host_id = host["id"]
 
@@ -1154,32 +1263,40 @@ class AgentStepFailureSignature(Signature):
                 continue
 
             failures = []
-            for _failure_idx, step_failure_log_match in zip(range(self.MAX_FAILURES_PER_HOST),
-                                                            self.LOG_PATTERN.finditer(agent_logs)):
+            for _failure_idx, step_failure_log_match in zip(
+                range(self.MAX_FAILURES_PER_HOST),
+                self.LOG_PATTERN.finditer(agent_logs),
+            ):
                 step_failure_log = step_failure_log_match.groupdict()
                 step_failure_message_match = self.MSG_PATTERN.match(step_failure_log["message"])
 
                 if step_failure_message_match is None:
-                    logger.warning("Step failure signature skipped failure because failure message has unexpected format")
+                    logger.warning(
+                        "Step failure signature skipped failure because failure message has unexpected format"
+                    )
                     continue
 
                 step_failure_message = step_failure_message_match.groupdict()
 
                 if not self._filter_message(step_failure_message):
-                    failures.append(OrderedDict(
-                        time=step_failure_log['time'],
-                        exit_code=step_failure_message['exit_code'],
-                        step_id=step_failure_message['step_id'],
-                        stderr=self._prepare_output(step_failure_message['stderr']),
-                    ))
+                    failures.append(
+                        OrderedDict(
+                            time=step_failure_log["time"],
+                            exit_code=step_failure_message["exit_code"],
+                            step_id=step_failure_message["step_id"],
+                            stderr=self._prepare_output(step_failure_message["stderr"]),
+                        )
+                    )
 
             if len(failures) != 0:
-                report += dedent(f"""
+                report += dedent(
+                    f"""
                 h2. Agent step failures for {host_id} ({self._get_hostname(host)})
-                {self._generate_table_for_report(failures)}""")
+                {self._generate_table_for_report(failures)}"""
+                )
 
         if len(report) != 0:
-            self._update_triaging_ticket(issue_key, report, should_update=should_update)
+            self._update_triaging_ticket(report)
 
 
 class MustGatherAnalysis(Signature):
@@ -1187,13 +1304,16 @@ class MustGatherAnalysis(Signature):
     This signature analyses must-gather collected after the failure of the installation.
     """
 
-    def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Must-gather Analysis:")
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            *kwargs,
+            comment_identifying_string="h1. Must-gather Analysis:",
+        )
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-        url = self._logs_url_to_api(url)
+    def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
-        cluster_id = md['cluster']['id']
+        cluster_id = md["cluster"]["id"]
         triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
 
         try:
@@ -1206,7 +1326,16 @@ class MustGatherAnalysis(Signature):
             try:
                 tmp_mustgather.write(mustgather)
                 tmp_mustgather.flush()
-                report = subprocess.run(["insights", "run", "-p", "ccx_rules_ocp", tmp_mustgather.name], stdout=subprocess.PIPE)
+                report = subprocess.run(
+                    [
+                        "insights",
+                        "run",
+                        "-p",
+                        "ccx_rules_ocp",
+                        tmp_mustgather.name,
+                    ],
+                    stdout=subprocess.PIPE,
+                )
                 with tempfile.NamedTemporaryFile(prefix="insights-report-", suffix=".txt") as tmp_report:
                     try:
                         logger.debug(f"Writing Insights report as {tmp_report.name}")
@@ -1219,14 +1348,16 @@ class MustGatherAnalysis(Signature):
                 logger.exception(f"Error while handling must-gather in {tmp_mustgather.name}")
 
         report = "*Insights report:* See {} attachment\n".format(tmp_report.name)
-        self._update_triaging_ticket(issue_key, report, should_update=should_update)
+        self._update_triaging_ticket(report)
 
 
 class OSInstallationTime(Signature):
-    writing_image_start_event_regex = re.compile(r'.*reached installation stage Writing image to disk$')
-    writing_image_end_event_regex = re.compile(r'.*reached installation stage Writing image to disk: 100%$')
+    writing_image_start_event_regex = re.compile(r".*reached installation stage Writing image to disk$")
+    writing_image_end_event_regex = re.compile(r".*reached installation stage Writing image to disk: 100%$")
 
-    unknown_message = "{color:darkgreen}OS installation time duration could not be determined for this host{color:darkgreen}"
+    unknown_message = (
+        "{color:darkgreen}OS installation time duration could not be determined for this host{color:darkgreen}"
+    )
     slow_message = "{{color:red}}OS installation to disk was rather slow, it took {} seconds{{color}}"
     fast_message = "{{color:darkgreen}}OS installation to disk was relatively okay, it took {} seconds{{color}}"
 
@@ -1235,8 +1366,12 @@ class OSInstallationTime(Signature):
     class NoEventFound(Exception):
         pass
 
-    def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. OS Installation Time:")
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            *kwargs,
+            comment_identifying_string="h1. OS Installation Time:",
+        )
 
     @classmethod
     def _get_last_event(cls, all_events, regex):
@@ -1248,11 +1383,7 @@ class OSInstallationTime(Signature):
         last ones however, are always relevant to the ticket in question.
         """
         try:
-            *_, last = (
-                event
-                for event in all_events
-                if regex.match(event["message"]) is not None
-            )
+            *_, last = (event for event in all_events if regex.match(event["message"]) is not None)
         except ValueError:
             raise cls.NoEventFound
 
@@ -1260,26 +1391,34 @@ class OSInstallationTime(Signature):
 
     @classmethod
     def _get_start_event_timestamp(cls, all_events):
-        return get_event_timestamp(cls._get_last_event(all_events, cls.writing_image_start_event_regex))
+        return get_event_timestamp(
+            cls._get_last_event(
+                all_events,
+                cls.writing_image_start_event_regex,
+            )
+        )
 
     @classmethod
     def _get_end_event_timestamp(cls, all_events):
-        return get_event_timestamp(cls._get_last_event(all_events, cls.writing_image_end_event_regex))
+        return get_event_timestamp(
+            cls._get_last_event(
+                all_events,
+                cls.writing_image_end_event_regex,
+            )
+        )
 
     @classmethod
     def host_entry(cls, host, host_events):
         entry = OrderedDict(
-            id=host['id'],
+            id=host["id"],
             hostname=cls._get_hostname(host),
             duration=cls.unknown_message,
-            installation_disk=host.get('installation_disk_path', ""),
+            installation_disk=host.get("installation_disk_path", ""),
         )
 
         try:
             total_duration_seconds = (
-                cls._get_end_event_timestamp(host_events)
-                -
-                cls._get_start_event_timestamp(host_events)
+                cls._get_end_event_timestamp(host_events) - cls._get_start_event_timestamp(host_events)
             ).total_seconds()
         except cls.NoEventFound:
             return entry
@@ -1296,18 +1435,39 @@ class OSInstallationTime(Signature):
 
         return entry
 
-    def _update_ticket(self, url, issue_key, should_update=False):
-        logs_url = self._logs_url_to_api(url)
-        cluster = get_metadata_json(logs_url)['cluster']
-        events_by_host = get_events_by_host(logs_url, cluster['id'])
-        host_entries = [self.host_entry(host, events_by_host[host["id"]]) for host in cluster['hosts']]
+    def _process_ticket(self, url, issue_key):
+        cluster = get_metadata_json(url)["cluster"]
+        events_by_host = get_events_by_host(url, cluster["id"])
+        host_entries = [self.host_entry(host, events_by_host[host["id"]]) for host in cluster["hosts"]]
 
         # Only report if we have at least one slow host
         if any("slow" in host["duration"] for host in host_entries):
             self._update_triaging_ticket(
-                key=issue_key,
                 comment=self._generate_table_for_report(host_entries),
-                should_update=should_update
+            )
+
+
+class NonstandardNetworkType(ErrorSignature):
+    allowed_network_types = [
+        "OpenShiftSDN",
+        "OVNKubernetes",
+    ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Non-standard CNI (Network Type):",
+            label="nonstandard-network-type",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        install_config = get_installconfig_yaml(url)
+        network_type = install_config["networking"]["networkType"]
+
+        if network_type not in self.allowed_network_types:
+            self._update_triaging_ticket(
+                comment=f"{{color:red}}Cluster is using a non-standard network type: {network_type}{{color}}",
             )
 
 
@@ -1315,12 +1475,26 @@ class OSInstallationTime(Signature):
 # Common functionality
 ############################
 JIRA_SERVER = "https://issues.redhat.com"
-SIGNATURES = [AllInstallationAttemptsSignature, ApiInvalidCertificateSignature, FailureDetails,
-              FailureDescription, ComponentsVersionSignature, HostsStatusSignature, HostsExtraDetailSignature,
-              StorageDetailSignature, InstallationDiskFIOSignature, LibvirtRebootFlagSignature,
-              MediaDisconnectionSignature, ConsoleTimeoutSignature, AgentStepFailureSignature,
-              CNIConfigurationError, MustGatherAnalysis, OSInstallationTime,
-              CoreOSInstallerErrorSignature, SNOMachineCidrSignature]
+ALL_SIGNATURES = [
+    AllInstallationAttemptsSignature,
+    ApiInvalidCertificateSignature,
+    FailureDetails,
+    FailureDescription,
+    ComponentsVersionSignature,
+    HostsStatusSignature,
+    HostsExtraDetailSignature,
+    StorageDetailSignature,
+    InstallationDiskFIOSignature,
+    LibvirtRebootFlagSignature,
+    MediaDisconnectionSignature,
+    AgentStepFailureSignature,
+    CNIConfigurationError,
+    MustGatherAnalysis,
+    OSInstallationTime,
+    CoreOSInstallerErrorSignature,
+    SNOMachineCidrSignature,
+    NonstandardNetworkType,
+]
 
 ############################
 # Signature runner functionality
@@ -1343,7 +1517,7 @@ def search_patterns_in_string(string, patterns):
 
 
 def group_similar_strings(ls, ratio):
-    '''
+    """
     Uses Levenshtein Distance Algorithm to calculate the differences between strings
     Then, groups similar strings that matches according to the ratio.
     The higher the ratio -> The more identical strings
@@ -1351,7 +1525,7 @@ def group_similar_strings(ls, ratio):
     Example:
     input: ['rakesh', 'zakesh', 'goldman LLC', 'oldman LLC', 'bakesh']
     output groups: [['rakesh', 'zakesh', 'bakesh'], ['goldman LLC', 'oldman LLC']]
-    '''
+    """
 
     groups = []
     for item in ls:
@@ -1360,15 +1534,15 @@ def group_similar_strings(ls, ratio):
                 group.append(item)
                 break
         else:
-            groups.append([item, ])
+            groups.append([item])
 
     return groups
 
 
-def get_issue(jclient, issue_key):
+def get_issue(jira_client, issue_key):
     issue = None
     try:
-        issue = jclient.issue(issue_key)
+        issue = jira_client.issue(issue_key)
     except jira.exceptions.JIRAError as e:
         if e.status_code != 404:
             raise
@@ -1385,142 +1559,246 @@ def get_logs_url_from_issue(issue):
         if m is not None:
             break
 
-        logger.debug(f"Cannot find {logs_url_pattern} format of URL for logs in %s, trying an older pattern", issue.key)
+        logger.debug(
+            f"Cannot find {logs_url_pattern} format of URL for logs in %s, trying an older pattern",
+            issue.key,
+        )
     else:
-        logger.warn("All patterns exhausted, no logs URL found. Giving up on this ticket", issue.key)
+        logger.warn(
+            "All patterns exhausted, no logs URL found. Giving up on this ticket",
+            issue.key,
+        )
         return None
 
     return m.groups()[0]
 
 
-def get_all_triage_tickets(jclient, only_recent=False):
-    recent_filter = "" if not only_recent else 'and created >= -31d'
+def get_all_triage_tickets(jira_client, only_recent=False):
+    recent_filter = "" if not only_recent else "and created >= -31d"
     query = f"project = AITRIAGE AND component = Cloud-Triage {recent_filter}"
 
-    return jclient.search_issues(query, maxResults=None)
+    return jira_client.search_issues(query, maxResults=None)
 
 
-def get_issues(jclient, issue, query=None, only_recent=True):
+def get_issues(jira_client, issue, query=None, only_recent=True):
     if issue is not None:
         logger.info(f"Fetching just {issue}")
-        return [get_issue(jclient, issue)]
+        return [get_issue(jira_client, issue)]
 
     if query is not None:
         logger.info(f"Fetching from query '{query}'")
-        return jclient.search_issues(query, maxResults=100)
+        return jira_client.search_issues(query, maxResults=100)
 
     logger.info(f"Fetching {'recent' if only_recent else 'all'} issues")
-    return get_all_triage_tickets(jclient, only_recent=only_recent)
+    return get_all_triage_tickets(jira_client, only_recent=only_recent)
 
 
 def get_ticket_browse_url(issue_key):
     return f"{JIRA_SERVER}/browse/{issue_key}"
 
 
-def process_issues(jclient, issues, update, update_signature):
+def process_issues(
+    jira_client,
+    issues,
+    should_reevaluate: bool,
+    only_specific_signatures,
+    dry_run_file,
+):
     logger.info(f"Found {len(issues)} tickets, processing...")
 
     should_progress_bar = sys.stderr.isatty()
-    for issue in tqdm.tqdm(issues, disable=not should_progress_bar, file=sys.stderr):
+    for issue in tqdm.tqdm(
+        issues,
+        disable=not should_progress_bar,
+        file=sys.stderr,
+    ):
         logger.debug(f"Issue {issue}")
         try:
-            url = get_logs_url_from_issue(issue)
+            ticket_logs_url = get_logs_url_from_issue(issue)
         except Exception:
             logger.exception("Error getting logs url of %s", issue.key)
             continue
 
-        if url is None:
+        if ticket_logs_url is None:
             logger.warning(f"Could not get URL from issue {get_ticket_browse_url(issue.key)}. Skipping")
             continue
 
-        add_signatures(jclient, url, issue.key, should_update=update,
-                       signatures=update_signature)
+        process_ticket_with_signatures(
+            jira_client,
+            ticket_logs_url,
+            issue.key,
+            should_reevaluate=should_reevaluate,
+            only_specific_signatures=only_specific_signatures,
+            dry_run_file=dry_run_file,
+        )
+
+        # Hacky solution to prevent tqdm from writing over the last line of the signature
+        if dry_run_file == sys.stdout:
+            sys.stdout.write("\n")
 
 
 def main(args):
-    jclient = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
+    jira_client = jira.JIRA(
+        consts.JIRA_SERVER,
+        token_auth=args.jira_access_token,
+        validate=True,
+    )
 
-    issues = get_issues(jclient, args.issue, args.search_query, args.recent_issues)
+    issues = get_issues(
+        jira_client,
+        issue=args.issue,
+        query=args.search_query,
+        only_recent=args.recent_issues,
+    )
 
     if args.dry_run_temp:
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as dry_run_file:
             logger.info(f"Dry run output will be written to {dry_run_file.name}")
             logger.info(f"Run `tail -f {dry_run_file.name}` to view dry run output in real time")
-            Signature.dry_run_file = dry_run_file
-            process_issues(jclient, issues, args.update, args.update_signature)
+            process_issues(
+                jira_client,
+                issues,
+                should_reevaluate=args.update,
+                only_specific_signatures=args.update_signature,
+                dry_run_file=dry_run_file,
+            )
             logger.info(f"Dry run output written to {dry_run_file.name}")
         return
 
-    if args.dry_run:
-        Signature.dry_run_file = sys.stdout
-
-    process_issues(jclient, issues, args.update, args.update_signature)
+    process_issues(
+        jira_client,
+        issues,
+        should_reevaluate=args.update,
+        only_specific_signatures=args.update_signature,
+        dry_run_file=sys.stdout,
+    )
 
 
 def format_time(time_str):
     return dateutil.parser.isoparse(time_str).strftime("%Y-%m-%d %H:%M:%S")
 
 
-def add_signatures(jclient, url, issue_key, should_update=False, signatures=None):
-    name_to_signature = {s.__name__: s for s in SIGNATURES}
-    signatures_to_add = SIGNATURES
-    if signatures:
-        should_update = True
-        signatures_to_add = [v for k, v in name_to_signature.items() if k in signatures]
+def process_ticket_with_signatures(
+    jira_client,
+    ticket_logs_url,
+    issue_key,
+    only_specific_signatures,
+    dry_run_file,
+    should_reevaluate=False,
+):
+    signatures = (
+        ALL_SIGNATURES
+        if only_specific_signatures is None
+        # Filter ALL_SIGNATURES by only_specific_signatures
+        else [
+            signature_class
+            for signature_class in ALL_SIGNATURES
+            if signature_class.__name__ in only_specific_signatures
+        ]
+    )
 
-    for sig in signatures_to_add:
-        logger.debug(f"Running signature {sig.__name__}")
-        s = sig(jclient)
-        s.update_ticket(url, issue_key, should_update=should_update)
+    for signature_class in signatures:
+        logger.debug(f"Running signature {signature_class.__name__}")
+        signature_class(
+            jira_client=jira_client,
+            should_reevaluate=True if only_specific_signatures is not None else should_reevaluate,
+            issue_key=issue_key,
+            dry_run_file=dry_run_file,
+        ).process_ticket(
+            ticket_logs_url,
+            issue_key,
+        )
 
 
 def parse_args():
-    description = f"""
-This utility updates existing triage tickets with signatures.
-Signatures perform automatic analysis of ticket log files to extract
-information that is crucial to help kickstart a ticket triage. Each
-signature typically outputs its information in the form of a ticket
-comment.
+    description = dedent(
+        """
+    This utility updates existing triage tickets with signatures.
+    Signatures perform automatic analysis of ticket log files to extract
+    information that is crucial to help kickstart a ticket triage. Each
+    signature typically outputs its information in the form of a ticket
+    comment.
 
+    See CONTRIBUTING.md for information about how to run this
+    """
+    ).strip()
 
-Before running this please make sure you have -
+    signature_names = [s.__name__ for s in ALL_SIGNATURES]
+    parser = argparse.ArgumentParser(
+        description=description,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
 
-1. A jira username and password -
-    Username: You can find it in {JIRA_SERVER}/secure/ViewProfile.jspa
-    Password: Simply your sso.redhat.com password
-
-2. A RedHat VPN connection - this is required to access ticket log files
-
-3. A Python virtualenv with all the requirements.txt installed
-   (you can also install them without a virtualenv if you wish).
-
-You can run this script without affecting the tickets by using the --dry-run flag
-""".strip()
-
-    signature_names = [s.__name__ for s in SIGNATURES]
-    parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
-
-    parser.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
-                        help="PAT (personal access token) for accessing Jira")
+    parser.add_argument(
+        "--jira-access-token",
+        default=os.environ.get("JIRA_ACCESS_TOKEN"),
+        required=False,
+        help="PAT (personal access token) for accessing Jira",
+    )
 
     selectors_group = parser.add_argument_group(title="Issues selection")
     selectors = selectors_group.add_mutually_exclusive_group(required=True)
-    selectors.add_argument("-r", "--recent-issues", action='store_true', help="Handle recent (30 days) Triaging Tickets")
-    selectors.add_argument("-a", "--all-issues", action='store_true', help="Handle all Triaging Tickets")
-    selectors.add_argument("-i", "--issue", required=False, help="Triage issue key")
-    selectors.add_argument("-s", "--search-query", required=False, help="Triage issue jql query")
+    selectors.add_argument(
+        "-r",
+        "--recent-issues",
+        action="store_true",
+        help="Handle recent (30 days) Triaging Tickets",
+    )
+    selectors.add_argument(
+        "-a",
+        "--all-issues",
+        action="store_true",
+        help="Handle all Triaging Tickets",
+    )
+    selectors.add_argument(
+        "-i",
+        "--issue",
+        required=False,
+        help="Triage issue key",
+    )
+    selectors.add_argument(
+        "-s",
+        "--search-query",
+        required=False,
+        help="Triage issue jql query",
+    )
 
-    parser.add_argument("-u", "--update", action="store_true", help="Update ticket even if signature already exist")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Output verbose logging")
+    parser.add_argument(
+        "-u",
+        "--update",
+        action="store_true",
+        help="Update ticket even if signature already exist",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Output verbose logging",
+    )
 
     dry_run_group = parser.add_argument_group(title="Dry run options")
     dry_run_args = dry_run_group.add_mutually_exclusive_group()
-    dry_run_msg = "Dry run. Don't update tickets. Write output to"
-    dry_run_args.add_argument("-d", "--dry-run", action="store_true", help=f"{dry_run_msg} stdout")
-    dry_run_args.add_argument("-t", "--dry-run-temp", action="store_true", help=f"{dry_run_msg} a temp file")
+    dry_run_msg = "Dry run. Don't update tickets. Write output to {}"
+    dry_run_args.add_argument(
+        "-d",
+        "--dry-run",
+        action="store_true",
+        help=dry_run_msg.format("stdout"),
+    )
+    dry_run_args.add_argument(
+        "-t",
+        "--dry-run-temp",
+        action="store_true",
+        help=dry_run_msg.format("a temp file"),
+    )
 
-    parser.add_argument("-us", "--update-signature", action='append', choices=signature_names,
-                        help="Update tickets with only the signatures specified")
+    parser.add_argument(
+        "-us",
+        "--update-signature",
+        action="append",
+        choices=signature_names,
+        help="Update tickets with only the signatures specified",
+    )
 
     args = parser.parse_args()
 

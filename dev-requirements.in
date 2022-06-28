@@ -1,0 +1,6 @@
+flake8
+pylint
+autopep8
+ipdb
+pip-tools
+black

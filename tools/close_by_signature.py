@@ -13,7 +13,7 @@ import retry
 
 import consts
 from add_triage_signature import (
-    config_logger, get_issues, SIGNATURES,
+    config_logger, get_issues, ALL_SIGNATURES,
 )
 
 logger = logging.getLogger(__name__)
@@ -126,7 +126,7 @@ def read_filters_file(path):
 def get_filters_from_json(filters_json, jira_client):
     signature_by_type = dict(map(
         lambda x: (x.__name__.lower(), x(jira_client)),
-        SIGNATURES
+        ALL_SIGNATURES
     ))
 
     filters = []
@@ -258,7 +258,7 @@ def link_issue_to_root_issue(jira_client, issue, root_issue, dry_run_stdout):
 def get_filters_from_args(args, jira_client):
     signature_by_type = dict(map(
         lambda x: (x.__name__.lower(), x(jira_client)),
-        SIGNATURES
+        ALL_SIGNATURES
     ))
 
     filters = []
