@@ -327,6 +327,7 @@ class HostsStatusSignature(Signature):
         for host in cluster['hosts']:
             info = host['status_info']
             role = host['role']
+            inventory = json.loads(host['inventory'])
             if host.get('bootstrap', False):
                 role = 'bootstrap'
             hosts.append(OrderedDict(
@@ -335,6 +336,7 @@ class HostsStatusSignature(Signature):
                 progress=host['progress']['current_stage'],
                 status=host['status'],
                 role=role,
+                boot_mode=inventory.get('boot', {}).get('current_boot_mode', 'N/A'),
                 status_info=str(info),
                 logs_info=host.get('logs_info', ""),
                 last_checked_in_at=format_time(host.get('checked_in_at', str(datetime.min)))))
