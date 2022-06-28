@@ -12,6 +12,7 @@ import itertools
 import sys
 import subprocess
 import tempfile
+import yaml
 from collections import OrderedDict, defaultdict
 from datetime import datetime
 from textwrap import dedent
@@ -98,6 +99,10 @@ class FailedToGetMetadataException(Exception):
     pass
 
 
+class FailedToGetInstallConfigException(Exception):
+    pass
+
+
 @functools.lru_cache(maxsize=1000)
 def get_metadata_json(cluster_url):
     try:
@@ -106,6 +111,16 @@ def get_metadata_json(cluster_url):
         return res.json()
     except Exception as e:
         raise FailedToGetMetadataException from e
+
+
+@functools.lru_cache(maxsize=1000)
+def get_installconfig_yaml(cluster_url):
+    try:
+        res = requests.get("{}/cluster_files/install-config.yaml".format(cluster_url))
+        res.raise_for_status()
+        return yaml.safe_load(res._content)
+    except Exception as e:
+        raise FailedToGetInstallConfigException from e
 
 
 @functools.lru_cache(maxsize=1000)
@@ -320,6 +335,7 @@ class HostsStatusSignature(Signature):
 
         url = self._logs_url_to_api(url)
         md = get_metadata_json(url)
+        installconfig = get_installconfig_yaml(url)
 
         cluster = md['cluster']
 
@@ -342,6 +358,9 @@ class HostsStatusSignature(Signature):
         report = "h2. Cluster Status\n"
         report += "*status:* {}\n".format(cluster['status'])
         report += "*status_info:* {}\n".format(cluster['status_info'])
+        report = "h2. Install-config Status\n"
+        report += "*baseDomain:* {}\n".format(installconfig["baseDomain"])
+        report += "*networkType:* {}\n".format(installconfig["networking"]["networkType"])
         report += "h2. Hosts status\n"
         report += self._generate_table_for_report(hosts)
         self._update_triaging_ticket(issue_key, report, should_update=should_update)
