@@ -124,22 +124,22 @@ def read_filters_file(path):
 
 
 def get_filters_from_json(filters_json, jira_client):
-    signature_by_type = dict(map(
-        lambda x: (x.__name__.lower(), x(jira_client)),
-        ALL_SIGNATURES
-    ))
+    signature_by_type = {
+        signature_class.__name__.lower(): signature_class for signature_class in ALL_SIGNATURES
+    }
 
     filters = []
     for sign_type, sign_data in filters_json.items():
         sign_type = sign_type.lower().replace('-', '').replace('_', '')
-        signature = signature_by_type.get(sign_type)
-        assert signature is not None
+        signature_class = signature_by_type.get(sign_type)
+        assert signature_class is not None
 
         for root_issue_key, message in sign_data.items():
+            signature_instance = signature_class(jira_client, root_issue_key)
             root_issue = jira_client.issue(root_issue_key)
             assert root_issue is not None
 
-            filters.append(Filter(signature, message, root_issue))
+            filters.append(Filter(signature_instance, message, root_issue))
 
     return filters
 

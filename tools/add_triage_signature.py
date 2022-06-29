@@ -643,7 +643,7 @@ class InstallationDiskFIOSignature(Signature):
     def __init__(self, *args, **kwargs):
         super().__init__(
             *args,
-            *kwargs,
+            **kwargs,
             comment_identifying_string="h1. Host slow installation disks:",
         )
 
@@ -1307,7 +1307,7 @@ class MustGatherAnalysis(Signature):
     def __init__(self, *args, **kwargs):
         super().__init__(
             *args,
-            *kwargs,
+            **kwargs,
             comment_identifying_string="h1. Must-gather Analysis:",
         )
 
@@ -1369,7 +1369,7 @@ class OSInstallationTime(Signature):
     def __init__(self, *args, **kwargs):
         super().__init__(
             *args,
-            *kwargs,
+            **kwargs,
             comment_identifying_string="h1. OS Installation Time:",
         )
 
