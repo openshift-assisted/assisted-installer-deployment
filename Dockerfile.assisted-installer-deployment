@@ -43,4 +43,5 @@ RUN ./setup_env.sh assisted_service
 WORKDIR /home/assisted-installer-deployment
 COPY . .
 
-RUN pip install .
+# PBR version is needed to allow us to .dockerignore the heavy .git directory
+RUN PBR_VERSION=9.9.9 pip install .

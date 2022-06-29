@@ -6,11 +6,34 @@ clean:
 	rm -rf build dist *egg-info ./__pycache__
 	find -name *.pyc -delete
 
+###############
+# Development #
+###############
+
+# This affects the message at the top of the auto-generated files,
+# instruction users how they should be updated
+CUSTOM_COMPILE_COMMAND = "make pip-freeze" 
+
+.PHONY: pip-freeze requirements.txt dev-requirements.txt
+
+requirements.txt: requirements.in
+	CUSTOM_COMPILE_COMMAND=$(CUSTOM_COMPILE_COMMAND) pip-compile $<
+
+dev-requirements.txt: dev-requirements.in
+	CUSTOM_COMPILE_COMMAND=$(CUSTOM_COMPILE_COMMAND) pip-compile $<
+
+# Compiles the input requirement files into a frozen requirement file
+pip-freeze: requirements.txt dev-requirements.txt
+
 ##########
 # Verify #
 ##########
 
-lint: flake8 pylint
+lint: flake8 pylint black
+
+black:
+	black --check tools/add_triage_signature.py
+	black --check tools/create_triage_tickets.py
 
 flake8:
 	flake8 .

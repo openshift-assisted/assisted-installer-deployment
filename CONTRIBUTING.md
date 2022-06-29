@@ -1,7 +1,7 @@
 # Triage Signatures
 Signatures are modules that perform automatic processing and analysis of triage logs to generate useful snippets of information to aid the user triaging the cluster failure.
 
-If you're looking to add new triage signatures to help the triaging efforts, you can do so by implementing them as subclasses of the `Signature` class inside the `./tools/add_triage_signature.py` script. Don't forget to also add the new signature class type to the `SIGNATURES` global list.
+If you're looking to add new triage signatures to help the triaging efforts, you can do so by implementing them as subclasses of the `Signature` class inside the `./tools/add_triage_signature.py` script. Don't forget to also add the new signature class type to the `ALL_SIGNATURES` global list.
 
 You can look at how other signatures perform various operations to take inspiration on how to write your own signature.
 
@@ -20,7 +20,7 @@ In order to test your new signatures, you can run the script locally to make sur
 5. Install `requirements.txt` (`python3 -m pip install -r requirements.txt`)
 (On Fedora, this step may need the `python3-devel` package to be installed first)
 
-6. Run `export JIRA_ACCESS_TOKEN=my-secret-token`
+6. Run `export JIRA_ACCESS_TOKEN=<my-secret-token>`
 
 7. Run `./tools/add_triage_signature.py`, using flags `--dry-run` or `--dry-run-temp`, along with `--issue AITRIAGE-3400` or `--recent-issues`
 
