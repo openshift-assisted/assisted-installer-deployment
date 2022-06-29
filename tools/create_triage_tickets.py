@@ -127,7 +127,9 @@ def main(args):
             new_issue = create_jira_ticket(jira_client, summaries, failure["name"], cluster)
             if new_issue is not None:
                 logs_url = "{}/files/{}".format(LOGS_COLLECTOR, failure["name"])
-                process_ticket_with_signatures(jira_client, logs_url, new_issue.key)
+                process_ticket_with_signatures(
+                    jira_client, logs_url, new_issue.key, only_specific_signatures=None, should_reevaluate=False
+                )
                 close_custom_domain_user_ticket(jira_client, new_issue.key)
 
     if not args.filters_json:
