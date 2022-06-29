@@ -13,80 +13,82 @@ import retry
 
 import consts
 from add_triage_signature import (
-    config_logger, get_issues, ALL_SIGNATURES,
+    config_logger,
+    get_issues,
+    ALL_SIGNATURES,
 )
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    desc = textwrap.dedent("""\
+    desc = textwrap.dedent(
+        """\
         Automatically resolve triage tickets that are linked to known issues by
         signature type and/or common message in the signature comment body.
         Root issues can be linked to given signature messages, and if provided they
         will be linked to the resolved issues on close.
-    """)
+    """
+    )
     parser = argparse.ArgumentParser(description=desc)
+    parser.add_argument("-v", "--verbose", action="store_true", help="Output verbose logging")
+
     parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Output verbose logging'
+        "--jira-access-token",
+        default=os.environ.get("JIRA_ACCESS_TOKEN"),
+        required=False,
+        help="PAT (personal access token) for accessing Jira",
     )
 
-    parser.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
-                        help="PAT (personal access token) for accessing Jira")
-
-    selectors_group = parser.add_argument_group(title='Issues selection')
+    selectors_group = parser.add_argument_group(title="Issues selection")
     selectors = selectors_group.add_mutually_exclusive_group(required=True)
     selectors.add_argument(
-        '-r', '--recent-issues',
-        action='store_true',
-        help='Handle recent (30 days) Triaging Tickets',
+        "-r",
+        "--recent-issues",
+        action="store_true",
+        help="Handle recent (30 days) Triaging Tickets",
     )
     selectors.add_argument(
-        '-a', '--all-issues',
-        action='store_true',
-        help='Handle all Triaging Tickets',
+        "-a",
+        "--all-issues",
+        action="store_true",
+        help="Handle all Triaging Tickets",
     )
     selectors.add_argument(
-        '-i', '--issue',
+        "-i",
+        "--issue",
         required=False,
-        help='Triage issue key',
+        help="Triage issue key",
     )
 
-    filter_group = parser.add_argument_group(title='Filter by')
+    filter_group = parser.add_argument_group(title="Filter by")
     filters = filter_group.add_mutually_exclusive_group(required=True)
     filters.add_argument(
-        '-f', '--filter',
-        nargs='+',
-        help='Filter issues that applied to the format '
-             'signature_type:root_issue:message',
+        "-f",
+        "--filter",
+        nargs="+",
+        help="Filter issues that applied to the format signature_type:root_issue:message",
     )
     filters.add_argument(
-        '--filters-json',
-        help='Filter issues that applied to the rules in a given json file '
-             'which has the format: '
-             '{signature_type: {root_issue: message}}',
+        "--filters-json",
+        help="Filter issues that applied to the rules in a given json file "
+        "which has the format: "
+        "{signature_type: {root_issue: message}}",
     )
 
-    dry_run_group = parser.add_argument_group(title='Dry run options')
+    dry_run_group = parser.add_argument_group(title="Dry run options")
     dry_run_args = dry_run_group.add_mutually_exclusive_group()
     dry_run_args.add_argument(
-        '-d', '--dry-run',
-        action='store_true',
-        help='Dry run. Don\'t update tickets. Write output to stdout'
+        "-d", "--dry-run", action="store_true", help="Dry run. Don't update tickets. Write output to stdout"
     )
     dry_run_args.add_argument(
-        '-t', '--dry-run-temp',
-        action='store_true',
-        help="Dry run. Don't update tickets. Write output to a temp file"
+        "-t", "--dry-run-temp", action="store_true", help="Dry run. Don't update tickets. Write output to a temp file"
     )
 
     return parser.parse_args()
 
 
 class Filter:
-
     def __init__(self, signature, message, root_issue):
         self.signature = signature
         self.message = message
@@ -94,7 +96,6 @@ class Filter:
 
 
 class IssueData:
-
     def __init__(self, issue, signature, root_issue, comment):
         self.issue = issue
         self.signature = signature
@@ -103,7 +104,7 @@ class IssueData:
 
 
 def run_using_json(path, jira_client, issues, dry_run_stdout=None):
-    logger.debug('Starting issue resolver task using filters json=%s', path)
+    logger.debug("Starting issue resolver task using filters json=%s", path)
     filters_json = read_filters_file(path)
     filters = get_filters_from_json(filters_json, jira_client)
     close_tickets_by_filters(
@@ -119,18 +120,16 @@ def read_filters_file(path):
     with open(path) as fp:
         filters_json = json.load(fp)
 
-    logger.debug('Filters file data=%s', pprint.pformat(filters_json))
+    logger.debug("Filters file data=%s", pprint.pformat(filters_json))
     return filters_json
 
 
 def get_filters_from_json(filters_json, jira_client):
-    signature_by_type = {
-        signature_class.__name__.lower(): signature_class for signature_class in ALL_SIGNATURES
-    }
+    signature_by_type = {signature_class.__name__.lower(): signature_class for signature_class in ALL_SIGNATURES}
 
     filters = []
     for sign_type, sign_data in filters_json.items():
-        sign_type = sign_type.lower().replace('-', '').replace('_', '')
+        sign_type = sign_type.lower().replace("-", "").replace("_", "")
         signature_class = signature_by_type.get(sign_type)
         assert signature_class is not None
 
@@ -146,7 +145,7 @@ def get_filters_from_json(filters_json, jira_client):
 
 def filter_and_generate_issues(jira_client, filters, issues):
     for issue in issues:
-        if issue.fields.status.name in ('Closed', 'Done', 'Obsolete'):
+        if issue.fields.status.name in ("Closed", "Done", "Obsolete"):
             continue
 
         comments = get_issue_comments(jira_client, issue)
@@ -176,7 +175,7 @@ def get_issue_comments(jira_client, issue):
     try:
         return jira_client.comments(issue)
     except JIRAError as e:
-        if 'Issue Does Not Exist' not in str(e):
+        if "Issue Does Not Exist" not in str(e):
             raise
 
     return None
@@ -184,7 +183,7 @@ def get_issue_comments(jira_client, issue):
 
 def get_dry_run_stdout(args):
     if args.dry_run_temp:
-        return tempfile.NamedTemporaryFile(mode='w', delete=False)
+        return tempfile.NamedTemporaryFile(mode="w", delete=False)
 
     elif args.dry_run:
         return sys.stdout
@@ -203,8 +202,8 @@ def close_tickets_by_filters(jira_client, filters, issues, dry_run_stdout):
     )
 
 
-TARGET_TRANSITION_ID = '41'  # '41' - 'Closed', see GET /rest/api/2/issue/{issueIdOrKey}/transitions
-CLOSED_TICKETS_ASSIGNEE = 'mkowalsk'
+TARGET_TRANSITION_ID = "41"  # '41' - 'Closed', see GET /rest/api/2/issue/{issueIdOrKey}/transitions
+CLOSED_TICKETS_ASSIGNEE = "mkowalsk"
 
 
 def close_and_link_issues(jira_client, filtered_issues_generator, dry_run_stdout):
@@ -217,56 +216,53 @@ def close_and_link_issues(jira_client, filtered_issues_generator, dry_run_stdout
                 dry_run_stdout=dry_run_stdout,
             )
 
-        logger.debug('Closing issue with key=%s signature=%s comment=%s',
-                     issue_data.issue.key, type(issue_data.signature),
-                     issue_data.comment.body)
+        logger.debug(
+            "Closing issue with key=%s signature=%s comment=%s",
+            issue_data.issue.key,
+            type(issue_data.signature),
+            issue_data.comment.body,
+        )
 
         if dry_run_stdout is None:
             jira_client.transition_issue(issue_data.issue, TARGET_TRANSITION_ID)
             jira_client.assign_issue(issue_data.issue, CLOSED_TICKETS_ASSIGNEE)
         else:
             print(
-                f'Closed issue key={issue_data.issue.key} '
-                f'signature={type(issue_data.signature)} '
-                f'comment={issue_data.comment.body}\n',
+                f"Closed issue key={issue_data.issue.key} "
+                f"signature={type(issue_data.signature)} "
+                f"comment={issue_data.comment.body}\n",
                 file=dry_run_stdout,
                 flush=True,
             )
             print(
-                f'Assigned issue key={issue_data.root_issue.key} '
-                f'to user={CLOSED_TICKETS_ASSIGNEE}\n',
+                f"Assigned issue key={issue_data.root_issue.key} to user={CLOSED_TICKETS_ASSIGNEE}\n",
                 file=dry_run_stdout,
                 flush=True,
             )
 
 
 def link_issue_to_root_issue(jira_client, issue, root_issue, dry_run_stdout):
-    logger.info('Linking issue key=%s to root issue key=%s', issue.key,
-                root_issue.key)
+    logger.info("Linking issue key=%s to root issue key=%s", issue.key, root_issue.key)
 
     if dry_run_stdout is None:
-        jira_client.create_issue_link('relates to', issue.key, root_issue.key)
+        jira_client.create_issue_link("relates to", issue.key, root_issue.key)
     else:
         print(
-            f'Linked issue key={issue.key} to root issue '
-            f'key={issue.key}\n',
+            f"Linked issue key={issue.key} to root issue key={issue.key}\n",
             file=dry_run_stdout,
             flush=True,
         )
 
 
 def get_filters_from_args(args, jira_client):
-    signature_by_type = dict(map(
-        lambda x: (x.__name__.lower(), x(jira_client)),
-        ALL_SIGNATURES
-    ))
+    signature_by_type = dict(map(lambda x: (x.__name__.lower(), x(jira_client)), ALL_SIGNATURES))
 
     filters = []
     for _filter in args.filter:
-        assert _filter.count(':') == 2
-        sign_type, root_issue_key, message = _filter.split(':')
+        assert _filter.count(":") == 2
+        sign_type, root_issue_key, message = _filter.split(":")
 
-        sign_type = sign_type.lower().replace('-', '').replace('_', '')
+        sign_type = sign_type.lower().replace("-", "").replace("_", "")
         signature = signature_by_type.get(sign_type)
         assert signature is not None
 
@@ -281,8 +277,7 @@ def get_filters_from_args(args, jira_client):
 def run_using_cli(args):
     config_logger(args.verbose)
 
-    logger.debug('Starting issue resolver task using CLI with args=%s',
-                 pprint.pformat(args.__dict__))
+    logger.debug("Starting issue resolver task using CLI with args=%s", pprint.pformat(args.__dict__))
 
     jira_client = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
 
@@ -307,6 +302,6 @@ def run_using_cli(args):
             dry_run_stdout.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     run_using_cli(parse_args())
