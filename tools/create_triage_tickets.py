@@ -87,7 +87,7 @@ def create_jira_ticket(jira_client, existing_tickets, failure_id, cluster_md):
         components=[{"name": "Cloud-Triage"}],
         priority={"name": "Blocker"},
         issuetype={"name": "Bug"},
-        description=FailureDescription(jira_client).build_description(url, cluster_md),
+        description=FailureDescription(jira_client, issue_key="Unknown").build_description(url, cluster_md),
     )
 
     logger.info("issue created: %s", new_issue)
