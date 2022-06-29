@@ -1157,7 +1157,7 @@ class CoreOSInstallerErrorSignature(ErrorSignature):
         super().__init__(
             *args,
             **kwargs,
-            signature_label="coreos_installer_error",
+            label="coreos_installer_error",
             comment_identifying_string="h1. CoreOS Installer error",
         )
 
