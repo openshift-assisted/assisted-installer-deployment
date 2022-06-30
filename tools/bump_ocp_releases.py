@@ -354,6 +354,7 @@ def get_pr_body(updates_made):
     return (
         get_release_notes(updates_made) +
         textwrap.dedent(f"""
+            /test {" ".join(f"edge-e2e-metal-assisted-{ocp_version.replace('.', '-')}" for ocp_version in updates_made)}
             /cc {" ".join(f"@{user}" for user in PR_MENTION)}
             /hold
         """)
