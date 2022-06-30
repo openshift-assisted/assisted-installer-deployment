@@ -929,8 +929,8 @@ class StorageDetailSignature(Signature):
 
 
 class SNOMachineCidrSignature(Signature):
-    def __init__(self, jira_client):
-        super().__init__(jira_client, comment_identifying_string="h1. Invalid machine cidr")
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs, comment_identifying_string="h1. Invalid machine cidr")
 
     def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
