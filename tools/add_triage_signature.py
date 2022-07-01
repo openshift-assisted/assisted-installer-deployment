@@ -345,6 +345,33 @@ class Signature(abc.ABC):
         inventory = json.loads(host["inventory"])
         return inventory["hostname"]
 
+    @staticmethod
+    def _generate_hosts_summary(hosts):
+        host_summary = []
+        for host in hosts:
+            # Add host status summary
+            if host["role"] not in ["master", "boostrap"]:
+                continue
+            if host["progress"] == "Done" or host["status"] != "error":
+                continue
+
+            host_comment = {
+                "Waiting for bootkube": "bootkube.service never completed",
+                "Rebooting": "Node never pulled Ignition",
+                "Configuring": "Node pulled Ignition, but never started kubelet",
+                "Waiting for control plane": "Masters never formed 2-node cluster",
+                "Waiting for controller": "Assisted installer controller pod never started",
+                "Writing image to disk": "Image probably failed to be written on disk",
+            }.get(host["progress"], "Unknown")
+            host_summary.append(
+                OrderedDict(
+                    hostname=host["hostname"],
+                    role=host["role"],
+                    description=host_comment,
+                )
+            )
+        return tabulate(host_summary, headers="keys", tablefmt="jira") + "\n"
+
 
 class ErrorSignature(Signature, abc.ABC):
     """
@@ -435,6 +462,7 @@ class HostsStatusSignature(Signature):
         report += "*networkType:* {}\n".format(installconfig["networking"]["networkType"])
         report += "h2. Hosts status\n"
         report += self._generate_table_for_report(hosts)
+        report += self._generate_hosts_summary(hosts)
         self._update_triaging_ticket(report)
 
 
