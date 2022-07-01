@@ -14,7 +14,7 @@ import sys
 import tempfile
 import yaml
 import ipaddress
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict, defaultdict, Counter
 from datetime import datetime
 from enum import Flag, auto
 from textwrap import dedent
@@ -1499,6 +1499,41 @@ class NonstandardNetworkType(ErrorSignature):
             )
 
 
+class FlappingValidations(ErrorSignature):
+    regexps = [
+        re.compile(r"Host .+: validation '.+' is now fixed"),
+        re.compile(r"Host .+: validation '.+' that used to succeed is now failing"),
+    ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Flapping validations:",
+            label="flapping-validations",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        events = get_events_json(url, get_metadata_json(url)["cluster"]["id"])
+        validation_state_changes = Counter(
+            event["message"] for event in events if any(regexp.match(event["message"]) for regexp in self.regexps)
+        )
+
+        excessive_validation_state_changes = [
+            OrderedDict(
+                message=k,
+                count=f"This validation flapped {v} times",
+            )
+            for k, v in validation_state_changes.items()
+            if v > 2
+        ]
+
+        if excessive_validation_state_changes:
+            self._update_triaging_ticket(
+                comment=self._generate_table_for_report(excessive_validation_state_changes),
+            )
+
+
 ############################
 # Common functionality
 ############################
@@ -1522,6 +1557,7 @@ ALL_SIGNATURES = [
     CoreOSInstallerErrorSignature,
     SNOMachineCidrSignature,
     NonstandardNetworkType,
+    FlappingValidations,
 ]
 
 ############################
