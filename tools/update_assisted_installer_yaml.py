@@ -3,6 +3,7 @@ import yaml
 import os
 import update_hash
 import skopeo
+import github
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--deployment", help="deployment yaml file to update", type=str,
@@ -46,10 +47,19 @@ def main():
         deployment = yaml.safe_load(f)
 
     for rep in deployment:
-        if full_release:
+        if rep == "openshift-assisted/assisted-ui":
+            # for UI we're only updating when new releases are being published
+            github_client = github.Github()
+            ui_repo = github_client.get_repo(rep)
+            latest_release = ui_repo.get_latest_release()
+            hash = ui_repo.get_commit(latest_release.tag_name).sha
+
+        elif full_release:
             hash = get_ref_by_docker_image(deployment[rep]['images'])
+
         else:
             hash = os.environ.get(rep, None)
+
         if not hash:
             continue
         update_hash.update_hash(deployment_yaml=args.deployment, repo=rep, hash=hash)
