@@ -1500,6 +1500,7 @@ class NonstandardNetworkType(ErrorSignature):
 
 
 class FlappingValidations(ErrorSignature):
+    validation_name_regexp = re.compile(r"Host .+: validation '(.+)'.+")
     regexps = [
         re.compile(r"Host .+: validation '.+' is now fixed"),
         re.compile(r"Host .+: validation '.+' that used to succeed is now failing"),
@@ -1516,12 +1517,14 @@ class FlappingValidations(ErrorSignature):
     def _process_ticket(self, url, issue_key):
         events = get_events_json(url, get_metadata_json(url)["cluster"]["id"])
         validation_state_changes = Counter(
-            event["message"] for event in events if any(regexp.match(event["message"]) for regexp in self.regexps)
+            self.validation_name_regexp.match(event["message"]).groups()[0]
+            for event in events
+            if any(regexp.match(event["message"]) for regexp in self.regexps)
         )
 
         excessive_validation_state_changes = [
             OrderedDict(
-                message=k,
+                validation=k,
                 count=f"This validation flapped {v} times",
             )
             for k, v in validation_state_changes.items()
