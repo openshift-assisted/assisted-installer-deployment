@@ -462,7 +462,10 @@ class HostsStatusSignature(Signature):
         report += "*networkType:* {}\n".format(installconfig["networking"]["networkType"])
         report += "h2. Hosts status\n"
         report += self._generate_table_for_report(hosts)
-        report += self._generate_hosts_summary(hosts)
+        summary = self._generate_hosts_summary(hosts)
+        if summary:
+            report += "\nHost status summary:\n"
+            report += summary
         self._update_triaging_ticket(report)
 
 
