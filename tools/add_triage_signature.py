@@ -1528,7 +1528,7 @@ class FlappingValidations(ErrorSignature):
                 count=f"This validation flapped {v} times",
             )
             for k, v in validation_state_changes.items()
-            if v > 2
+            if v > 4
         ]
 
         if excessive_validation_state_changes:
