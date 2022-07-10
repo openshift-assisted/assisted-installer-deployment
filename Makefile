@@ -32,6 +32,7 @@ pip-freeze: requirements.txt dev-requirements.txt
 lint: flake8 pylint black
 
 black:
+	black --check tools/close_by_signature.py
 	black --check tools/add_triage_signature.py
 	black --check tools/create_triage_tickets.py
 
