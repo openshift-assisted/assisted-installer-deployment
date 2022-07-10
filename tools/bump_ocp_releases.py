@@ -9,14 +9,13 @@ import argparse
 import pathlib
 import tempfile
 import textwrap
-import semver
 import shutil
 import subprocess
 import uuid
 
 import bs4
-from distutils import version
 import github
+import natsort
 import requests
 import sh
 
@@ -154,7 +153,7 @@ def get_release_data(minor_release, cpu_architecture):
         versions = []
         for release in releases:
             versions.append(release['version'])
-        latest_version = max(versions, key=semver.VersionInfo.parse)
+        latest_version = max(versions, key=natsort.natsort_key)
         release_data = [r for r in releases if r['version'] == latest_version][0]
     return release_data
 
@@ -172,7 +171,7 @@ def get_latest_rhcos_release_from_minor(minor_release: str, all_releases: list, 
     if not all_relevant_releases:
         return None
 
-    return sorted(all_relevant_releases, key=version.LooseVersion)[-1]
+    return natsort.natsorted(all_relevant_releases)[-1]
 
 
 def get_all_releases(openshift_version, cpu_architecture):
@@ -317,16 +316,13 @@ def update_os_images_json(default_os_images_json, updates_made, updates_made_str
         updates_made_str.add(f"rhcos {rhcos_default_release} -> {rhcos_latest_release}")
 
         logger.info(f"New latest rhcos release available, {rhcos_default_release} -> {rhcos_latest_release}")
-        # Update rhcos image/rootfs with latest version
+        # Update rhcos image with latest version
         rhcos_image = updated_version_json[index]["url"].replace(rhcos_default_release, rhcos_latest_release)
-        rhcos_rootfs = updated_version_json[index]["rootfs_url"].replace(rhcos_default_release, rhcos_latest_release)
         if not pre_release:
             # Replace 'pre-release' with minor version
             rhcos_image = rhcos_image.replace(RHCOS_PRE_RELEASE, openshift_version)
-            rhcos_rootfs = rhcos_rootfs.replace(RHCOS_PRE_RELEASE, openshift_version)
         # Update json
         updated_version_json[index]["url"] = rhcos_image
-        updated_version_json[index]["rootfs_url"] = rhcos_rootfs
 
         if bypass_iso_download:
             rhcos_version_from_iso = "8888888"
