@@ -1386,9 +1386,7 @@ class OSInstallationTime(Signature):
     writing_image_start_event_regex = re.compile(r".*reached installation stage Writing image to disk$")
     writing_image_end_event_regex = re.compile(r".*reached installation stage Writing image to disk: 100%$")
 
-    unknown_message = (
-        "{color:darkgreen}OS installation time duration could not be determined for this host{color:darkgreen}"
-    )
+    unknown_message = "{color:darkgreen}OS installation time duration could not be determined for this host{color}"
     slow_message = "{{color:red}}OS installation to disk was rather slow, it took {} seconds{{color}}"
     fast_message = "{{color:darkgreen}}OS installation to disk was relatively okay, it took {} seconds{{color}}"
 
