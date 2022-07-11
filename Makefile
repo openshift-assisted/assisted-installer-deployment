@@ -35,6 +35,7 @@ black:
 	black --check tools/close_by_signature.py
 	black --check tools/add_triage_signature.py
 	black --check tools/create_triage_tickets.py
+	black --check tools/triage_status_report.py
 
 flake8:
 	flake8 .

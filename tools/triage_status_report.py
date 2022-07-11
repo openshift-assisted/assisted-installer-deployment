@@ -35,17 +35,19 @@ def _parse_issue_data(issue):
     user = issue.raw["fields"]["customfield_12319044"]
     email_domain = issue.raw["fields"]["customfield_12319045"]
 
-    features = [label.replace("FEATURE-", "")
-                for label in issue.raw["fields"]["labels"]
-                if "FEATURE" in label]
+    features = [label.replace("FEATURE-", "") for label in issue.raw["fields"]["labels"] if "FEATURE" in label]
 
     # filtering some non-important "features"
-    features = [feature for feature in features
-                if feature not in (
-                    "Requested-hostname",
-                    "Requsted-hostname",  # leaving the value with the typo for backwards compatibility
-                    "NetworkType",
-                )]
+    features = [
+        feature
+        for feature in features
+        if feature
+        not in (
+            "Requested-hostname",
+            "Requsted-hostname",  # leaving the value with the typo for backwards compatibility
+            "NetworkType",
+        )
+    ]
 
     return IssueData(key=key, url=url, user=user, email_domain=email_domain, features=features)
 
@@ -55,7 +57,7 @@ def _post_message(webhook, text):
         # dry-run mode, just printing it raw
         print(text)
     else:
-        response = requests.post(webhook, data=json.dumps({"text": text}), headers={'Content-type': 'application/json'})
+        response = requests.post(webhook, data=json.dumps({"text": text}), headers={"Content-type": "application/json"})
         response.raise_for_status()
 
         print("Message sent successfully!")
@@ -88,17 +90,24 @@ def triage_status_report(jira_client, filter_id, webhook):
         table += f"<{issue.url}|{issue.key}>   {issue.user:<15} {issue.email_domain:<15} {issue.features}\n"
 
     if table:
-        text += '```{}```'.format(table)
+        text += "```{}```".format(table)
 
     _post_message(webhook, text)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
-                        help="PAT (personal access token) for accessing Jira")
-    parser.add_argument("--webhook", default=os.environ.get("WEBHOOK"),
-                        help="Slack channel url to post information. Not specifying implies dry-run")
+    parser.add_argument(
+        "--jira-access-token",
+        default=os.environ.get("JIRA_ACCESS_TOKEN"),
+        required=False,
+        help="PAT (personal access token) for accessing Jira",
+    )
+    parser.add_argument(
+        "--webhook",
+        default=os.environ.get("WEBHOOK"),
+        help="Slack channel url to post information. Not specifying implies dry-run",
+    )
     parser.add_argument("--filter-id", default=FILTER_ID, help="Jira filter id")
     args = parser.parse_args()
 
