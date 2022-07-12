@@ -21,20 +21,18 @@ RUN alternatives --set python /usr/bin/python3.9
 
 RUN pip3 install pip --upgrade
 
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install -r /tmp/requirements.txt
+COPY requirements.txt ./
+RUN pip install -r requirements.txt
 
-COPY dev-requirements.txt /tmp/dev-requirements.txt
-RUN pip install -r /tmp/dev-requirements.txt
+COPY dev-requirements.txt ./
+RUN pip install -r dev-requirements.txt
 
-COPY requirements-rht.txt /tmp/requirements-rht.txt
-# required in order to handle self-signed repository
-RUN curl -k -d op=download -d mimeType=application/x-x509-ca-cer \
-    -d submit=Submit https://ca01.pki.prod.int.rdu2.redhat.com:8443/ca/ee/ca/getCAChain \
-    | openssl pkcs7 -inform DER -print_certs \
-    -out /etc/pki/ca-trust/source/anchors/Red_Hat_CA_chain.pem || true
-RUN update-ca-trust || true
-RUN pip install -r /tmp/requirements-rht.txt || true
+ARG INSTALL_CCX=true
+
+COPY ccx/ ./ccx
+RUN if [ "${INSTALL_CCX}" == "true" ]; then \
+        ./ccx/install.sh; \
+    fi
 
 # required for generating configuration/bundle in assisted-service repo
 COPY ./setup_env.sh ./

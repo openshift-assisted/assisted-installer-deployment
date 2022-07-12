@@ -20,12 +20,6 @@ function kustomize() {
     tar -zx -C /usr/bin/
 }
 
-function butane() {
-  echo "Installing butane..."
-  curl https://mirror.openshift.com/pub/openshift-v4/clients/butane/latest/butane-${ARCH} --output /usr/local/bin/butane
-  chmod +x /usr/local/bin/butane
-}
-
 function assisted_service() {
   ARCH=$(case $(arch) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(arch) ;; esac)
   OS=$(uname | awk '{print tolower($0)}')
@@ -43,7 +37,6 @@ function assisted_service() {
     sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.2 \
     github.com/AlekSi/gocov-xml@v0.0.0-20190121064608-3a14fb1c4737
 
-  butane
   kustomize
 }
 
