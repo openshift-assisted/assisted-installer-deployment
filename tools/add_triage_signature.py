@@ -359,6 +359,7 @@ class Signature(abc.ABC):
                 "Waiting for bootkube": "bootkube.service never completed",
                 "Rebooting": "Node never pulled Ignition",
                 "Configuring": "Node pulled Ignition, but never started kubelet",
+                "Joined": "The Node k8s resource associated with this host is not Ready or the Assisted Controller is not running on the cluster",
                 "Waiting for control plane": "Masters never formed 2-node cluster",
                 "Waiting for controller": "Assisted installer controller pod never started",
                 "Writing image to disk": "Image probably failed to be written on disk",
