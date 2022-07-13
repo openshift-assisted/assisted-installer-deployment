@@ -128,11 +128,50 @@ def get_installconfig_yaml(cluster_url):
         raise FailedToGetInstallConfigException from e
 
 
+def partition(iterator, predicate):
+    """
+    Partition an iterator into partitions separated by items that match
+    a given predicate.
+
+    For example:
+
+    > partition(range(10), lambda x: x % 4 == 0)
+    [[1, 2, 3], [5, 6, 7], [9]]
+    """
+    return [
+        list(partition)
+        for predicate_result, partition in itertools.groupby(iterator, key=predicate)
+        if not predicate_result
+    ]
+
+
 @functools.lru_cache(maxsize=1000)
-def get_events_json(logs_url, cluster_id):
+def _get_all_cluster_events(logs_url, cluster_id):
+    """
+    WARNING - It's likely you do not want to use this function
+    as it returns all recorded events for this cluster rather than
+    just the events relevant to the latest installation attempt for
+    which this ticket was created
+    """
     res = requests.get(f"{logs_url}/cluster_{cluster_id}_events.json")
     res.raise_for_status()
     return res.json()
+
+
+def _partition_cluster_events(logs_url, cluster_id):
+    """
+    Use the reset event to partition the events list into separate installations
+    """
+    return partition(
+        _get_all_cluster_events(logs_url, cluster_id), lambda event: event["name"] == "cluster_installation_reset"
+    )
+
+
+def get_cluster_installation_events(logs_url, cluster_id):
+    # Use just the last partition, as it contains all the events that apply to
+    # this current installation, as the logs for this failure were collected
+    # right after this installation failed, before the cluster was reset.
+    return _partition_cluster_events(logs_url, cluster_id)[-1]
 
 
 @functools.lru_cache(maxsize=100)
@@ -167,7 +206,7 @@ def get_journal(triage_logs_tar, host_ip, journal_file):
 
 def get_events_by_host(logs_url, cluster_id):
     events_by_host = defaultdict(list)
-    for event in get_events_json(logs_url, cluster_id):
+    for event in get_cluster_installation_events(logs_url, cluster_id):
         if "host_id" not in event:
             # Cluster-level event, no host_id associated with it
             continue
@@ -696,7 +735,7 @@ class InstallationDiskFIOSignature(Signature):
         cluster = md["cluster"]
 
         cluster_id = cluster["id"]
-        events = get_events_json(url, cluster_id)
+        events = get_cluster_installation_events(url, cluster_id)
         fio_events = self._get_fio_events(events)
 
         fio_events_by_host = defaultdict(list)
@@ -1517,7 +1556,7 @@ class FlappingValidations(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        events = get_events_json(url, get_metadata_json(url)["cluster"]["id"])
+        events = get_cluster_installation_events(url, get_metadata_json(url)["cluster"]["id"])
         validation_state_changes = Counter(
             self.validation_name_regexp.match(event["message"]).groups()[0]
             for event in events
@@ -1566,7 +1605,7 @@ class WrongBootOrderSignature(ErrorSignature):
 
         cluster_id = cluster["id"]
         report = ""
-        events = get_events_json(url, cluster_id)
+        events = get_cluster_installation_events(url, cluster_id)
         reboot_events_by_host = defaultdict(list)
         for event in events:
             if self.EVENT_PATTERN in event["message"]:
@@ -1638,12 +1677,49 @@ class ReleasePullErrorSignature(ErrorSignature):
             self._update_triaging_ticket(report)
 
 
+class EventsInstallationAttempts(Signature):
+    """
+    This signature inspects the events file for this cluster to check how many
+    installation attempts seem to appear in it. It does so by looking at reset
+    events which act as indicators for where one attempt stops and another
+    begins.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Multiple installation attempts in the events file",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        md = get_metadata_json(url)
+
+        cluster = md["cluster"]
+        cluster_id = cluster["id"]
+
+        installation_attempts = len(_partition_cluster_events(url, cluster_id))
+
+        if installation_attempts != 1:
+            last_attempt_first_event = get_cluster_installation_events(url, cluster_id)[0]
+            self._update_triaging_ticket(
+                dedent(
+                    f"""
+                    The events file for this cluster contains events from {installation_attempts} installation attempts.
+                    When reading the events for this ticket, make sure you look only at the events for the last installation attempt,
+                    the first event in that attempt happened around {{*}}{last_attempt_first_event["event_time"]}{{*}}.
+                    """
+                ).strip()
+            )
+
+
 ############################
 # Common functionality
 ############################
 JIRA_SERVER = "https://issues.redhat.com"
 ALL_SIGNATURES = [
     AllInstallationAttemptsSignature,
+    EventsInstallationAttempts,
     ApiInvalidCertificateSignature,
     FailureDetails,
     FailureDescription,
