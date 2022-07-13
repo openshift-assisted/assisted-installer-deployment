@@ -1015,20 +1015,18 @@ class SNOMachineCidrSignature(Signature):
         inventory = json.loads(host["inventory"])
         # The first one is the machine_cidr that will be used for network configuration
         machine_cidr = ipaddress.ip_network(cluster["machine_networks"][0]["cidr"])
-        for route in inventory["routes"]:
-            # currently only relevant for ipv4
-            if (
-                route.get("destination") == "0.0.0.0"
-                and route.get("gateway")
-                and ipaddress.ip_address(route["gateway"]) in machine_cidr
-            ):
-                return
 
-        report = (
-            f"Machine cidr {machine_cidr} doesn't match any default route configured on the host. \n It will cause "
-            f"etcd certificate error (or some other) as kubelet and OVNKubernetes will not run with expected machine cidr.\n"
-            f"We hope it will be fixed after https://issues.redhat.com/browse/SDN-3053"
-        )
+        default_routes = (route for route in inventory["routes"] if route.get("destination") == "0.0.0.0")
+
+        if any(
+            route.get("gateway") and ipaddress.ip_address(route["gateway"]) not in machine_cidr
+            for route in default_routes
+        ):
+            report = (
+                f"Machine cidr {machine_cidr} doesn't match one of the default routes configured on the host. \n It will cause "
+                f"etcd certificate error (or some other) as kubelet and OVNKubernetes will not run with expected machine cidr.\n"
+                f"We hope it will be fixed after https://issues.redhat.com/browse/SDN-3053"
+            )
 
         self._update_triaging_ticket(report)
 
