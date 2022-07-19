@@ -34,6 +34,7 @@ lint: flake8 pylint black
 black:
 	black --check tools/close_by_signature.py
 	black --check tools/add_triage_signature.py
+	black --check tools/test_add_triage_signature.py
 	black --check tools/create_triage_tickets.py
 	black --check tools/triage_status_report.py
 
