@@ -967,12 +967,12 @@ class StorageDetailSignature(Signature):
             disks = inventory["disks"]
             disks_details = defaultdict(list)
             for d in disks:
-                disk_type = d.get("drive_type", "N/A")
+                disk_type = d.get("drive_type", "Not available")
                 disks_details["type"].append(disk_type)
-                disks_details["bootable"].append(str(d.get("bootable", "N/A")))
-                disks_details["name"].append(d.get("name", "N/A"))
-                disks_details["path"].append(d.get("path", "N/A"))
-                disks_details["by-path"].append(d.get("by_path", "N/A"))
+                disks_details["bootable"].append(str(d.get("bootable", False)))
+                disks_details["name"].append(d.get("name", "Not available"))
+                disks_details["path"].append(d.get("path", "Not available"))
+                disks_details["by-path"].append(d.get("by_path", "Not available"))
                 disks_details["smart"].append(
                     (
                         self._parse_smart(d.get("smart", "N/A"))
