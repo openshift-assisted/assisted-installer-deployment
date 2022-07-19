@@ -1713,6 +1713,108 @@ class EventsInstallationAttempts(Signature):
             )
 
 
+class ControllerOperatorStatus(Signature):
+    """
+    This signature inspects the Assisted Controller logs to extract the status
+    of degraded operators and attaches them as a file in a human readable YAML
+    format
+    """
+
+    operator_regex = re.compile(r"Operator ([a-z\-]+), statuses: \[(.*)\].*")
+    conditions_regex = re.compile(r"\{(.+?)\}")
+    condition_regex = re.compile(
+        r"([A-Za-z]+) (False|True) ([0-9a-zA-Z\-]+ [0-9a-zA-Z\:]+ [0-9a-zA-Z\-\+]+ [A-Z]+) (.*)"
+    )
+
+    @classmethod
+    def operator_statuses_from_controller_logs(cls, controller_log):
+        operator_statuses = defaultdict(dict)
+        for operator_name, operator_status in cls.operator_regex.findall(controller_log):
+            for operator_conditions_raw in cls.conditions_regex.findall(operator_status):
+                for (
+                    condition_name,
+                    condition_result,
+                    condition_timestamp,
+                    condition_reason,
+                ) in cls.condition_regex.findall(operator_conditions_raw):
+                    operator_statuses[operator_name][condition_name] = {
+                        "result": condition_result == "True",
+                        "timestamp": condition_timestamp,
+                        "reason": condition_reason,
+                    }
+
+        return operator_statuses
+
+    @staticmethod
+    def condition_has_result(operator_conditions, expected_condition_name: str, expected_condition_result: str) -> bool:
+        return any(
+            condition_values["result"] == expected_condition_result
+            for condition_name, condition_values in operator_conditions.items()
+            if condition_name == expected_condition_name
+        )
+
+    @classmethod
+    def filter_operators(
+        cls,
+        operator_statuses,
+        required_conditions,
+        aggregation_function,
+    ):
+        return {
+            operator_name: operator_conditions
+            for operator_name, operator_conditions in operator_statuses.items()
+            if aggregation_function(
+                cls.condition_has_result(operator_conditions, required_condition_name, required_condition_result)
+                for required_condition_name, required_condition_result in required_conditions
+            )
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Operator status from Assisted Controller logs",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        try:
+            controller_logs = get_triage_logs_tar(
+                triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]
+            ).get("controller_logs.tar.gz/assisted-installer-controller-*.logs")
+        except FileNotFoundError:
+            return
+
+        unhealthy_operators = self.filter_operators(
+            self.operator_statuses_from_controller_logs(controller_logs),
+            (
+                ("Degraded", True),
+                ("Available", False),
+                ("Progressing", True),
+            ),
+            aggregation_function=any,
+        )
+
+        if len(unhealthy_operators) != 0:
+            with tempfile.NamedTemporaryFile(
+                prefix="controller-logs-operators-status-", suffix=".yaml", mode="w"
+            ) as operator_status_tmp:
+                try:
+                    logger.debug(f"Writing operator statuses report from controller logs as {operator_status_tmp.name}")
+                    operator_status_tmp.write(yaml.dump(unhealthy_operators))
+                    operator_status_tmp.flush()
+                    self._upload_attachment(issue_key, operator_status_tmp.name)
+                except Exception:
+                    logger.exception(f"Error while writing and uploading {operator_status_tmp.name}")
+
+            self._update_triaging_ticket(
+                dedent(
+                    f"""
+                    Controller logs contain the status for some unhealthy operators. See attached {operator_status_tmp.name}
+                    """.strip()
+                )
+            )
+
+
 ############################
 # Common functionality
 ############################
@@ -1740,6 +1842,7 @@ ALL_SIGNATURES = [
     FlappingValidations,
     WrongBootOrderSignature,
     ReleasePullErrorSignature,
+    ControllerOperatorStatus,
 ]
 
 ############################
@@ -1916,7 +2019,7 @@ def main(args):
         issues,
         should_reevaluate=args.update,
         only_specific_signatures=args.update_signature,
-        dry_run_file=sys.stdout,
+        dry_run_file=sys.stdout if args.dry_run else None,
     )
 
 
