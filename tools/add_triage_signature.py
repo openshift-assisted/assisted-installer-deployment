@@ -1815,6 +1815,38 @@ class ControllerOperatorStatus(Signature):
             )
 
 
+class DualStackBadRoute(Signature):
+    """
+    Looks for https://bugzilla.redhat.com/show_bug.cgi?id=2088346
+    """
+
+    fatal_error_regex = re.compile(r"^F.*failed to get default gateway interface$", re.MULTILINE)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Bugzilla 2088346",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        try:
+            ovnkube_logs = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]).get(
+                "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/control-plane/*/containers/ovnkube-node-*.log"
+            )
+        except FileNotFoundError:
+            return
+
+        if self.fatal_error_regex.search(ovnkube_logs):
+            self._update_triaging_ticket(
+                dedent(
+                    """
+                    ovnkube-node container logs seem to indicate one of the hosts is hitting https://bugzilla.redhat.com/show_bug.cgi?id=2088346
+                    """.strip()
+                )
+            )
+
+
 ############################
 # Common functionality
 ############################
@@ -1843,6 +1875,7 @@ ALL_SIGNATURES = [
     WrongBootOrderSignature,
     ReleasePullErrorSignature,
     ControllerOperatorStatus,
+    DualStackBadRoute,
 ]
 
 ############################
