@@ -2,49 +2,32 @@
 # pylint: disable=invalid-name,bare-except,too-many-arguments,redefined-outer-name
 
 import argparse
-import subprocess
 import csv
-import re
-import os
-import sys
 import logging
-from urllib.parse import urlparse
+import os
+import re
+import subprocess
+import sys
 from collections import defaultdict
-import yaml
-import bugzilla
-from tabulate import tabulate
-
-import jira
 
 import consts
-from utils import get_credentials_from_netrc
+import jira
+import yaml
+from tabulate import tabulate
 
-
-logging.basicConfig(level=logging.WARN, format='%(levelname)-10s %(message)s')
+logging.basicConfig(level=logging.WARN, format="%(levelname)-10s %(message)s")
 logger = logging.getLogger(__name__)
 logging.getLogger("__main__").setLevel(logging.INFO)
 
 REPO_URL_TEMPLATE = "https://github.com/{}"
-ISSUES_REGEX = re.compile(r'((MGMT-|OCPBUGSM-|BZ-|Bug )[0-9]+)')
-BZ_BUGS_PREFIX = "Bug "
+ISSUES_REGEX = re.compile(r"((MGMT-)[0-9]+)")
 
 # Only for those statuses on issue-type Bug, we should make changes
-JIRA_BUG_STATUSES = ['Done', 'QE Review', 'POST', 'MODIFIED',
-                     'Closed', 'Verified', 'Release Pending']
+JIRA_BUG_STATUSES = ["Done", "QE Review", "POST", "MODIFIED", "Closed", "Verified", "Release Pending"]
 
-BZ_REFERENCE_FIELD = "customfield_12316840"
-BZ_SERVER = "https://bugzilla.redhat.com"
 REPORT_FORMAT_CSV = "csv_report"
 REPORT_FORMAT_MARKDOWN = "markdown_report"
 REPORT_FORMAT_STD = "std_report"
-
-
-def get_bz_client(username, password):
-    logger.info("log-in to bugzilla with username: %s", username)
-    if username == "apikey":
-        return bugzilla.RHBugzilla3(BZ_SERVER, api_key=password)
-
-    return bugzilla.RHBugzilla3(BZ_SERVER, user=username, password=password)
 
 
 def create_dir(dirname):
@@ -67,9 +50,10 @@ def clone_repo(repo):
 def get_issues_list_for_repo(repo, from_commit, to_commit):
     create_dir("temp")
     dirname = clone_repo(repo)
-    raw_log = subprocess.check_output("git log --pretty=medium {}...{} ".format(from_commit, to_commit),
-                                      shell=True, cwd=dirname)
-    matches = ISSUES_REGEX.findall(raw_log.decode('utf-8'), re.MULTILINE)
+    raw_log = subprocess.check_output(
+        "git log --pretty=medium {}...{} ".format(from_commit, to_commit), shell=True, cwd=dirname
+    )
+    matches = ISSUES_REGEX.findall(raw_log.decode("utf-8"), re.MULTILINE)
     return [i for i, _ in matches]
 
 
@@ -83,7 +67,7 @@ def get_manifest_yaml(commit=None):
 
 
 def get_commit_from_manifest(manifest, repo):
-    return manifest[repo]['revision']
+    return manifest[repo]["revision"]
 
 
 def get_field_by_name(issue, fieldName):
@@ -94,22 +78,12 @@ def get_field_by_name(issue, fieldName):
 
 
 def get_jira_issues_info(jclient, keys):
-    issues = jclient.search_issues("issue in ({})".format(",".join(keys)), fields=["key", "summary", "status",
-                                                                                   "assignee",
-                                                                                   BZ_REFERENCE_FIELD,
-                                                                                   "fixVersions"], maxResults=200)
+    issues = jclient.search_issues(
+        "issue in ({})".format(",".join(keys)),
+        fields=["key", "summary", "status", "assignee", "fixVersions"],
+        maxResults=200,
+    )
     return issues
-
-
-def get_bz_issues_info(bzclient, keys):
-    bugs_ids = {i.replace('Bug ', '') for i in keys}
-    bugs = bzclient.getbugs(bugs_ids, include_fields=['id', 'summary', 'status', 'assigned_to'])
-    return bugs
-
-
-def get_bz_id_from_jira(issue):
-    bz_ref = get_field_by_name(issue, BZ_REFERENCE_FIELD)
-    return None if bz_ref is None else bz_ref.bugid
 
 
 def format_key_for_print(key, isMarkdown=False):
@@ -122,57 +96,46 @@ def format_key_for_print(key, isMarkdown=False):
 def get_jira_data_for_print(issues, issues_in_repos, isMarkdown=False):
     table = []
     for i in issues:
-        row = {'key': format_key_for_print(i.key, isMarkdown=isMarkdown),
-               'summary': i.fields.summary,
-               'status': i.fields.status.name,
-               'assignee': i.fields.assignee,
-               'repos': ", ".join(issues_in_repos[i.key])}
-        table.append(row)
-
-    return table
-
-
-def get_bz_data_for_print(issues, issues_in_repos, isMarkdown=False):
-    table = []
-    for i in issues:
-        row = {'key': i.id,
-               'summary': i.summary,
-               'status': i.status,
-               'assignee': i.assigned_to,
-               'repos': ", ".join(issues_in_repos["Bug "+str(i.id)])}
+        row = {
+            "key": format_key_for_print(i.key, isMarkdown=isMarkdown),
+            "summary": i.fields.summary,
+            "status": i.fields.status.name,
+            "assignee": i.fields.assignee,
+            "repos": ", ".join(issues_in_repos[i.key]),
+        }
         table.append(row)
 
     return table
 
 
 def get_data_for_release_candidates(issues):
-    headers = ['key', 'summary', 'status', 'fixVersion']
+    headers = ["key", "summary", "status", "fixVersion"]
     table = []
     for i in issues:
-        row = {'key': format_key_for_print(i.key),
-               'summary': i.fields.summary,
-               'status': i.fields.status.name,
-               'fixVersions': ",".join([v.name for v in i.fields.fixVersions])}
+        row = {
+            "key": format_key_for_print(i.key),
+            "summary": i.fields.summary,
+            "status": i.fields.status.name,
+            "fixVersions": ",".join([v.name for v in i.fields.fixVersions]),
+        }
         table.append(row)
 
     return headers, table
 
 
-def print_report_csv(jira_issues, bz_issues, issues_in_repos):
-    headers = ['key', 'summary', 'status', 'assignee', 'repos']
+def print_report_csv(jira_issues, issues_in_repos):
+    headers = ["key", "summary", "status", "assignee", "repos"]
     jira_data = get_jira_data_for_print(jira_issues, issues_in_repos)
-    bz_data = get_bz_data_for_print(bz_issues, issues_in_repos)
-    csvout = csv.DictWriter(sys.stdout, delimiter='|', fieldnames=headers)
+    csvout = csv.DictWriter(sys.stdout, delimiter="|", fieldnames=headers)
     csvout.writeheader()
-    for row in jira_data+bz_data:
+    for row in jira_data:
         csvout.writerow(row)
 
 
-def print_report_table(jira_issues, bz_issues, issues_in_repos, isMarkdown=False):
+def print_report_table(jira_issues, issues_in_repos, isMarkdown=False):
     jira_data = get_jira_data_for_print(jira_issues, issues_in_repos, isMarkdown=isMarkdown)
-    bz_data = get_bz_data_for_print(bz_issues, issues_in_repos, isMarkdown=isMarkdown)
     fmt = "github" if isMarkdown else "psql"
-    print(tabulate(jira_data+bz_data, headers="keys", tablefmt=fmt))
+    print(tabulate(jira_data, headers="keys", tablefmt=fmt))
 
 
 def print_report_table_for_release_candidates(issues):
@@ -190,18 +153,19 @@ def filter_issues_to_modify(issues, ignore_issues):
     return filtered_issues
 
 
-def filter_bz_issues_to_modify(bz_issues, ignore_issues):
-    if not ignore_issues:
-        ignore_issues = []
-    filtered_issues = []
-    for i in bz_issues:
-        if i.id not in ignore_issues and i.status in ['ON_QA', 'POST']:
-            filtered_issues.append(i)
-    return filtered_issues
-
-
-def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_version=None, specific_issue=None,
-         should_update=False, is_dry_run=False, requested_repos=None, modify_report=False, ignore_issues=None):
+def main(
+    jclient,
+    from_commit,
+    to_commit,
+    report_format=None,
+    fix_version=None,
+    specific_issue=None,
+    should_update=False,
+    is_dry_run=False,
+    requested_repos=None,
+    modify_report=False,
+    ignore_issues=None,
+):
     issue_keys = []
     issues_in_repos = defaultdict(set)
     if specific_issue is not None:
@@ -212,7 +176,7 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
 
         for repo, _ in to_manifest.items():
             if not requested_repos or os.path.basename(repo) in requested_repos:
-                if repo == 'openshift-assisted/assisted-ui' and from_commit == 'v1.0.12.1':
+                if repo == "openshift-assisted/assisted-ui" and from_commit == "v1.0.12.1":
                     continue
                 repo_to_commit = get_commit_from_manifest(to_manifest, repo)
                 repo_from_commit = get_commit_from_manifest(from_manifest, repo)
@@ -226,29 +190,19 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
     if not issue_keys:
         return
 
-    bz_issues_keys = []
-    jira_issues_keys = []
-    for i in issue_keys:
-        if BZ_BUGS_PREFIX in i:
-            bz_issues_keys.append(i)
-        else:
-            jira_issues_keys.append(i)
-    logger.info("bz_issues_keys=%s", bz_issues_keys)
-    logger.info("jira_issues_keys=%s", jira_issues_keys)
+    logger.info("jira_issues_keys=%s", issue_keys)
 
-    bz_issues = get_bz_issues_info(bzclient, bz_issues_keys)
-    jira_issues = get_jira_issues_info(jclient, jira_issues_keys)
+    jira_issues = get_jira_issues_info(jclient, issue_keys)
     if report_format is not None:
         if report_format == REPORT_FORMAT_CSV:
-            print_report_csv(jira_issues, bz_issues, issues_in_repos)
+            print_report_csv(jira_issues, issues_in_repos)
         elif report_format == REPORT_FORMAT_STD:
-            print_report_table(jira_issues, bz_issues, issues_in_repos, isMarkdown=False)
+            print_report_table(jira_issues, issues_in_repos, isMarkdown=False)
         else:
-            print_report_table(jira_issues, bz_issues, issues_in_repos, isMarkdown=True)
+            print_report_table(jira_issues, issues_in_repos, isMarkdown=True)
         return
 
     jira_issues_to_modify = filter_issues_to_modify(jira_issues, ignore_issues)
-    bz_issues_to_modify = filter_bz_issues_to_modify(bz_issues, ignore_issues)
 
     if modify_report:
         print_report_table_for_release_candidates(jira_issues)
@@ -257,51 +211,33 @@ def main(jclient, bzclient, from_commit, to_commit, report_format=None, fix_vers
         if fix_version:
             fix_version_to_update = fix_version
         else:
-            if not to_commit.startswith(("v", "V")):
-                logger.error("Cannot update Bugzilla's 'fixed in' value because no 'fix-version' was supplied, "
-                             + " and 'to-version' (%s), does not match the format of versions '[vV]*'",
-                             to_commit)
-                return
             fix_version_to_update = format_fix_version(to_commit)
 
-        update_fix_versions_for_all_issues(bzclient, jira_issues_to_modify, bz_issues_to_modify, fix_version_to_update, is_dry_run=is_dry_run)
+        update_fix_versions_for_all_issues(jira_issues_to_modify, fix_version_to_update, is_dry_run=is_dry_run)
 
 
 def format_fix_version(version):
     return f"AI {version.replace('v', '')}"
 
 
-def update_fix_versions_for_all_issues(bzclient, jira_issues_to_modify, bz_issues_to_modify, fix_version, is_dry_run=False):
-    bz_issues = []
+def update_fix_versions_for_all_issues(jira_issues_to_modify, fix_version, is_dry_run=False):
     jira_issues = []
 
     for i in jira_issues_to_modify:
-        bz_ref = get_field_by_name(i, BZ_REFERENCE_FIELD)
-        if bz_ref is not None:
-            bz_issues.append(bz_ref.bugid)
-        else:
-            jira_issues.append(i)
-
-    for i in bz_issues_to_modify:
-        bz_issues.append(i.id)
-
-    if len(bz_issues) == 0:
-        logger.info("No BZ issues selected for updating")
-    else:
-        if is_dry_run:
-            logger.info("Dry-run: Updating BZ tickets %s with fixed_in %s", str(bz_issues), fix_version)
-        else:
-            logger.info("Updating BZ tickets %s with fixed_in %s", str(bz_issues), fix_version)
-            bu = bzclient.build_update(fixed_in=fix_version)
-            bzclient.update_bugs(bz_issues, bu)
+        jira_issues.append(i)
 
     if len(jira_issues) == 0:
         logger.info("No Jira issues selected for updating")
     else:
         if is_dry_run:
             for i in jira_issues:
-                logger.info("Dry-run: Updating Jira tickets %s (%s, %s) with fixed_in %s", i.key,
-                            i.fields.status.name, i.fields.fixVersions, fix_version)
+                logger.info(
+                    "Dry-run: Updating Jira tickets %s (%s, %s) with fixed_in %s",
+                    i.key,
+                    i.fields.status.name,
+                    i.fields.fixVersions,
+                    fix_version,
+                )
         else:
             for i in jira_issues:
                 logger.info("Updating Jira tickets %s with fixed_in %s", i.key, fix_version)
@@ -309,15 +245,11 @@ def update_fix_versions_for_all_issues(bzclient, jira_issues_to_modify, bz_issue
 
 
 def update_fixversion_for_jira_issue(issue, fix_version):
-    if issue.key.startswith("OCPBUGSM"):
-        logger.info("skip setting fixVersion on issue %s", issue.key)
-        return
-
     if len(issue.fields.fixVersions) != 1 or fix_version != issue.fields.fixVersions[0].name:
         logger.info("setting fixVersion %s to issue %s", fix_version, issue.key)
-        issue.fields.fixVersions = [{'name': fix_version}]
+        issue.fields.fixVersions = [{"name": fix_version}]
         try:
-            issue.update(fields={'fixVersions': issue.fields.fixVersions})
+            issue.update(fields={"fixVersions": issue.fields.fixVersions})
         except Exception:
             logger.exception("Could not set fixVersion of %s", issue.key)
     else:
@@ -325,48 +257,94 @@ def update_fixversion_for_jira_issue(issue, fix_version):
 
 
 if __name__ == "__main__":
-    VALID_REPOS = ['assisted-installer', 'assisted-service', 'assisted-installer-agent', 'assisted-ui', 'assisted-image-service']
+    VALID_REPOS = [
+        "assisted-installer",
+        "assisted-service",
+        "assisted-installer-agent",
+        "assisted-ui",
+        "assisted-image-service",
+    ]
     parser = argparse.ArgumentParser()
     loginGroup = parser.add_argument_group(title="login options")
     loginArgs = loginGroup.add_mutually_exclusive_group()
-    loginArgs.add_argument("--netrc", default="/root/.netrc", required=False, help="netrc file")
-    loginArgs.add_argument("--jira-access-token", default=os.environ.get("JIRA_ACCESS_TOKEN"), required=False,
-                           help="PAT (personal access token) for accessing Jira")
-    loginArgs.add_argument("-bup", "--bugzilla-user-password", required=False, help="Bugzilla username and password in the format of user:pass")
+    loginArgs.add_argument(
+        "--jira-access-token",
+        default=os.environ.get("JIRA_ACCESS_TOKEN"),
+        required=False,
+        help="PAT (personal access token) for accessing Jira",
+    )
     selectionGroup = parser.add_argument_group(title="Issues selection")
     selectionGroup.add_argument("-f", "--from-version", help="From version", type=str, required=False)
-    selectionGroup.add_argument("-t", "--to-version",
-                                help="To version. If not provided, the current content of the manifest will be used",
-                                type=str, required=False)
+    selectionGroup.add_argument(
+        "-t",
+        "--to-version",
+        help="To version. If not provided, the current content of the manifest will be used",
+        type=str,
+        required=False,
+    )
     selectionGroup.add_argument("-i", "--issue", required=False, help="Issue key")
     parser.add_argument("-v", "--verbose", action="store_true", help="Output verbose logging")
     parser.add_argument("-d", "--dry-run", action="store_true", help="Dry run - do not update Bugzilla")
-    parser.add_argument("-r", "--repos", action='append', choices=VALID_REPOS,
-                        help="Get tickets for the specified repos")
+    parser.add_argument(
+        "-r", "--repos", action="append", choices=VALID_REPOS, help="Get tickets for the specified repos"
+    )
     actionGroup = parser.add_argument_group(title="Operations to perform on selected issues")
     poptions = actionGroup.add_mutually_exclusive_group(required=False)
-    poptions.add_argument("-pm", "--print-tickets-to-modify-report", action="store_true", dest='modify_report',
-                          help="Print issues that are candidates to be modifies")
-    poptions.add_argument("-p", "--print-report", action="store_const", dest='report_format',
-                          const=REPORT_FORMAT_STD, help="Print issues details")
-    poptions.add_argument("-pc", "--print-csv-report", action="store_const", dest='report_format',
-                          const=REPORT_FORMAT_CSV, help="Print issues details in csv format")
-    poptions.add_argument("-pmd", "--print-markdown-report", action="store_const", dest='report_format',
-                          const=REPORT_FORMAT_MARKDOWN, help="Print issues details in markdown format")
-    actionGroup.add_argument("-ut", "--update-ticket-fixed-in", action="store_true", help="Update ticket "
-                             + "'fixed_in' field, if the ticket is in status 'QE REVIEW' or 'Done'")
-    actionGroup.add_argument("-fv", "--fixed-in-value", required=False,
-                             help="Value to update the Bugzilla's 'fixed_in' field. Required if 'to_version' is not supplied")
-    actionGroup.add_argument("-ii", "--ignore-issue", default=None, nargs="+", help="Add the watcher to the selected tickets")
+    poptions.add_argument(
+        "-pm",
+        "--print-tickets-to-modify-report",
+        action="store_true",
+        dest="modify_report",
+        help="Print issues that are candidates to be modifies",
+    )
+    poptions.add_argument(
+        "-p",
+        "--print-report",
+        action="store_const",
+        dest="report_format",
+        const=REPORT_FORMAT_STD,
+        help="Print issues details",
+    )
+    poptions.add_argument(
+        "-pc",
+        "--print-csv-report",
+        action="store_const",
+        dest="report_format",
+        const=REPORT_FORMAT_CSV,
+        help="Print issues details in csv format",
+    )
+    poptions.add_argument(
+        "-pmd",
+        "--print-markdown-report",
+        action="store_const",
+        dest="report_format",
+        const=REPORT_FORMAT_MARKDOWN,
+        help="Print issues details in markdown format",
+    )
+    actionGroup.add_argument(
+        "-ut",
+        "--update-ticket-fixed-in",
+        action="store_true",
+        help="Update ticket " + "'fixed_in' field, if the ticket is in status 'QE REVIEW' or 'Done'",
+    )
+    actionGroup.add_argument(
+        "-fv",
+        "--fixed-in-value",
+        required=False,
+        help="Value to update the Bugzilla's 'fixed_in' field. Required if 'to_version' is not supplied",
+    )
+    actionGroup.add_argument(
+        "-ii", "--ignore-issue", default=None, nargs="+", help="Add the watcher to the selected tickets"
+    )
     args = parser.parse_args()
     if args.issue is None:
         if args.from_version is None:
-            parser.error("Must provide 'from-version'  parameter, if a specific issue is "
-                         + "not selected")
+            parser.error("Must provide 'from-version'  parameter, if a specific issue is " + "not selected")
     else:
         if args.to_version is not None or args.from_version is not None:
-            parser.error("If a specific issue is selected, 'from-version' and 'to-version' parameters cannot "
-                         + "be supplied")
+            parser.error(
+                "If a specific issue is selected, 'from-version' and 'to-version' parameters cannot " + "be supplied"
+            )
     if args.update_ticket_fixed_in and args.to_version is None and args.fixed_in_value is None:
         parser.error("When updating 'fixed_in' and 'to_version' is not provided, 'fixed-in-value' must be supplied")
 
@@ -376,14 +354,18 @@ if __name__ == "__main__":
     if args.verbose:
         logger.setLevel(logging.DEBUG)
 
-    busername, bpassword = get_credentials_from_netrc(
-        hostname=urlparse(BZ_SERVER).hostname,
-        netrc_file=args.netrc,
-    )
-    bzclient = get_bz_client(busername, bpassword)
-
     jclient = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
 
-    main(jclient, bzclient, args.from_version, args.to_version, args.report_format, specific_issue=args.issue,
-         fix_version=args.fixed_in_value, should_update=args.update_ticket_fixed_in, is_dry_run=args.dry_run,
-         requested_repos=args.repos, modify_report=args.modify_report, ignore_issues=args.ignore_issue)
+    main(
+        jclient,
+        args.from_version,
+        args.to_version,
+        args.report_format,
+        specific_issue=args.issue,
+        fix_version=args.fixed_in_value,
+        should_update=args.update_ticket_fixed_in,
+        is_dry_run=args.dry_run,
+        requested_repos=args.repos,
+        modify_report=args.modify_report,
+        ignore_issues=args.ignore_issue,
+    )
