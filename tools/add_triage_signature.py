@@ -1847,6 +1847,35 @@ class DualStackBadRoute(Signature):
             )
 
 
+class StaticNetworking(Signature):
+    """
+    Shows the infraenv's static networking config
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. At-least one infraenv has static networking config",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        infraenvs = get_metadata_json(url).get("infraenvs", [])
+        messages = [
+            f"""Infraenv {infraenv["name"]} interface {interface["logical_nic_name"]} ({interface["mac_address"]}) has static network config:
+{{code}}
+{yaml.dump(yaml.safe_load(entry["network_yaml"]), default_flow_style=False)}
+{{code}}"""
+            for infraenv in infraenvs
+            for entry in json.loads(infraenv["static_network_config"])
+            for interface in entry["mac_interface_map"]
+            if infraenv.get("static_network_config", "") != ""
+        ]
+
+        if messages:
+            self._update_triaging_ticket("\n".join(messages))
+
+
 ############################
 # Common functionality
 ############################
@@ -1876,6 +1905,7 @@ ALL_SIGNATURES = [
     ReleasePullErrorSignature,
     ControllerOperatorStatus,
     DualStackBadRoute,
+    StaticNetworking,
 ]
 
 ############################
