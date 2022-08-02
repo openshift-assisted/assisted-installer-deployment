@@ -387,6 +387,9 @@ class Signature(abc.ABC):
     @staticmethod
     def _generate_hosts_summary(hosts):
         host_summary = []
+
+        some_done = any(host["progress"] == "Done" for host in hosts)
+
         for host in hosts:
             # Add host status summary
             if host["role"] not in ["master", "boostrap"]:
@@ -398,7 +401,10 @@ class Signature(abc.ABC):
                 "Waiting for bootkube": "bootkube.service never completed",
                 "Rebooting": "Node never pulled Ignition",
                 "Configuring": "Node pulled Ignition, but never started kubelet",
-                "Joined": "The Node k8s resource associated with this host is not Ready or the Assisted Controller is not running on the cluster",
+                "Joined": (
+                    "The Node k8s resource associated with this host is not Ready"
+                    + (" or the Assisted Controller is not running on the cluster" if not some_done else "")
+                ),
                 "Waiting for control plane": "Masters never formed 2-node cluster",
                 "Waiting for controller": "Assisted installer controller pod never started",
                 "Writing image to disk": "Image probably failed to be written on disk",
@@ -1869,11 +1875,62 @@ class StaticNetworking(Signature):
             for infraenv in infraenvs
             for entry in json.loads(infraenv["static_network_config"])
             for interface in entry["mac_interface_map"]
-            if infraenv.get("static_network_config", "") != ""
+            if infraenv.get("static_network_config", "") not in ("", None)
         ]
 
         if messages:
             self._update_triaging_ticket("\n".join(messages))
+
+
+class NodeStatus(Signature):
+    """
+    Dumps the node statuses from the installer gather
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Collected nodes.json from installer gather",
+        )
+
+    @staticmethod
+    def get_condition_by_type(conditions, type):
+        condition = next((condition for condition in conditions if condition["type"] == type), None)
+
+        if condition is None:
+            return "(Condition not found)"
+
+        return f"Status {condition['status']} with reason {condition['reason']}, message {condition['message']}"
+
+    def _process_ticket(self, url, issue_key):
+        try:
+            nodes_json = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]).get(
+                "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/resources/nodes.json"
+            )
+        except FileNotFoundError:
+            return
+
+        try:
+            nodes = json.loads(nodes_json)
+        except json.JSONDecodeError:
+            return
+
+        nodes_table = []
+        for node in nodes.get("items", []):
+            node_conditions = node["status"]["conditions"]
+            nodes_table.append(
+                OrderedDict(
+                    name=node["metadata"]["name"],
+                    MemoryPressure=self.get_condition_by_type(node_conditions, "MemoryPressure"),
+                    DiskPressure=self.get_condition_by_type(node_conditions, "DiskPressure"),
+                    PIDPressure=self.get_condition_by_type(node_conditions, "PIDPressure"),
+                    Ready=self.get_condition_by_type(node_conditions, "Ready"),
+                )
+            )
+
+        report = self._generate_table_for_report(nodes_table)
+        self._update_triaging_ticket(report)
 
 
 ############################
@@ -1906,6 +1963,7 @@ ALL_SIGNATURES = [
     ControllerOperatorStatus,
     DualStackBadRoute,
     StaticNetworking,
+    NodeStatus,
 ]
 
 ############################
