@@ -1,2 +1,5 @@
 {
+  "master_failed_to_pull_ignition_signature" : {
+    "MGMT-11089": "Master nodes failed to pull ignition"
+  }
 }
