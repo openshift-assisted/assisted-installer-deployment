@@ -714,6 +714,57 @@ class HostsExtraDetailSignature(Signature):
         self._update_triaging_ticket(report)
 
 
+class MasterFailedToPullIgnitionSignature(ErrorSignature):
+    """
+    This signature finds tickets for clusters where at least one master node failed to pull ignition
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Master nodes failed to pull ignition",
+            label="masters_failed_to_pull_ignition",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        hosts = []
+        cluster_hosts = get_metadata_json(url)["cluster"]["hosts"]
+        # this signature is not relevant for SNO
+        if len(cluster_hosts) <= 1:
+            return
+
+        for host in cluster_hosts:
+            if host["role"] == "bootstrap" and host["progress"]["current_stage"] == "WaitingForControlPlane":
+                # We probably failed due to other issues, so we don't want to sign this ticket
+                return
+            inventory = json.loads(host["inventory"])
+            boot_mode = inventory.get("boot", {}).get("current_boot_mode", "N/A")
+            if (
+                host["role"] == "master"
+                and host["progress"]["current_stage"] == "Rebooting"
+                and host["status"] == "error"
+                and boot_mode == "bios"
+            ):
+                hosts.append(
+                    OrderedDict(
+                        HostID=host["id"],
+                        Hostname=inventory["hostname"],
+                        Progress=host["progress"]["current_stage"],
+                    )
+                )
+        if len(hosts) == 2:
+            # we only want to sign this ticket if both master didn't pull ignition
+            report = dedent(
+                """
+                When both master nodes didn't pull the ignition post reboot there is nothing we can do.
+                """
+            )
+
+            report += self._generate_table_for_report(hosts)
+            self._update_triaging_ticket(report)
+
+
 class InstallationDiskFIOSignature(Signature):
     fio_regex = re.compile(r"\(fdatasync duration:\s(\d+)\sms\)")
 
@@ -1964,6 +2015,7 @@ ALL_SIGNATURES = [
     DualStackBadRoute,
     StaticNetworking,
     NodeStatus,
+    MasterFailedToPullIgnitionSignature,
 ]
 
 ############################
