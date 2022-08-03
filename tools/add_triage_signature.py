@@ -249,7 +249,7 @@ class Signature(abc.ABC):
         self._identifing_string = comment_identifying_string
         self._old_identifing_string = old_comment_string
         self.dry_run_file = dry_run_file
-        self.should_reevaluate = dry_run_file
+        self.should_reevaluate = should_reevaluate
         self.issue_key = issue_key
 
     def process_ticket(self, url, issue_key):
@@ -283,10 +283,10 @@ class Signature(abc.ABC):
             )
 
     def _add_signature_function_impact(self, issue_key, labels_to_add):
-        self._add_labels_to_field(custom_field_name(CUSTOM_FIELD_FUNCTION_IMPACT))
+        self._add_labels_to_field(issue_key, labels_to_add, custom_field_name(CUSTOM_FIELD_FUNCTION_IMPACT))
 
     def _add_signature_labels(self, issue_key, labels_to_add):
-        self._add_labels_to_field(FIELD_LABELS)
+        self._add_labels_to_field(issue_key, labels_to_add, FIELD_LABELS)
 
     def find_signature_comment(self, key=None, comments=None):
         assert key or comments
