@@ -1925,9 +1925,9 @@ class StaticNetworking(Signature):
 {yaml.dump(yaml.safe_load(entry["network_yaml"]), default_flow_style=False)}
 {{code}}"""
             for infraenv in infraenvs
+            if infraenv.get("static_network_config", "") not in ("", None)
             for entry in json.loads(infraenv["static_network_config"])
             for interface in entry["mac_interface_map"]
-            if infraenv.get("static_network_config", "") not in ("", None)
         ]
 
         if messages:
