@@ -1980,7 +1980,11 @@ class NodeStatus(Signature):
                 )
             )
 
-        report = self._generate_table_for_report(nodes_table)
+        if len(nodes_table) != 0:
+            report = self._generate_table_for_report(nodes_table)
+        else:
+            report = "The nodes.json file doesn't have any node resources in it. You should probably check the kubelet logs for the 2 non-bootstrap control-plane hosts"
+
         self._update_triaging_ticket(report)
 
 
