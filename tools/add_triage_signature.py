@@ -249,7 +249,7 @@ class Signature(abc.ABC):
         self._identifing_string = comment_identifying_string
         self._old_identifing_string = old_comment_string
         self.dry_run_file = dry_run_file
-        self.should_reevaluate = dry_run_file
+        self.should_reevaluate = should_reevaluate
         self.issue_key = issue_key
 
     def process_ticket(self, url, issue_key):
@@ -279,14 +279,14 @@ class Signature(abc.ABC):
         if len(new_labels) != 0:
             self._update_fields(
                 issue_key,
-                {FIELD_LABELS: field_existing_labels + new_labels},
+                {field_name: field_existing_labels + new_labels},
             )
 
     def _add_signature_function_impact(self, issue_key, labels_to_add):
-        self._add_labels_to_field(custom_field_name(CUSTOM_FIELD_FUNCTION_IMPACT))
+        self._add_labels_to_field(issue_key, labels_to_add, custom_field_name(CUSTOM_FIELD_FUNCTION_IMPACT))
 
     def _add_signature_labels(self, issue_key, labels_to_add):
-        self._add_labels_to_field(FIELD_LABELS)
+        self._add_labels_to_field(issue_key, labels_to_add, FIELD_LABELS)
 
     def find_signature_comment(self, key=None, comments=None):
         assert key or comments
@@ -712,6 +712,57 @@ class HostsExtraDetailSignature(Signature):
 
         report = self._generate_table_for_report(hosts)
         self._update_triaging_ticket(report)
+
+
+class MasterFailedToPullIgnitionSignature(ErrorSignature):
+    """
+    This signature finds tickets for clusters where at least one master node failed to pull ignition
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Master nodes failed to pull ignition",
+            function_impact_label="masters_failed_to_pull_ignition",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        hosts = []
+        cluster_hosts = get_metadata_json(url)["cluster"]["hosts"]
+        # this signature is not relevant for SNO
+        if len(cluster_hosts) <= 1:
+            return
+
+        for host in cluster_hosts:
+            if host["role"] == "bootstrap" and host["progress"]["current_stage"] == "WaitingForControlPlane":
+                # We probably failed due to other issues, so we don't want to sign this ticket
+                return
+            inventory = json.loads(host["inventory"])
+            boot_mode = inventory.get("boot", {}).get("current_boot_mode", "N/A")
+            if (
+                host["role"] == "master"
+                and host["progress"]["current_stage"] == "Rebooting"
+                and host["status"] == "error"
+                and boot_mode == "bios"
+            ):
+                hosts.append(
+                    OrderedDict(
+                        HostID=host["id"],
+                        Hostname=inventory["hostname"],
+                        Progress=host["progress"]["current_stage"],
+                    )
+                )
+        if len(hosts) == 2:
+            # we only want to sign this ticket if both master didn't pull ignition
+            report = dedent(
+                """
+                When both master nodes didn't pull the ignition post reboot there is nothing we can do.
+                """
+            )
+
+            report += self._generate_table_for_report(hosts)
+            self._update_triaging_ticket(report)
 
 
 class InstallationDiskFIOSignature(Signature):
@@ -1964,6 +2015,7 @@ ALL_SIGNATURES = [
     DualStackBadRoute,
     StaticNetworking,
     NodeStatus,
+    MasterFailedToPullIgnitionSignature,
 ]
 
 ############################
