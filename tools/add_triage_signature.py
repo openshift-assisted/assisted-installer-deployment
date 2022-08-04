@@ -303,7 +303,7 @@ class Signature(abc.ABC):
 
         return None
 
-    def _update_triaging_ticket(self, comment):
+    def _update_triaging_ticket(self, comment) -> bool:
         report = "\n"
         report += self._identifing_string + "\n"
         if comment is not None:
@@ -322,6 +322,7 @@ class Signature(abc.ABC):
                 self.issue_key,
             )
             self._jira_client.add_comment(self.issue_key, report)
+            return True
         elif self.should_reevaluate:
             logger.info(
                 "Updating existing '%s' comment of %s",
@@ -329,12 +330,14 @@ class Signature(abc.ABC):
                 self.issue_key,
             )
             jira_comment.update(body=report)
+            return True
         else:
             logger.debug(
                 "Not updating existing '%s' comment of %s",
                 signature_name,
                 self.issue_key,
             )
+            return False
 
     def _update_description(self, key, new_description):
         i = self._jira_client.issue(key)
@@ -443,9 +446,7 @@ class ErrorSignature(Signature, abc.ABC):
         self._label = label
 
     def _update_triaging_ticket(self, comment):
-        super()._update_triaging_ticket(comment)
-
-        if self.should_reevaluate and self.dry_run_file is None:
+        if super()._update_triaging_ticket(comment) and self.dry_run_file is None:
             if self._function_impact_label is not None:
                 self._add_signature_function_impact(
                     self.issue_key,
