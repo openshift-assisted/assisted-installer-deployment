@@ -279,7 +279,7 @@ class Signature(abc.ABC):
         if len(new_labels) != 0:
             self._update_fields(
                 issue_key,
-                {FIELD_LABELS: field_existing_labels + new_labels},
+                {field_name: field_existing_labels + new_labels},
             )
 
     def _add_signature_function_impact(self, issue_key, labels_to_add):
@@ -724,7 +724,7 @@ class MasterFailedToPullIgnitionSignature(ErrorSignature):
             *args,
             **kwargs,
             comment_identifying_string="h1. Master nodes failed to pull ignition",
-            label="masters_failed_to_pull_ignition",
+            function_impact_label="masters_failed_to_pull_ignition",
         )
 
     def _process_ticket(self, url, issue_key):
