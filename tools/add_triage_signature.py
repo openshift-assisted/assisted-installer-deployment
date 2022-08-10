@@ -1989,6 +1989,51 @@ class NodeStatus(Signature):
         self._update_triaging_ticket(report)
 
 
+class HostsInterfacesSignature(Signature):
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Host interfaces:",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        md = get_metadata_json(url)
+
+        cluster = md["cluster"]
+
+        hosts = []
+        for host in cluster["hosts"]:
+            interfaces = self._get_interfaces(host)
+            hosts.append(
+                OrderedDict(
+                    id=host["id"],
+                    hostname=self._get_hostname(host),
+                    name="\n".join(interfaces["name"]),
+                    mac_address="\n".join(interfaces["mac_address"]),
+                    ipv4_addresses="\n".join(interfaces["ipv4_addresses"]),
+                    ipv6_addresses="\n".join(interfaces["ipv6_addresses"]),
+                )
+            )
+
+        report = self._generate_table_for_report(hosts)
+        self._update_triaging_ticket(report)
+
+    def _get_interfaces(self, host: dict):
+        inventory = json.loads(host["inventory"])
+        interfaces_details = defaultdict(list)
+        for interface in inventory.get("interfaces", []):
+            name = interface.get("name")
+            if not name:
+                continue
+            interfaces_details["name"].append(name)
+            interfaces_details["mac_address"].append(json.dumps(interface.get("mac_address")))
+            interfaces_details["ipv4_addresses"].append(json.dumps(interface.get("ipv4_addresses", [])))
+            interfaces_details["ipv6_addresses"].append(json.dumps(interface.get("ipv6_addresses", [])))
+
+        return interfaces_details
+
+
 ############################
 # Common functionality
 ############################
@@ -2002,6 +2047,7 @@ ALL_SIGNATURES = [
     ComponentsVersionSignature,
     HostsStatusSignature,
     HostsExtraDetailSignature,
+    HostsInterfacesSignature,
     StorageDetailSignature,
     InstallationDiskFIOSignature,
     LibvirtRebootFlagSignature,
