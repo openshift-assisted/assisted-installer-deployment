@@ -14,6 +14,7 @@ import sys
 import tempfile
 import yaml
 import ipaddress
+import pathlib
 from collections import OrderedDict, defaultdict, Counter
 from datetime import datetime
 from enum import Flag, auto
@@ -2034,6 +2035,61 @@ class HostsInterfacesSignature(Signature):
         return interfaces_details
 
 
+class ErrorCreatingReadWriteLayer(ErrorSignature):
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Error creating read-write layer - Bugzilla 1993243",
+            function_impact_label="bz1993243",
+        )
+
+    @staticmethod
+    def format_message(bad_pod):
+        return f"Pod {bad_pod['metadata']['name']} in namespace {bad_pod['metadata']['namespace']} has a container with an error creating the read-write layer, this is likely to due this known bug https://bugzilla.redhat.com/show_bug.cgi?id=1993243"
+
+    @staticmethod
+    def is_bad_pod(pod):
+        return any(
+            containerStatus.get("state", {}).get("waiting", {}).get("reason") == "CreateContainerError"
+            and "error creating read-write layer with ID"
+            in containerStatus.get("state", {}).get("waiting", {}).get("message")
+            for containerStatus in pod.get("status", {}).get("containerStatuses", [])
+        )
+
+    @classmethod
+    def _get_namespace_pods(cls, namespace_dir: pathlib.Path):
+        podsYaml = namespace_dir / "core" / "pods.yaml"
+        if podsYaml.exists():
+            with podsYaml.open() as f:
+                yield from (pod for pod in yaml.safe_load(f).get("items", []))
+
+    @classmethod
+    def _get_all_pods(cls, must_gather_namespaces_dir):
+        for namespace_dir in must_gather_namespaces_dir.iterdir():
+            if namespace_dir.is_dir():
+                yield from cls._get_namespace_pods(namespace_dir)
+
+    @classmethod
+    def _get_bad_pods(cls, must_gather_namespace_dir):
+        return (pod for pod in cls._get_all_pods(must_gather_namespace_dir) if cls.is_bad_pod(pod))
+
+    def _process_ticket(self, url, issue_key):
+        try:
+            must_gather_namespaces_dir = get_triage_logs_tar(
+                triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]
+            ).get("controller_logs.tar.gz/must-gather.tar.gz/must-gather.local.*/*/namespaces")
+        except FileNotFoundError:
+            return
+
+        if (
+            messages := "\n\n".join(
+                self.format_message(bad_pod) for bad_pod in self._get_bad_pods(must_gather_namespaces_dir)
+            )
+        ) != "":
+            self._update_triaging_ticket(messages)
+
+
 ############################
 # Common functionality
 ############################
@@ -2067,6 +2123,7 @@ ALL_SIGNATURES = [
     StaticNetworking,
     NodeStatus,
     MasterFailedToPullIgnitionSignature,
+    ErrorCreatingReadWriteLayer,
 ]
 
 ############################
