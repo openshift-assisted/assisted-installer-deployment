@@ -72,7 +72,7 @@ multi-key-dict==2.0.3
     # via python-jenkins
 natsort==8.1.0
     # via -r requirements.in
-nestedarchive==0.2.3
+nestedarchive==0.2.4
     # via -r requirements.in
 networkx==2.5.1
     # via -r requirements.in
