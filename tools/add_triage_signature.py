@@ -2090,6 +2090,31 @@ class ErrorCreatingReadWriteLayer(ErrorSignature):
             self._update_triaging_ticket(messages)
 
 
+class DualstackrDNSBug(ErrorSignature):
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. rDNS and DNS entries for IPv4/IPv6 interface - MGMT-11651",
+            function_impact_label="mgmt11651",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"])
+
+        try:
+            kubeapiserver_logs = triage_logs_tar.get(
+                "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/bootstrap/containers/kube-apiserver-*.log"
+            )
+        except FileNotFoundError:
+            return
+
+        if "must match public address family" in kubeapiserver_logs:
+            self._update_triaging_ticket(
+                "kube-apiserver logs contain the message 'must match public address family', this is probably due to MGMT-11651"
+            )
+
+
 ############################
 # Common functionality
 ############################
@@ -2124,6 +2149,7 @@ ALL_SIGNATURES = [
     NodeStatus,
     MasterFailedToPullIgnitionSignature,
     ErrorCreatingReadWriteLayer,
+    DualstackrDNSBug,
 ]
 
 ############################
