@@ -2115,6 +2115,29 @@ class DualstackrDNSBug(ErrorSignature):
             )
 
 
+class LVMOnRaid(ErrorSignature):
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Trouble cleaning LVM on RAID - MGMT-11695",
+            function_impact_label="mgmt11695",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        cluster = get_metadata_json(url)["cluster"]
+
+        host_messages = [
+            f"Host {self._get_hostname(host)} has LVM disks and has the 'Can't open' coreos-installer error, this is probably due to MGMT-11695"
+            for host in cluster["hosts"]
+            if "Can't open" in host.get("status_info", "")
+            and any(disk.get("drive_type") == "LVM" for disk in json.loads(host["inventory"]).get("disks", []))
+        ]
+
+        if host_messages:
+            self._update_triaging_ticket("\n".join(host_messages))
+
+
 ############################
 # Common functionality
 ############################
@@ -2150,6 +2173,7 @@ ALL_SIGNATURES = [
     MasterFailedToPullIgnitionSignature,
     ErrorCreatingReadWriteLayer,
     DualstackrDNSBug,
+    LVMOnRaid,
 ]
 
 ############################
