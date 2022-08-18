@@ -60,7 +60,11 @@ ASSISTED_SERVICE_MASTER_DEFAULT_RELEASE_IMAGES_JSON_URL = \
 
 OCP_REPLACE_CONTEXT = ['"{version}"', "ocp-release:{version}"]
 
-SKIPPED_MAJOR_RELEASE = ["4.6", "4.7"]
+SKIPPED_MINOR_OCP_RELEASES = ["4.6", "4.7"]
+
+# TODO: re-include 4.11 once https://issues.redhat.com/browse/ART-4439 is resolved
+SKIPPED_MINOR_RHCOS_RELEASES = ["4.6", "4.7", "4.11"]
+
 MAJOR_MINOR_VERSION_REGEX = re.compile(r"^([1-9]\d*|0)(\.(([1-9]\d*)|0))$")
 
 CPU_ARCHITECTURE_AMD64 = "amd64"
@@ -245,7 +249,7 @@ def update_release_images_json(default_release_images_json, updates_made, update
 
     for index, release_image in enumerate(default_release_images_json):
         openshift_version = release_image["openshift_version"]
-        if openshift_version in SKIPPED_MAJOR_RELEASE:
+        if openshift_version in SKIPPED_MINOR_OCP_RELEASES:
             logger.info(f"Skipping {openshift_version} listed in the skip list")
             continue
         if not MAJOR_MINOR_VERSION_REGEX.match(openshift_version):
@@ -283,7 +287,7 @@ def update_os_images_json(default_os_images_json, updates_made, updates_made_str
 
     for index, os_image in enumerate(default_os_images_json):
         openshift_version = os_image["openshift_version"]
-        if openshift_version in SKIPPED_MAJOR_RELEASE:
+        if openshift_version in SKIPPED_MINOR_RHCOS_RELEASES:
             logger.info(f"Skipping {openshift_version} listed in the skip list")
             continue
         if not MAJOR_MINOR_VERSION_REGEX.match(openshift_version):
