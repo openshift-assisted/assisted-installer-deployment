@@ -2115,12 +2115,12 @@ class DualstackrDNSBug(ErrorSignature):
             )
 
 
-class LVMOnRaid(ErrorSignature):
+class InsufficientLVMCleanup(ErrorSignature):
     def __init__(self, *args, **kwargs):
         super().__init__(
             *args,
             **kwargs,
-            comment_identifying_string="h1. Trouble cleaning LVM on RAID - MGMT-11695",
+            comment_identifying_string="h1. Trouble cleaning LVM - MGMT-11695",
             function_impact_label="mgmt11695",
         )
 
@@ -2173,7 +2173,7 @@ ALL_SIGNATURES = [
     MasterFailedToPullIgnitionSignature,
     ErrorCreatingReadWriteLayer,
     DualstackrDNSBug,
-    LVMOnRaid,
+    InsufficientLVMCleanup,
 ]
 
 ############################
