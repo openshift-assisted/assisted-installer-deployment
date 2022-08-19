@@ -1918,17 +1918,27 @@ class StaticNetworking(Signature):
             comment_identifying_string="h1. At-least one infraenv has static networking config",
         )
 
+    @staticmethod
+    def _stringify_entry(entry):
+        return yaml.dump(
+            {
+                "nmstate_config": yaml.safe_load(entry.get("network_yaml")),
+                "mapping": entry.get("mac_interface_map", {}),
+            },
+            default_flow_style=False,
+        )
+
     def _process_ticket(self, url, issue_key):
         infraenvs = get_metadata_json(url).get("infraenvs", [])
         messages = [
-            f"""Infraenv {infraenv["name"]} interface {interface["logical_nic_name"]} ({interface["mac_address"]}) has static network config:
+            f"""Infraenv {infraenv["name"]} has static network config:
 {{code}}
-{yaml.dump(yaml.safe_load(entry["network_yaml"]), default_flow_style=False)}
-{{code}}"""
+{self._stringify_entry(entry)}
+{{code}}
+            """
             for infraenv in infraenvs
             if infraenv.get("static_network_config", "") not in ("", None)
             for entry in json.loads(infraenv["static_network_config"])
-            for interface in entry["mac_interface_map"]
         ]
 
         if messages:
