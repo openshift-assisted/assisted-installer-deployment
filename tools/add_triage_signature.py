@@ -1931,11 +1931,9 @@ class StaticNetworking(Signature):
     def _process_ticket(self, url, issue_key):
         infraenvs = get_metadata_json(url).get("infraenvs", [])
         messages = [
-            f"""Infraenv {infraenv["name"]} has static network config:
-{{code}}
-{self._stringify_entry(entry)}
-{{code}}
-            """
+            f"""
+h3. A host in *Infraenv {infraenv["name"]}* has static network config:
+{{code}}{self._stringify_entry(entry)}{{code}}"""
             for infraenv in infraenvs
             if infraenv.get("static_network_config", "") not in ("", None)
             for entry in json.loads(infraenv["static_network_config"])
