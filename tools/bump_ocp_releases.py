@@ -62,8 +62,7 @@ OCP_REPLACE_CONTEXT = ['"{version}"', "ocp-release:{version}"]
 
 SKIPPED_MINOR_OCP_RELEASES = ["4.6", "4.7"]
 
-# TODO: re-include 4.11 once https://issues.redhat.com/browse/ART-4439 is resolved
-SKIPPED_MINOR_RHCOS_RELEASES = ["4.6", "4.7", "4.11"]
+SKIPPED_MINOR_RHCOS_RELEASES = ["4.6", "4.7"]
 
 MAJOR_MINOR_VERSION_REGEX = re.compile(r"^([1-9]\d*|0)(\.(([1-9]\d*)|0))$")
 
