@@ -12,7 +12,7 @@ openshift-assisted/assisted-ui:
   images:
   - quay.io/edge-infrastructure/assisted-installer-ui
 openshift/assisted-installer-agent:
-  revision: a22a84b67f7296c7f5b34812bdc8c98d9dd9b944
+  revision: a86fbe714e37340ecf697429eef12f48e7ea77b3
   images:
   - quay.io/edge-infrastructure/assisted-installer-agent
 openshift/assisted-image-service:
@@ -32,8 +32,8 @@ openshift/assisted-image-service:
 #     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-reporter-rhel8:v1.0.0-247
 #     production image name: registry.redhat.io/rhai-tech-preview/assisted-installer-reporter-rhel8:v1.0.0-247
 # - assisted-installer-agent:
-#     hash: a22a84b67f7296c7f5b34812bdc8c98d9dd9b944
-#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v1.0.0-181
-#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-agent-rhel8:v1.0.0-181
-#     production image name: registry.redhat.io/rhai-tech-preview/assisted-installer-agent-rhel8:v1.0.0-181
+#     hash: a86fbe714e37340ecf697429eef12f48e7ea77b3
+#     image name: registry-proxy.engineering.redhat.com/rh-osbs/openshift4-assisted-installer-agent-rhel8:v1.0.0-182
+#     staging image name: registry.stage.redhat.io/openshift4/assisted-installer-agent-rhel8:v1.0.0-182
+#     production image name: registry.redhat.io/rhai-tech-preview/assisted-installer-agent-rhel8:v1.0.0-182
 #
