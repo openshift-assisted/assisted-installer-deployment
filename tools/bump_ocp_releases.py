@@ -33,6 +33,10 @@ OCP_INFO_FC_CALL = (
     r"curl https://api.openshift.com/api/upgrades_info/v1/graph\?channel\=candidate-{version}\&arch\={architecture}"
     " | jq '[.nodes[]]'"
 )
+OCP_INFO_MULTIARCH_CALL = (
+    r"curl https://multi.ocp.releases.ci.openshift.org/graph"
+    " | jq '[.nodes[]]'"
+)
 
 RHCOS_RELEASES = "https://mirror.openshift.com/pub/openshift-v4/{architecture}/dependencies/rhcos/{minor}/"
 RHCOS_PRE_RELEASE = "pre-release"
@@ -70,6 +74,7 @@ CPU_ARCHITECTURE_AMD64 = "amd64"
 CPU_ARCHITECTURE_X86_64 = "x86_64"
 CPU_ARCHITECTURE_ARM64 = "arm64"
 CPU_ARCHITECTURE_AARCH64 = "aarch64"
+CPU_ARCHITECTURE_MULTI = "multi"
 
 
 def get_rhcos_version_from_iso(minor_version, rhcos_latest_release, cpu_architecture):
@@ -136,7 +141,9 @@ def open_pr(github_client, title, body, branch):
 
 def get_latest_release_from_minor(minor_release, cpu_architecture: str):
     release_data = get_release_data(minor_release, cpu_architecture)
-    return release_data.get('version', None)
+    version = release_data.get('version', None)
+    if version:
+        return version.removesuffix('-multi')
 
 
 def get_release_note_url(minor_release):
@@ -153,6 +160,8 @@ def get_release_data(minor_release, cpu_architecture):
     if not release_data:
         releases = subprocess.check_output(OCP_INFO_FC_CALL.format(version=minor_release, architecture=cpu_architecture), shell=True)
         releases = json.loads(releases)
+        if not releases:
+            releases = get_multiarch_release_data(minor_release)
         versions = []
         for release in releases:
             versions.append(release['version'])
@@ -162,6 +171,13 @@ def get_release_data(minor_release, cpu_architecture):
         except IndexError:
             release_data = {}
     return release_data
+
+
+def get_multiarch_release_data(minor_release):
+    release_data = subprocess.check_output(OCP_INFO_MULTIARCH_CALL, shell=True)
+    release_data = json.loads(release_data)
+    release_data = filter(lambda x: minor_release in x['version'] and "nightly" not in x['version'], release_data)
+    return list(release_data)
 
 
 def is_pre_release(release):
