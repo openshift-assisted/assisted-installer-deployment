@@ -136,7 +136,7 @@ def open_pr(github_client, title, body, branch):
 
 def get_latest_release_from_minor(minor_release, cpu_architecture: str):
     release_data = get_release_data(minor_release, cpu_architecture)
-    return release_data['version']
+    return release_data.get('version', None)
 
 
 def get_release_note_url(minor_release):
@@ -156,8 +156,11 @@ def get_release_data(minor_release, cpu_architecture):
         versions = []
         for release in releases:
             versions.append(release['version'])
-        latest_version = max(versions, key=natsort.natsort_key)
-        release_data = [r for r in releases if r['version'] == latest_version][0]
+        latest_version = max(versions, key=natsort.natsort_key, default=None)
+        try:
+            release_data = [r for r in releases if r['version'] == latest_version][0]
+        except IndexError:
+            release_data = {}
     return release_data
 
 
