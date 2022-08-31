@@ -1874,7 +1874,7 @@ class ControllerOperatorStatus(Signature):
             )
 
 
-class DualStackBadRoute(Signature):
+class DualStackBadRoute(ErrorSignature):
     """
     Looks for https://bugzilla.redhat.com/show_bug.cgi?id=2088346
     """
@@ -1886,6 +1886,7 @@ class DualStackBadRoute(Signature):
             *args,
             **kwargs,
             comment_identifying_string="h1. Bugzilla 2088346",
+            function_impact_label="bz2088346",
         )
 
     def _process_ticket(self, url, issue_key):
