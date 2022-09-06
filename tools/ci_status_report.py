@@ -88,7 +88,7 @@ def filter_jobs(response: requests.Response) -> typing.Iterator[Job]:
             if (organization, repository) in TRACKED_REPOSITORIES:
                 base_ref = ref.get("base_ref")
                 if not base_ref:
-                    raise Exception(f"Entry for repository {organization}/{repository} does not contain a 'base_ref' key")
+                    raise ValueError(f"Entry for repository {organization}/{repository} does not contain 'base_ref' key")
                 break
 
         else:
