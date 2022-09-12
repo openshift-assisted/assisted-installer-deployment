@@ -192,6 +192,12 @@ def get_triage_logs_tar(triage_url, cluster_id):
         raise FailedToGetLogsTarException from e
 
 
+def get_controller_logs(triage_url):
+    return get_triage_logs_tar(triage_url=triage_url, cluster_id=get_metadata_json(triage_url)["cluster"]["id"]).get(
+        "controller_logs.tar.gz/assisted-installer-controller-*.logs"
+    )
+
+
 def get_host_log_file(triage_logs_tar, host_id, filename):
     # The file is already uniquely determined by the host_id, we can omit the hostname
     hostname = "*"
@@ -668,9 +674,8 @@ class FailureDetails(Signature):
         #           in the https://github.com/openshift/assisted-service/blob/master/internal/usage/consts.go
         #           we are manually extracting it from the cluster config and setting a feature flag
         #           so that JIRA issues can be filtered already now.
-        if "user_managed_networking" in cluster_md:
-            if cluster_md["user_managed_networking"] is True or cluster_md["user_managed_networking"] == "true":
-                update_fields["labels"].append("FEATURE-User-Managed-Networking")
+        if cluster_md.get("user_managed_networking", False):
+            update_fields["labels"].append("FEATURE-User-Managed-Networking")
 
         # (mko) Platform is not implemented as a separate feature flag, but we want to be able to filter
         #       it in Jira using labels. For this reason we are extracting it manually from the cluster payload.
@@ -1182,14 +1187,8 @@ class ApiInvalidCertificateSignature(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
-
-        cluster = md["cluster"]
-        cluster_id = cluster["id"]
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
-
         try:
-            controller_logs = triage_logs_tar.get("controller_logs.tar.gz/assisted-installer-controller-*.logs")
+            controller_logs = get_controller_logs(url)
         except FileNotFoundError:
             return
 
@@ -1779,55 +1778,6 @@ class ControllerOperatorStatus(Signature):
     format
     """
 
-    operator_regex = re.compile(r"Operator ([a-z\-]+), statuses: \[(.*)\].*")
-    conditions_regex = re.compile(r"\{(.+?)\}")
-    condition_regex = re.compile(
-        r"([A-Za-z]+) (False|True) ([0-9a-zA-Z\-]+ [0-9a-zA-Z\:]+ [0-9a-zA-Z\-\+]+ [A-Z]+) (.*)"
-    )
-
-    @classmethod
-    def operator_statuses_from_controller_logs(cls, controller_log):
-        operator_statuses = defaultdict(dict)
-        for operator_name, operator_status in cls.operator_regex.findall(controller_log):
-            for operator_conditions_raw in cls.conditions_regex.findall(operator_status):
-                for (
-                    condition_name,
-                    condition_result,
-                    condition_timestamp,
-                    condition_reason,
-                ) in cls.condition_regex.findall(operator_conditions_raw):
-                    operator_statuses[operator_name][condition_name] = {
-                        "result": condition_result == "True",
-                        "timestamp": condition_timestamp,
-                        "reason": condition_reason,
-                    }
-
-        return operator_statuses
-
-    @staticmethod
-    def condition_has_result(operator_conditions, expected_condition_name: str, expected_condition_result: str) -> bool:
-        return any(
-            condition_values["result"] == expected_condition_result
-            for condition_name, condition_values in operator_conditions.items()
-            if condition_name == expected_condition_name
-        )
-
-    @classmethod
-    def filter_operators(
-        cls,
-        operator_statuses,
-        required_conditions,
-        aggregation_function,
-    ):
-        return {
-            operator_name: operator_conditions
-            for operator_name, operator_conditions in operator_statuses.items()
-            if aggregation_function(
-                cls.condition_has_result(operator_conditions, required_condition_name, required_condition_result)
-                for required_condition_name, required_condition_result in required_conditions
-            )
-        }
-
     def __init__(self, *args, **kwargs):
         super().__init__(
             *args,
@@ -1837,14 +1787,12 @@ class ControllerOperatorStatus(Signature):
 
     def _process_ticket(self, url, issue_key):
         try:
-            controller_logs = get_triage_logs_tar(
-                triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]
-            ).get("controller_logs.tar.gz/assisted-installer-controller-*.logs")
+            controller_logs = get_controller_logs(url)
         except FileNotFoundError:
             return
 
-        unhealthy_operators = self.filter_operators(
-            self.operator_statuses_from_controller_logs(controller_logs),
+        unhealthy_operators = filter_operators(
+            operator_statuses_from_controller_logs(controller_logs),
             (
                 ("Degraded", True),
                 ("Available", False),
@@ -2149,6 +2097,40 @@ class InsufficientLVMCleanup(ErrorSignature):
             self._update_triaging_ticket("\n".join(host_messages))
 
 
+class UserManagedNetworkingLoadBalancer(ErrorSignature):
+    lb_operators = {"authentication", "console", "ingress"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            function_impact_label="umh_load_balancer_unhealthy",
+            comment_identifying_string="h1. Probably user managed load-balancer issues, could theoretically be prevented with MGMT-11941",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        md = get_metadata_json(url)
+        cluster_md = md["cluster"]
+        if not cluster_md.get("user_managed_networking", False):
+            return
+
+        try:
+            controller_logs = get_controller_logs(url)
+        except FileNotFoundError:
+            return
+
+        unhealthy_operators = filter_operators(
+            operator_statuses_from_controller_logs(controller_logs),
+            (("Degraded", True), ("Available", False), ("Progressing", True)),
+            aggregation_function=any,
+        )
+
+        if self.lb_operators == unhealthy_operators.keys():
+            self._update_triaging_ticket(
+                "Cluster has user_managed_networking and *only* load-balancer related operators seem to be broken"
+            )
+
+
 ############################
 # Common functionality
 ############################
@@ -2185,6 +2167,7 @@ ALL_SIGNATURES = [
     ErrorCreatingReadWriteLayer,
     DualstackrDNSBug,
     InsufficientLVMCleanup,
+    UserManagedNetworkingLoadBalancer,
 ]
 
 ############################
@@ -2228,6 +2211,50 @@ def group_similar_strings(ls, ratio):
             groups.append([item])
 
     return groups
+
+
+def condition_has_result(operator_conditions, expected_condition_name: str, expected_condition_result: str) -> bool:
+    return any(
+        condition_values["result"] == expected_condition_result
+        for condition_name, condition_values in operator_conditions.items()
+        if condition_name == expected_condition_name
+    )
+
+
+def filter_operators(operator_statuses, required_conditions, aggregation_function):
+    return {
+        operator_name: operator_conditions
+        for operator_name, operator_conditions in operator_statuses.items()
+        if aggregation_function(
+            condition_has_result(operator_conditions, required_condition_name, required_condition_result)
+            for required_condition_name, required_condition_result in required_conditions
+        )
+    }
+
+
+def operator_statuses_from_controller_logs(controller_log):
+    operator_regex = re.compile(r"Operator ([a-z\-]+), statuses: \[(.*)\].*")
+    conditions_regex = re.compile(r"\{(.+?)\}")
+    condition_regex = re.compile(
+        r"([A-Za-z]+) (False|True) ([0-9a-zA-Z\-]+ [0-9a-zA-Z\:]+ [0-9a-zA-Z\-\+]+ [A-Z]+) (.*)"
+    )
+    operator_statuses = defaultdict(dict)
+
+    for operator_name, operator_status in operator_regex.findall(controller_log):
+        for operator_conditions_raw in conditions_regex.findall(operator_status):
+            for (
+                condition_name,
+                condition_result,
+                condition_timestamp,
+                condition_reason,
+            ) in condition_regex.findall(operator_conditions_raw):
+                operator_statuses[operator_name][condition_name] = {
+                    "result": condition_result == "True",
+                    "timestamp": condition_timestamp,
+                    "reason": condition_reason,
+                }
+
+    return operator_statuses
 
 
 def get_issue(jira_client, issue_key):
