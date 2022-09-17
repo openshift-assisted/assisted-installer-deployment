@@ -10,7 +10,7 @@ attrs==21.4.0
     # via pytest
 beautifulsoup4==4.10.0
     # via -r requirements.in
-cachecontrol[redis]==0.12.11
+cachecontrol==0.12.11
     # via insights-core
 certifi==2022.6.15
     # via requests
@@ -78,7 +78,7 @@ networkx==2.5.1
     # via -r requirements.in
 numpy==1.23.0
     # via matplotlib
-oauthlib==3.2.0
+oauthlib==3.2.1
     # via requests-oauthlib
 packaging==21.0
     # via
@@ -125,9 +125,7 @@ pyyaml==6.0
     #   -r requirements.in
     #   insights-core
 redis==4.3.4
-    # via
-    #   cachecontrol
-    #   insights-core
+    # via insights-core
 requests==2.26.0
     # via
     #   -r requirements.in
