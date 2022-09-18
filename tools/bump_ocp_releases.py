@@ -60,7 +60,7 @@ ASSISTED_SERVICE_MASTER_DEFAULT_RELEASE_IMAGES_JSON_URL = \
 
 OCP_REPLACE_CONTEXT = ['"{version}"', "ocp-release:{version}"]
 
-SKIPPED_MINOR_OCP_RELEASES = ["4.6", "4.7", "4.12"]
+SKIPPED_MINOR_OCP_RELEASES = ["4.6", "4.7"]
 
 SKIPPED_MINOR_RHCOS_RELEASES = ["4.6", "4.7"]
 
@@ -145,17 +145,17 @@ def get_release_note_url(minor_release):
 
 def get_release_data(minor_release, cpu_architecture):
     # We're using 'x86_64' as a default architecture in the service,
-    # changing to 'amd64' as used for quering the OCP release images.
+    # changing to 'amd64' as used for querying the OCP release images.
     if cpu_architecture == CPU_ARCHITECTURE_X86_64:
         cpu_architecture = CPU_ARCHITECTURE_AMD64
+
     release_data = subprocess.check_output(OCP_INFO_CALL.format(version=minor_release, architecture=cpu_architecture), shell=True)
     release_data = json.loads(release_data)
     if not release_data:
         releases = subprocess.check_output(OCP_INFO_FC_CALL.format(version=minor_release, architecture=cpu_architecture), shell=True)
         releases = json.loads(releases)
-        versions = []
-        for release in releases:
-            versions.append(release['version'])
+        versions = [release["version"] for release in releases
+                    if release["version"].startswith(minor_release)]
         latest_version = max(versions, key=natsort.natsort_key, default=None)
         try:
             release_data = [r for r in releases if r['version'] == latest_version][0]
