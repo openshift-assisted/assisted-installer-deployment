@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 # pylint: disable=invalid-name,bare-except,too-many-arguments,redefined-outer-name
-
 import argparse
+from collections import defaultdict
+import contextlib
 import csv
 import logging
 import os
 import re
 import subprocess
 import sys
-from collections import defaultdict
+import tempfile
+import pathlib
 
 import consts
 import jira
@@ -30,31 +32,21 @@ REPORT_FORMAT_MARKDOWN = "markdown_report"
 REPORT_FORMAT_STD = "std_report"
 
 
-def create_dir(dirname):
-    try:
-        os.mkdir(dirname)
-    except Exception:
-        pass
-
-
-def clone_repo(repo):
-    dirname = "temp/{}".format(os.path.basename(repo))
-    if os.path.isdir(dirname):
-        subprocess.check_call("git fetch -tf", shell=True, cwd=dirname)
-    else:
-        repo_url = REPO_URL_TEMPLATE.format(repo)
-        subprocess.check_call("git clone {}".format(repo_url), shell=True, cwd="temp")
-    return dirname
+def clone_repo(temp_dir, repo):
+    repo_path = temp_dir / os.path.basename(repo)
+    repo_url = REPO_URL_TEMPLATE.format(repo)
+    subprocess.check_call("git clone {}".format(repo_url), shell=True, cwd=temp_dir)
+    return repo_path
 
 
 def get_issues_list_for_repo(repo, from_commit, to_commit):
-    create_dir("temp")
-    dirname = clone_repo(repo)
-    raw_log = subprocess.check_output(
-        "git log --pretty=medium {}...{} ".format(from_commit, to_commit), shell=True, cwd=dirname
-    )
-    matches = ISSUES_REGEX.findall(raw_log.decode("utf-8"), re.MULTILINE)
-    return [i for i, _ in matches]
+    with tempfile.TemporaryDirectory() as temp_dir:
+        repo_path = clone_repo(pathlib.Path(temp_dir), repo)
+        raw_log = subprocess.check_output(
+            "git log --pretty=medium {}...{} ".format(from_commit, to_commit), shell=True, cwd=repo_path
+        )
+        matches = ISSUES_REGEX.findall(raw_log.decode("utf-8"), re.MULTILINE)
+        return [i for i, _ in matches]
 
 
 def get_manifest_yaml(commit=None):
