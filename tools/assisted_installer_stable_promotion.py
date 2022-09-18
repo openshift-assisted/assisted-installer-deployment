@@ -44,16 +44,14 @@ def tag_manifest_images(tags):
     with open(args.deployment, "r") as f:
         deployment = yaml.safe_load(f)
 
-    for rep_data in deployment.values():
-        for image in rep_data["images"]:
-            revision = rep_data["revision"]
+    for component in deployment.values():
+        if "backend" not in component["categories"]:
+            continue
 
-            if image.startswith("quay.io/ocpmetal/"):
-                pull_spec = f"{image}:{revision}"
-            elif image.startswith("quay.io/edge-infrastructure"):
-                pull_spec = f"{image}:latest-{revision}"
-            else:
-                raise ValueError(f"Unknown repository of image {image}")
+        for image in component["images"]:
+            revision = component["revision"]
+
+            pull_spec = f"{image}:latest-{revision}"
 
             try:
                 tag_image(pull_spec, tags)
