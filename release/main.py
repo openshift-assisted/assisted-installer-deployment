@@ -26,11 +26,14 @@ def tag_all(manifest, tag, delete_if_exists=False):
     '''Read the manifest file and create a tag for each entry'''
     logger = get_logger()
     with open(manifest, 'r') as manifest_file:
-        manifest_contnet = yaml.safe_load(manifest_file)
-    logger.info("Creating %s tag for all repos", tag)
+        manifest_content = yaml.safe_load(manifest_file)
+    logger.info("Creating %s tag for all backend repos", tag)
     gtools = gittools.GitApiUtils()
     repos_with_tag = []
-    for repo in manifest_contnet.keys():
+    for repo, component_data in manifest_content.items():
+        if "backend" not in component_data["categories"]:
+            continue
+
         if gtools.tag_exists(repo, tag):
             repos_with_tag.append(repo)
     if repos_with_tag:
@@ -40,9 +43,13 @@ def tag_all(manifest, tag, delete_if_exists=False):
         else:
             raise ValueError(f"{tag} tag already exists in these repositories {repos_with_tag}")
 
-    for repo, repo_info in manifest_contnet.items():
-        logger.info("Creating %s tag in repo: %s, revision: %s", tag, repo, repo_info['revision'])
-        gtools.create_tag(repo, repo_info['revision'], tag)
+    for repo, component_data in manifest_content.items():
+        if "backend" not in component_data["categories"]:
+            continue
+
+        logger.info("Creating %s tag in repo: %s, revision: %s", tag, repo, component_data['revision'])
+        gtools.create_tag(repo, component_data['revision'], tag)
+
     logger.info("Done")
 
 
