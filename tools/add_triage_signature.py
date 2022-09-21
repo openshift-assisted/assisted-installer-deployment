@@ -831,92 +831,6 @@ class InstallationDiskFIOSignature(Signature):
             self._update_triaging_ticket(report)
 
 
-class CNIConfigurationError(ErrorSignature):
-    def __init__(self, *args, **kwargs):
-        super().__init__(
-            *args,
-            **kwargs,
-            function_impact_label="missing_CNI",
-            comment_identifying_string="h1. No CNI configuration",
-        )
-
-    @staticmethod
-    def _get_host_neighbors(host):
-        """
-        Given a host object, get the IP addresses of neighboring hosts. These are extracted from the given host's "connectivity" stanza.
-        """
-        if host["connectivity"] is None:
-            return []
-        try:
-            return [
-                (
-                    remote_host["host_id"],
-                    remote_host["l3_connectivity"][0]["remote_ip_address"],
-                )
-                for remote_host in json.loads(host["connectivity"])["remote_hosts"]
-            ]
-        except KeyError:
-            # Malformed host obect, ignore
-            return []
-
-    @classmethod
-    def _get_all_host_ip_addresses(cls, cluster):
-        """Given a cluster object, return a list of all host IP addresses.
-
-        Since the metadata.json file does not contain the IP address of each host,
-        we have to infer it by examining the connectivity stanza of each of the hosts.
-        Collecting the neighboring hosts from each of the host objects into a set should hopefully
-        give us all host IP addresses.
-        """
-        return set(itertools.chain(*(cls._get_host_neighbors(host) for host in cluster["hosts"])))
-
-    def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
-
-        cluster = md["cluster"]
-        cluster_id = cluster["id"]
-
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
-
-        host_ip_addresses = self._get_all_host_ip_addresses(cluster)
-
-        if len(host_ip_addresses) == 0:
-            # Fallback because some clusters just have a weird metadata.json without even a `hosts` stanza...
-            host_ip_addresses = [("Unknown", "*")]
-
-        hosts = []
-        threshold = 1000
-
-        for host_id, host_ip in host_ip_addresses:
-            try:
-                kubelet_journal = get_journal(triage_logs_tar, host_ip, "kubelet.log")
-                cni_errors = search_patterns_in_string(
-                    kubelet_journal,
-                    re.escape(
-                        "No CNI configuration file in /etc/kubernetes/cni/net.d/. Has your network provider started?"
-                    ),
-                )
-
-                if len(cni_errors) > threshold:
-                    hosts.append(
-                        OrderedDict(
-                            {
-                                "Host ID": host_id,
-                                "Host IP": host_ip,
-                                "Number of errors": f"{len(cni_errors)} (threshold {threshold})",
-                                "First error": f"{{code}}{cni_errors[0]}{{code}}",
-                                "Last error": f"{{code}}{cni_errors[1]}{{code}}",
-                            }
-                        )
-                    )
-            except FileNotFoundError:
-                continue
-
-        if len(hosts):
-            report = self._generate_table_for_report(hosts)
-            self._update_triaging_ticket(report)
-
-
 class StorageDetailSignature(Signature):
     def __init__(self, *args, **kwargs):
         super().__init__(
@@ -2150,7 +2064,6 @@ ALL_SIGNATURES = [
     LibvirtRebootFlagSignature,
     MediaDisconnectionSignature,
     AgentStepFailureSignature,
-    CNIConfigurationError,
     MustGatherAnalysis,
     OSInstallationTime,
     CoreOSInstallerErrorSignature,
