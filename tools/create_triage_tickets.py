@@ -21,6 +21,10 @@ from add_triage_signature import (
     process_ticket_with_signatures,
 )
 from retry import retry
+from utils import (
+    normalize_jira_title,
+    normalize_jira_titles,
+)
 
 DEFAULT_DAYS_TO_HANDLE = 30
 DEFAULT_WATCHERS = ["mkowalsk"]
@@ -70,7 +74,7 @@ def close_custom_domain_user_ticket(jira_client, issue_key):
 
 def create_jira_ticket(jira_client, existing_tickets, failure_id, cluster_md):
     summary = format_summary({"failure_id": failure_id})
-    if summary in existing_tickets:
+    if normalize_jira_title(summary) in existing_tickets:
         logger.debug("issue found: %s", summary)
         return None
 
@@ -111,6 +115,10 @@ def main(args):
     failed_clusters = res.json()
 
     issues, summaries = get_all_triage_tickets(jira_client)
+    # We are normalizing the titles of jira tickets to strip all the non-alphanumeric
+    # characters. This is because changing format of the title causes creation of duplicated
+    # AITRAIGE tickets. This normalization will make it at least a bit more robust.
+    normalized_summaries = normalize_jira_titles(summaries)
     if not issues:
         raise ConnectionError("Failed to get any issues from JIRA")
 
@@ -124,7 +132,7 @@ def main(args):
         cluster = res.json()["cluster"]
 
         if cluster["status"] == "error":
-            new_issue = create_jira_ticket(jira_client, summaries, failure["name"], cluster)
+            new_issue = create_jira_ticket(jira_client, normalized_summaries, failure["name"], cluster)
             if new_issue is not None:
                 logs_url = "{}/files/{}".format(LOGS_COLLECTOR, failure["name"])
                 process_ticket_with_signatures(
