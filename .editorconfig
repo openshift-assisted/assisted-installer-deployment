@@ -1,0 +1,7 @@
+# EditorConfig
+
+root = true
+
+[*.py]
+indent_style = space
+indent_size = 4
