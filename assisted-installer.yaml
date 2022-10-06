@@ -1,5 +1,5 @@
 openshift/assisted-installer:
-  revision: 2cdfc9f8611a243c295efc4ebe2c991e00de737c
+  revision: a2028cf79871411c9ab26537703a7ce88c065c45
   categories:
   - backend
   images:
