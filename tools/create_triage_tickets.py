@@ -27,7 +27,6 @@ from utils import (
 )
 
 DEFAULT_DAYS_TO_HANDLE = 30
-DEFAULT_WATCHERS = ["mkowalsk"]
 
 
 LOGS_COLLECTOR = "http://assisted-logs-collector.usersys.redhat.com"
@@ -57,11 +56,6 @@ def get_all_triage_tickets(jira_client):
         idx += block_size
 
     return issues, set(summaries)
-
-
-def add_watchers(jira_client, issue):
-    for watcher in DEFAULT_WATCHERS:
-        jira_client.add_watcher(issue.key, watcher)
 
 
 def close_custom_domain_user_ticket(jira_client, issue_key):
@@ -95,9 +89,6 @@ def create_jira_ticket(jira_client, existing_tickets, failure_id, cluster_md):
     )
 
     logger.info("issue created: %s", new_issue)
-    # (mko 27/10/2021) Disabling adding watchers due to the HTTP 400 error raised when creating
-    #                  AITRIAGE tickets from Jenkins using this script.
-    # add_watchers(jira_client, new_issue)
     return new_issue
 
 

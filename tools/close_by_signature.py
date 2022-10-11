@@ -205,7 +205,6 @@ def close_tickets_by_filters(jira_client, filters, issues, dry_run_stdout):
 
 
 TARGET_TRANSITION_ID = "41"  # '41' - 'Closed', see GET /rest/api/2/issue/{issueIdOrKey}/transitions
-CLOSED_TICKETS_ASSIGNEE = "mkowalsk"
 
 
 def close_and_link_issues(jira_client, filtered_issues_generator, dry_run_stdout):
@@ -227,17 +226,11 @@ def close_and_link_issues(jira_client, filtered_issues_generator, dry_run_stdout
 
         if dry_run_stdout is None:
             jira_client.transition_issue(issue_data.issue, TARGET_TRANSITION_ID)
-            jira_client.assign_issue(issue_data.issue, CLOSED_TICKETS_ASSIGNEE)
         else:
             print(
                 f"Closed issue key={issue_data.issue.key} "
                 f"signature={type(issue_data.signature)} "
                 f"comment={issue_data.comment.body}\n",
-                file=dry_run_stdout,
-                flush=True,
-            )
-            print(
-                f"Assigned issue key={issue_data.root_issue.key} to user={CLOSED_TICKETS_ASSIGNEE}\n",
                 file=dry_run_stdout,
                 flush=True,
             )
