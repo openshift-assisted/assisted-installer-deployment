@@ -2045,6 +2045,45 @@ class UserManagedNetworkingLoadBalancer(ErrorSignature):
             )
 
 
+class TagAnalysis(Signature):
+    known_tags = {
+        "ui_ocm": "this cluster was created through the OCM UI on https://console.redhat.com/",
+        "aicli": "this cluster was created through aicli (https://github.com/karmab/aicli)",
+        # Know about other tags? Please add them!
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Tag analysis for this ticket",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        tags = set(get_metadata_json(url)["cluster"].get("tags", "").split(","))
+
+        if tags == {""}:
+            return
+
+        unknown_tags = tags - self.known_tags.keys()
+        multiple_unknown_tags = len(unknown_tags) > 1
+
+        known_tags_messages = [
+            f"* According to the {tag} tag, {self.known_tags[tag]}." for tag in tags if tag in self.known_tags
+        ]
+
+        unknown_tag_message = (
+            [
+                "\n",
+                f"Additionally, this cluster has the tag{'s' if multiple_unknown_tags else ''} {', '.join(unknown_tags)} which {'are' if multiple_unknown_tags else 'is'} unknown",
+            ]
+            if len(unknown_tags) > 0
+            else []
+        )
+
+        self._update_triaging_ticket("\n".join(known_tags_messages + unknown_tag_message))
+
+
 ############################
 # Common functionality
 ############################
@@ -2081,6 +2120,7 @@ ALL_SIGNATURES = [
     DualstackrDNSBug,
     InsufficientLVMCleanup,
     UserManagedNetworkingLoadBalancer,
+    TagAnalysis,
 ]
 
 ############################
