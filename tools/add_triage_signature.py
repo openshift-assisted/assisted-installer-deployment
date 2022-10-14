@@ -1514,10 +1514,9 @@ class NonstandardNetworkType(ErrorSignature):
 
 class FlappingValidations(ErrorSignature):
     validation_name_regexp = re.compile(r"Host .+: validation '(.+)'.+")
-    regexps = [
-        re.compile(r"Host .+: validation '.+' is now fixed"),
-        re.compile(r"Host .+: validation '.+' that used to succeed is now failing"),
-    ]
+
+    succeed_to_failing_regexp = re.compile(r"Host .+: validation '.+' that used to succeed is now failing")
+    now_fixed_regexp = re.compile(r"Host .+: validation '.+' is now fixed")
 
     def __init__(self, *args, **kwargs):
         super().__init__(
@@ -1528,25 +1527,38 @@ class FlappingValidations(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        events = get_cluster_installation_events(url, get_metadata_json(url)["cluster"]["id"])
-        validation_state_changes = Counter(
-            self.validation_name_regexp.match(event["message"]).groups()[0]
-            for event in events
-            if any(regexp.match(event["message"]) for regexp in self.regexps)
-        )
+        events = get_events_by_host(url, get_metadata_json(url)["cluster"]["id"])
 
-        excessive_validation_state_changes = [
-            OrderedDict(
-                validation=k,
-                count=f"This validation flapped {v} times",
+        host_tables = {}
+        for host, events in events.items():
+            succeed_to_failing_counter = Counter(
+                self.validation_name_regexp.match(event["message"]).groups()[0]
+                for event in events
+                if self.succeed_to_failing_regexp.match(event["message"])
             )
-            for k, v in validation_state_changes.items()
-            if v > 4
-        ]
 
-        if excessive_validation_state_changes:
+            now_fixed = Counter(
+                self.validation_name_regexp.match(event["message"]).groups()[0]
+                for event in events
+                if self.now_fixed_regexp.match(event["message"])
+            )
+
+            table = [
+                OrderedDict(
+                    validation=validation_name,
+                    failed=f"This went from succeeding to failing {succeed_to_failing_occurrences} times",
+                    fixed=f"This validation was fixed {now_fixed.get(validation_name, 0)} times",
+                )
+                for validation_name, succeed_to_failing_occurrences in succeed_to_failing_counter.items()
+            ]
+
+            if table:
+                host_tables[host] = self._generate_table_for_report(table)
+
+        if host_tables:
+            text = "\n".join(f"h2. Host ID {host}\n{table}" for host, table in host_tables.items())
             self._update_triaging_ticket(
-                comment=self._generate_table_for_report(excessive_validation_state_changes),
+                comment=text,
             )
 
 
