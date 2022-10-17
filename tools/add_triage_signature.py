@@ -1717,8 +1717,12 @@ class ControllerOperatorStatus(Signature):
         except FileNotFoundError:
             return
 
+        # We want to consider unhealthy operators that have a condition explicitly marking them as
+        # degraded, unavailable or progressing and also operators that don't have any explicit
+        # condition:
+        operator_statuses = operator_statuses_from_controller_logs(controller_logs, include_empty=True)
         unhealthy_operators = filter_operators(
-            operator_statuses_from_controller_logs(controller_logs),
+            operator_statuses,
             (
                 ("Degraded", True),
                 ("Available", False),
@@ -1726,6 +1730,8 @@ class ControllerOperatorStatus(Signature):
             ),
             aggregation_function=any,
         )
+        operators_without_conds = {name: conds for name, conds in operator_statuses.items() if not conds}
+        unhealthy_operators.update(operators_without_conds)
 
         if len(unhealthy_operators) != 0:
             with tempfile.NamedTemporaryFile(
@@ -2197,7 +2203,7 @@ def filter_operators(operator_statuses, required_conditions, aggregation_functio
     }
 
 
-def operator_statuses_from_controller_logs(controller_log):
+def operator_statuses_from_controller_logs(controller_log, include_empty=False):
     operator_regex = re.compile(r"Operator ([a-z\-]+), statuses: \[(.*)\].*")
     conditions_regex = re.compile(r"\{(.+?)\}")
     condition_regex = re.compile(
@@ -2206,6 +2212,8 @@ def operator_statuses_from_controller_logs(controller_log):
     operator_statuses = defaultdict(dict)
 
     for operator_name, operator_status in operator_regex.findall(controller_log):
+        if include_empty:
+            operator_statuses[operator_name] = {}
         for operator_conditions_raw in conditions_regex.findall(operator_status):
             for (
                 condition_name,
