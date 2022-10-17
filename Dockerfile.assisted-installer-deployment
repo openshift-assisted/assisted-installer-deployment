@@ -1,20 +1,14 @@
 FROM quay.io/centos/centos:stream8
 
-ENV GOPATH=/root/go
-ENV GOROOT=/usr/lib/golang
-ENV PATH=$PATH:$GOROOT/bin:$GOPATH/bin
-
 RUN dnf install -y \
     jq \
     gcc \
-    golang-1.17* \
     git \
     make \
     skopeo \
     python39 \
     python39-pip \
     python39-devel \
-    genisoimage \
         && dnf clean all
 
 RUN alternatives --set python /usr/bin/python3.9
@@ -33,10 +27,6 @@ COPY ccx/ ./ccx
 RUN if [ "${INSTALL_CCX}" == "true" ]; then \
         ./ccx/install.sh; \
     fi
-
-# required for generating configuration/bundle in assisted-service repo
-COPY ./setup_env.sh ./
-RUN ./setup_env.sh assisted_service
 
 WORKDIR /home/assisted-installer-deployment
 COPY . .
