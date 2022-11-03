@@ -2046,6 +2046,9 @@ class UserManagedNetworkingLoadBalancer(ErrorSignature):
         if not cluster_md.get("user_managed_networking", False):
             return
 
+        if cluster_md.get("high_availability_mode") == "None":
+            return
+
         try:
             controller_logs = get_controller_logs(url)
         except FileNotFoundError:
