@@ -2130,6 +2130,64 @@ class SkipDisks(ErrorSignature):
             )
 
 
+class FailedRequestTriggersHostTimeout(Signature):
+    """
+    This signature looks for failed requests that could have caused an host timeout, ultimately failing installation
+    """
+
+    # This has to be maintained to be the same format as
+    # https://github.com/openshift/assisted-installer-agent/blob/aebd94105b4ed6442f21a7a26ab4e40eafd936aa/src/commands/step_processor.go#L81
+    # Remember to maintain backwards compatibility if that format ever changes - create
+    # PATTERN_NEW and try to match both.
+    LOG_PATTERN = re.compile(
+        r'time="(?P<time>.+)" level=(?P<severity>[a-z]+) msg="(?P<message>.*api\.openshift\.com/api/assisted-install.*Service Unavailable)" file=.+'
+    )
+
+    HOST_TIMED_OUT_STATUS_INFO = "Host failed to install due to timeout while connecting to host"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Failed request triggering host timeout",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        cluster = get_metadata_json(url)["cluster"]
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster["id"])
+
+        failed_requests_hosts = self._failed_requests_hosts(cluster, triage_logs_tar)
+        timed_out_hosts = self._timed_out_hosts(cluster)
+        messages = [
+            f"h2. Host {host_id} has request failures and timed out. Did the request cause the host to timeout?"
+            for host_id in failed_requests_hosts & timed_out_hosts
+        ]
+
+        if len(messages) == 0 and len(failed_requests_hosts) > 0 and len(timed_out_hosts) > 0:
+            messages = [
+                f"h2. Cluster {cluster['id']} has at least one host that failed requests ({', '.join(failed_requests_hosts)}) and at least one host that timed out ({', '.join(timed_out_hosts)})"
+            ]
+        if len(messages) > 0:
+            self._update_triaging_ticket("\n".join(messages))
+
+    @classmethod
+    def _failed_requests_hosts(cls, cluster, triage_logs_tar):
+        failed_requests_hosts = set()
+        for host in cluster["hosts"]:
+            try:
+                agent_logs = get_host_log_file(triage_logs_tar, host["id"], "agent.logs")
+            except FileNotFoundError:
+                continue
+
+            if len(re.findall(cls.LOG_PATTERN, agent_logs)) > 0:
+                failed_requests_hosts.add(host["id"])
+        return failed_requests_hosts
+
+    @classmethod
+    def _timed_out_hosts(cls, cluster):
+        return {host["id"] for host in cluster["hosts"] if host["status_info"] == cls.HOST_TIMED_OUT_STATUS_INFO}
+
+
 ############################
 # Common functionality
 ############################
@@ -2168,6 +2226,7 @@ ALL_SIGNATURES = [
     UserManagedNetworkingLoadBalancer,
     TagAnalysis,
     SkipDisks,
+    FailedRequestTriggersHostTimeout,
 ]
 
 ############################
