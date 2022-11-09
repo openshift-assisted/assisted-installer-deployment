@@ -2105,6 +2105,31 @@ class TagAnalysis(Signature):
         self._update_triaging_ticket("\n".join(known_tags_messages + unknown_tag_message))
 
 
+class SkipDisks(ErrorSignature):
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. User has chose to skip some disks",
+            function_impact_label="skip_disks",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        skip_disks = {
+            host["id"]: host["skip_formatting_disks"].split(",")
+            for host in get_metadata_json(url)["cluster"].get("hosts", [])
+            if host.get("skip_formatting_disks", None) is not None and host["skip_formatting_disks"] != ""
+        }
+
+        if skip_disks:
+            self._update_triaging_ticket(
+                "\n".join(
+                    f"* User has chosen to skip formatting of disks for host {host_id}: {', '.join(disks)}, this could lead to boot order issues and the user was warned about it"
+                    for host_id, disks in skip_disks.items()
+                )
+            )
+
+
 ############################
 # Common functionality
 ############################
@@ -2142,6 +2167,7 @@ ALL_SIGNATURES = [
     InsufficientLVMCleanup,
     UserManagedNetworkingLoadBalancer,
     TagAnalysis,
+    SkipDisks,
 ]
 
 ############################
