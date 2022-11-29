@@ -478,7 +478,15 @@ class HostsStatusSignature(Signature):
 
     def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
-        installconfig = get_installconfig_yaml(url)
+
+        try:
+            installconfig = get_installconfig_yaml(url)
+        except FailedToGetInstallConfigException:
+            logger.exception("Failed to get install-config.yaml")
+            self._update_triaging_ticket(
+                "Installation status signature cannot be created. This cluster's collected logs are missing install-config.yaml for an unknown reason, why is it missing?"
+            )
+            return
 
         cluster = md["cluster"]
 
