@@ -428,7 +428,6 @@ class Signature(abc.ABC):
             )
         return tabulate(host_summary, headers="keys", tablefmt="jira") + "\n"
 
-
 class ErrorSignature(Signature, abc.ABC):
     """
     ErrorSignature is a Signature that also optionally adds function impact and
@@ -1236,6 +1235,93 @@ class CoreOSInstallerErrorSignature(ErrorSignature):
             """
             )
             report += self._generate_table_for_report(hosts)
+            self._update_triaging_ticket(report)
+
+class AgentNsenterSignature(Signature):
+    """
+    Signature that indicate that one of the agent commands have failed, because not all commands are required,
+    sometimes command can fail but the installation will start anyway this signature will give an indication that one
+    of the commands have failed.
+    """
+
+    # This has to be maintained to be the same format as
+    # https://github.com/openshift/assisted-installer-agent/blob/aebd94105b4ed6442f21a7a26ab4e40eafd936aa/src/commands/step_processor.go#L81
+    # Remember to maintain backwards compatibility if that format ever changes - create
+    # PATTERN_NEW and try to match both.
+    LOG_PATTERN = re.compile(
+        r'level=(?P<severity>[a-z]+) msg=."(?P<message>failed executing nsenter.*)" file=.+'
+    )
+
+    MAX_FAILURES_PER_HOST = 10
+    MAX_LINE_LENGTH = 1000
+    TRUNCATE_OUTPUT_LINES = 100
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Agent nsenter failure",
+        )
+
+    @classmethod
+    def _prepare_output(cls, output):
+        if len(output) == 0:
+            return output
+
+        pre = "{code:borderStyle=none|bgColor=transparent} "
+        post = " {code}"
+        output_lines = output.replace("|", "¦").split("\\n")
+
+        if len(output_lines) > cls.TRUNCATE_OUTPUT_LINES:
+            half = cls.TRUNCATE_OUTPUT_LINES // 2
+            output_lines = output_lines[:half] + ["**OUTPUT HAS BEEN TRUNCATED**"] + output_lines[-half:]
+
+        output_lines = [line for line in output_lines if line != '\\"']
+        output_lines = [pre + line[: cls.MAX_LINE_LENGTH] + post for line in output_lines]
+
+        return "".join(output_lines)
+
+    def _process_ticket(self, url, issue_key):
+        md = get_metadata_json(url)
+
+        cluster = md["cluster"]
+        cluster_id = cluster["id"]
+
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+
+        report = ""
+        for host in cluster["hosts"]:
+            host_id = host["id"]
+
+            try:
+                agent_logs = get_host_log_file(triage_logs_tar, host_id, "agent.logs")
+            except FileNotFoundError:
+                continue
+
+            print("Working on host {host_id}", host_id)
+            failures = []
+            for _failure_idx, step_failure_log_match in zip(
+                range(self.MAX_FAILURES_PER_HOST),
+                self.LOG_PATTERN.finditer(agent_logs),
+            ):
+                step_failure_log = step_failure_log_match.groupdict()
+                # print("only time", step_failure_log["time"])
+
+                failures.append(
+                    OrderedDict(
+                        severity=step_failure_log["severity"],
+                        msg=step_failure_log["message"],
+                    )
+                )
+
+            if len(failures) != 0:
+                report += dedent(
+                    f"""
+                    h2. Agent nsenter failures for {host_id} ({self._get_hostname(host)})
+                    {self._generate_table_for_report(failures)}"""
+                )
+
+        if len(report) != 0:
             self._update_triaging_ticket(report)
 
 
@@ -2214,6 +2300,7 @@ ALL_SIGNATURES = [
     InstallationDiskFIOSignature,
     LibvirtRebootFlagSignature,
     MediaDisconnectionSignature,
+    AgentNsenterSignature,
     AgentStepFailureSignature,
     MustGatherAnalysis,
     OSInstallationTime,
