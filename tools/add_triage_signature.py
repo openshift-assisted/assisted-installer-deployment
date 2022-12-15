@@ -2037,6 +2037,51 @@ class InsufficientLVMCleanup(ErrorSignature):
             self._update_triaging_ticket("\n".join(host_messages))
 
 
+class ErrorOnCleanupInstallDevice(Signature):
+    """
+    This signature monitors errors on cleanupInstallDevice function
+    """
+
+    # This has to be maintained to be the same format as
+    # https://github.com/openshift/assisted-installer/blob/51c021f3245ef1d9e1a50a3e31dc23350cdc5d32/src/installer/installer.go#L98
+    # Remember to maintain backwards compatibility if that format ever changes - create
+    # PATTERN_NEW and try to match both.
+    LOG_PATTERN = re.compile(r'msg="(?P<message>failed to prepare install device.*)"')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Non-fatal error(s) occured trying to perform best-effort cleanup on installation disk",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        cluster = get_metadata_json(url)["cluster"]
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster["id"])
+
+        hosts = []
+        for host in cluster["hosts"]:
+            host_id = host["id"]
+
+            try:
+                installer_logs = get_host_log_file(triage_logs_tar, host_id, "installer.logs")
+            except FileNotFoundError:
+                continue
+
+            if match := self.LOG_PATTERN.search(installer_logs):
+                hosts.append(
+                    OrderedDict(
+                        host=self._get_hostname(host),
+                        message=match.group("message"),
+                    )
+                )
+
+        if hosts:
+            report = "cleanupInstallDevice function has failed for the following hosts. However, its failure does not block installation. Check logs to see if it is related to the installation failure\n"
+            report += self._generate_table_for_report(hosts)
+            self._update_triaging_ticket(report)
+
+
 class UserManagedNetworkingLoadBalancer(ErrorSignature):
     lb_operators = {"authentication", "console", "ingress"}
 
@@ -2231,6 +2276,7 @@ ALL_SIGNATURES = [
     ErrorCreatingReadWriteLayer,
     DualstackrDNSBug,
     InsufficientLVMCleanup,
+    ErrorOnCleanupInstallDevice,
     UserManagedNetworkingLoadBalancer,
     TagAnalysis,
     SkipDisks,
