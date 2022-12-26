@@ -1130,6 +1130,34 @@ class ApiInvalidCertificateSignature(ErrorSignature):
             self._update_triaging_ticket(report)
 
 
+class ApiExpiredCertificateSignature(ErrorSignature):
+
+    LOG_PATTERN = re.compile("x509: certificate has expired or is not yet valid.*")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            function_impact_label="api_expired_certificate",
+            comment_identifying_string="h1. Expired Certificate",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        try:
+            bootstrap_kube_apiserver_logs = get_triage_logs_tar(
+                triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]
+            ).get(
+                "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/bootstrap/containers/bootstrap-control-plane/kube-apiserver.log"
+            )
+        except FileNotFoundError:
+            return
+        if invalid_api_log_lines := self.LOG_PATTERN.findall(bootstrap_kube_apiserver_logs):
+            report = f"{{code}}{invalid_api_log_lines[0]}{{code}}"
+            if (num_lines := len(invalid_api_log_lines)) > 1:
+                report += f"\n additional {num_lines} relevant similar error log lines are found"
+            self._update_triaging_ticket(report)
+
+
 class AllInstallationAttemptsSignature(Signature):
     def __init__(self, *args, **kwargs):
         super().__init__(
@@ -2249,6 +2277,7 @@ ALL_SIGNATURES = [
     AllInstallationAttemptsSignature,
     EventsInstallationAttempts,
     ApiInvalidCertificateSignature,
+    ApiExpiredCertificateSignature,
     FailureDetails,
     FailureDescription,
     ComponentsVersionSignature,
