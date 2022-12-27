@@ -17,7 +17,7 @@ class TestCiStatusReport:
 
             response.json.side_effect = [json_text]
             jobs = filter_jobs(response)
-            assert(
+            assert (
                 len(list(jobs))
                 ==
                 FIXTURE_PROW_JOB_STATUSES_RESPONSE_N_ITEMS)
