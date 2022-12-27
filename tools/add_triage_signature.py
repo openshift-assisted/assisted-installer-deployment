@@ -1378,6 +1378,32 @@ class AgentStepFailureSignature(Signature):
             self._update_triaging_ticket(report)
 
 
+class MissingMustGatherLogs(ErrorSignature):
+    """
+    This signature is added in case must-gather logs weren't collected after the failure of the installation
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            function_impact_label="missing_must_gather_logs",
+            comment_identifying_string="h1. Missing must-gather logs",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        md = get_metadata_json(url)
+        cluster_id = md["cluster"]["id"]
+        if md["cluster"]["logs_info"] in ("timeout", "completed"):
+            triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+            try:
+                get_mustgather(triage_logs_tar)
+            except FailedToGetMustgatherException:
+                self._update_triaging_ticket(
+                    "This cluster's collected logs are missing must-gather logs although it should be collected, why is it missing?"
+                )
+
+
 class MustGatherAnalysis(Signature):
     """
     This signature analyses must-gather collected after the failure of the installation.
@@ -2278,6 +2304,7 @@ ALL_SIGNATURES = [
     EventsInstallationAttempts,
     ApiInvalidCertificateSignature,
     ApiExpiredCertificateSignature,
+    MissingMustGatherLogs,
     FailureDetails,
     FailureDescription,
     ComponentsVersionSignature,
