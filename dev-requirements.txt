@@ -93,11 +93,7 @@ toml==0.10.2
     #   autopep8
     #   ipdb
 tomli==2.0.1
-    # via
-    #   black
-    #   build
-    #   pep517
-    #   pylint
+    # via pep517
 tomlkit==0.11.0
     # via pylint
 traitlets==5.3.0
@@ -106,7 +102,7 @@ traitlets==5.3.0
     #   matplotlib-inline
 wcwidth==0.2.5
     # via prompt-toolkit
-wheel==0.37.1
+wheel==0.38.1
     # via pip-tools
 wrapt==1.14.1
     # via astroid
