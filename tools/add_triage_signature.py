@@ -1400,7 +1400,8 @@ class MissingMustGatherLogs(ErrorSignature):
                 get_mustgather(triage_logs_tar)
             except FailedToGetMustgatherException:
                 self._update_triaging_ticket(
-                    "This cluster's collected logs are missing must-gather logs although it should be collected, why is it missing?"
+                    f"This cluster collected logs are missing must-gather logs although it should be collected, "
+                    f'logs_info status: {md["cluster"]["logs_info"]} '
                 )
 
 
