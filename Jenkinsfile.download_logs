@@ -3,7 +3,9 @@ pipeline {
 
     parameters {
         string(name: 'REMOTE_SERVICE_URL', defaultValue: 'https://api.openshift.com', description: 'Service URL')
+        string(name: 'ASSISTED_INSTALLER_DEPLOYMENT_REMOTE', defaultValue: 'https://github.com/openshift-assisted/assisted-installer-deployment', description: 'assisted-installer-deployment repo URL to use')
         string(name: 'ASSISTED_INSTALLER_DEPLOYMENT_BRANCH', defaultValue: 'master', description: 'Branch on assisted-installer-deployment repo to use')
+        string(name: 'ASSISTED_TEST_INFRA_REMOTE', defaultValue: 'https://github.com/openshift/assisted-test-infra', description: 'assisted-test-infra repo URL to use')
         string(name: 'ASSISTED_TEST_INFRA_BRANCH', defaultValue: 'master', description: 'Branch on assisted-test-infra repo to use')
     }
 
@@ -27,7 +29,7 @@ pipeline {
         stage('Init') {
             steps {
                 sh "rm -rf assisted-test-infra"
-                sh "git clone https://github.com/openshift/assisted-test-infra --branch ${ASSISTED_TEST_INFRA_BRANCH}"
+                sh "git clone ${ASSISTED_TEST_INFRA_REMOTE} --branch ${ASSISTED_TEST_INFRA_BRANCH}"
                 dir ('assisted-test-infra') {
                     sh "scripts/install_environment.sh install_skipper"
                     sh "make image_build"
@@ -46,7 +48,7 @@ pipeline {
         stage('Create tickets') {
             steps {
                 sh "rm -rf assisted-installer-deployment"
-                sh "git clone https://github.com/openshift-assisted/assisted-installer-deployment --branch ${ASSISTED_INSTALLER_DEPLOYMENT_BRANCH}"
+                sh "git clone ${ASSISTED_INSTALLER_DEPLOYMENT_REMOTE} --branch ${ASSISTED_INSTALLER_DEPLOYMENT_BRANCH}"
 
                 dir ('assisted-installer-deployment') {
                     sh "skipper run ./tools/create_triage_tickets.py --jira-access-token ${JIRA_ACCESS_TOKEN} -v"
