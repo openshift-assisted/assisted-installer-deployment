@@ -1394,7 +1394,18 @@ class MissingMustGatherLogs(ErrorSignature):
     def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
         cluster_id = md["cluster"]["id"]
-        if md["cluster"]["logs_info"] in ("timeout", "completed"):
+        # temporary workaround till requested status is set only when the controller is
+        # already up and running
+        cluster = md["cluster"]
+        hosts = cluster["hosts"]
+        masters_in_done = len(host for host in hosts if host["progress"] == "Done")
+        def bootstrap_after_waiting_for_bootkube():
+            for host in hosts:
+                if host["role"] == "bootstrap" and host["progress"]["current_stage"] in ["Rebooting", "Configuring", "Joined", "Done"]:
+                    return True
+            return False
+        ##
+        if cluster["logs_info"] in ("timeout", "completed") and masters_in_done >= 2 and bootstrap_after_waiting_for_bootkube():
             triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
             try:
                 get_mustgather(triage_logs_tar)
