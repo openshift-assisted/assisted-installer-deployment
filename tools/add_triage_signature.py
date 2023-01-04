@@ -2388,6 +2388,38 @@ class MissingOSTreePivot(ErrorSignature):
             )
 
 
+class MachineConfigDaemonErrorExtracting(ErrorSignature):
+    """
+    Looks for https://issues.redhat.com/browse/OCPBUGS-5352
+    """
+
+    mco_error = re.compile(r"must be empty, pass --confirm to overwrite contents of directory$", re.MULTILINE)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. machine-config-daemon could not extract machine-os-content",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        try:
+            mcd_logs = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]).get(
+                "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/control-plane/*/journals/machine-config-daemon-firstboot.log"
+            )
+        except FileNotFoundError:
+            return
+
+        if self.mco_error.search(mcd_logs):
+            self._update_triaging_ticket(
+                dedent(
+                    """
+                    machine-config-daemon-firstboot logs seem to indicate one of the hosts is hitting https://issues.redhat.com/browse/OCPBUGS-5352
+                    """.strip()
+                )
+            )
+
+
 ############################
 # Common functionality
 ############################
@@ -2432,6 +2464,7 @@ ALL_SIGNATURES = [
     FailedRequestTriggersHostTimeout,
     ControllerWarnings,
     MissingOSTreePivot,
+    MachineConfigDaemonErrorExtracting,
 ]
 
 ############################
