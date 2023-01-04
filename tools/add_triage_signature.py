@@ -2295,6 +2295,38 @@ class FailedRequestTriggersHostTimeout(Signature):
         return {host["id"] for host in cluster["hosts"] if host["status_info"] == cls.HOST_TIMED_OUT_STATUS_INFO}
 
 
+class ControllerWarnings(Signature):
+    """
+    This signature looks at the controller logs and searches for warnings
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Controller warning logs",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        try:
+            controller_logs = get_controller_logs(url)
+        except FileNotFoundError:
+            logger.info("Skipping ControllerWarnings signature because no controller logs")
+            return
+
+        max_shown = 10
+        warnings = warnings_from_controller_logs(controller_logs)
+        if len(warnings) != 0:
+            warning_text = "\n".join(warnings[:max_shown])
+
+            if len(warnings) > max_shown:
+                warning_text += (
+                    "\n" + f"There are {len(warnings) - max_shown} additional warnings but they are not shown"
+                )
+
+            self._update_triaging_ticket("Controller logs contain some warnings:\n" + f"{{code}}{warning_text}{{code}}")
+
+
 ############################
 # Common functionality
 ############################
@@ -2337,6 +2369,7 @@ ALL_SIGNATURES = [
     TagAnalysis,
     SkipDisks,
     FailedRequestTriggersHostTimeout,
+    ControllerWarnings,
 ]
 
 ############################
@@ -2426,6 +2459,11 @@ def operator_statuses_from_controller_logs(controller_log, include_empty=False):
                 }
 
     return operator_statuses
+
+
+def warnings_from_controller_logs(controller_log):
+    warning_regex = re.compile(r'time=".*" level=warning msg=".*')
+    return warning_regex.findall(controller_log)
 
 
 def get_issue(jira_client, issue_key):
