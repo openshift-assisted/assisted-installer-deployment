@@ -7,6 +7,8 @@ from datetime import datetime
 
 import yaml
 
+import skopeo_utils
+
 logging.basicConfig(format='%(asctime)s %(message)s')
 logging.getLogger().setLevel(logging.INFO)
 
@@ -49,21 +51,19 @@ def tag_manifest_images(tags):
             continue
 
         for image in component["images"]:
-            revision = component["revision"]
-
-            pull_spec = f"{image}:latest-{revision}"
-
-            try:
-                tag_image(pull_spec, tags)
-            except Exception as ex:
-                logging.exception("Failed to tag %s, reason: %s", image, ex)
+            tag_image(image, component["revision"], tags)
 
 
-def tag_image(image, tags):
+def tag_image(image, revision, tags):
     for tag in tags:
-        logging.info(f"Tagging image {image} to {tag}")
-        tagged_image = f'{image.rsplit(":")[0]}:{tag}'
-        subprocess.check_output(f"skopeo copy docker://{image} docker://{tagged_image}", shell=True)
+        logging.info(f"Tagging revision {revision} as {image}:{tag}")
+        skopeo_client = skopeo_utils.Skopeo()
+        source_tags = skopeo_client.get_image_tags_by_pattern(repository=image, pattern=f"^(latest|hotfix)-{revision}$")
+
+        if len(source_tags) != 1:
+            raise RuntimeError(f"Expected exactly 1 tag for revision {image} at revision {revision}. Got: {source_tags}")
+
+        skopeo_client.tag_image(image=image, source_tag=source_tags[0], target_tag=tag)
 
 
 def tag_repo(tags):

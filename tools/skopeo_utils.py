@@ -16,3 +16,11 @@ class Skopeo:
             return []
         # tags are returned by skopeo from oldest to newest. Let's reverse the order
         return [tag for tag in response["Tags"] if re.search(pattern, tag) is not None][::-1]
+
+    def tag_image(self, image: str, source_tag: str, target_tag: str) -> None:
+        subprocess.check_output([
+            "skopeo",
+            "copy",
+            f"docker://{image}:{source_tag}",
+            f"docker://{image}:{target_tag}",
+        ])
