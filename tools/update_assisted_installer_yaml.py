@@ -1,9 +1,10 @@
 import argparse
 import yaml
 import os
-import update_hash
-import skopeo
 import github
+
+import update_hash
+import skopeo_utils
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--deployment", help="deployment yaml file to update", type=str,
@@ -26,7 +27,7 @@ def find_first_common_element(lists: list[str]) -> str:
 def get_ref_by_docker_image(images):
     tag_pattern = "^latest-[a-f0-9]{40}$"
     tag_prefix = "latest-"
-    skopeo_client = skopeo.Skopeo()
+    skopeo_client = skopeo_utils.Skopeo()
     image_tags = [skopeo_client.get_image_tags_by_pattern(image, tag_pattern)
                   for image in images]
 
@@ -35,7 +36,7 @@ def get_ref_by_docker_image(images):
 
     tag = find_first_common_element(image_tags)
     if tag is None:
-        raise ValueError(f"Couild not find common tag for images {images}")
+        raise ValueError(f"Could not find common tag for images {images}")
 
     return tag.removeprefix(tag_prefix)
 
