@@ -6,3 +6,6 @@ make:
 volumes:
   - $PWD/assisted-installer.yaml:/assisted-installer.yaml:rw
   - $HOME/.ssh/known_hosts:/root/.ssh/known_hosts:ro
+  - ${XDG_RUNTIME_DIR}/containers/auth.json:/run/user/0/containers/auth.json:ro
+env:
+  REGISTRY_AUTH_FILE: /run/user/0/containers/auth.json
