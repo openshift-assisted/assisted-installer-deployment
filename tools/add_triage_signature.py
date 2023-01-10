@@ -2327,6 +2327,67 @@ class ControllerWarnings(Signature):
             self._update_triaging_ticket("Controller logs contain some warnings:\n" + f"{{code}}{warning_text}{{code}}")
 
 
+class MissingOSTreePivot(ErrorSignature):
+    """
+    This signature looks for missing pivot URL in rpm-ostree status of the control-plane hosts
+    """
+
+    PIVOT_URL_PATTERN = re.compile(r"pivot://.*")
+    CONTROL_PLANE_PATH = "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/control-plane"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            function_impact_label="missing_pivot_ostree",
+            comment_identifying_string="h1. MCO didn't pivot some hosts",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"])
+        hosts = []
+
+        try:
+            # Fetch control-plane directory from the bootstrap log bundle
+            control_plane_dir = triage_logs_tar.get(self.CONTROL_PLANE_PATH)
+        except FileNotFoundError:
+            return
+
+        for node_dir in control_plane_dir.iterdir():
+            node_ip = os.path.basename(node_dir)
+            try:
+                # Fetch ostree status file for the node
+                ostree_status_file = triage_logs_tar.get(f"{self.CONTROL_PLANE_PATH}/{node_ip}/rpm-ostree/status")
+            except FileNotFoundError:
+                return
+
+            # Search for the pivot URL
+            if not self.PIVOT_URL_PATTERN.search(ostree_status_file):
+                try:
+                    # Get hostname according to node_ip
+                    hostname = triage_logs_tar.get(f"{self.CONTROL_PLANE_PATH}/{node_ip}/network/hostname.txt")
+                except FileNotFoundError:
+                    return
+
+                hosts.append(
+                    OrderedDict(
+                        Hostname=hostname,
+                        IP=node_ip,
+                    )
+                )
+
+        if len(hosts) != 0:
+            self._update_triaging_ticket(
+                dedent(
+                    f"""
+            MCO didn't invoke OSTree pivot on the following non-bootstrap control-plane hosts:
+            [Could be related to this issue in MCO: https://issues.redhat.com/browse/OCPBUGS-5379]
+            {self._generate_table_for_report(hosts)}
+            """
+                )
+            )
+
+
 ############################
 # Common functionality
 ############################
@@ -2370,6 +2431,7 @@ ALL_SIGNATURES = [
     SkipDisks,
     FailedRequestTriggersHostTimeout,
     ControllerWarnings,
+    MissingOSTreePivot,
 ]
 
 ############################
