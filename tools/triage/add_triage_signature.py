@@ -2087,6 +2087,33 @@ class HostsInterfacesSignature(Signature):
         return interfaces_details
 
 
+class NetworksMtuMismatch(ErrorSignature):
+    LOG_PATTERN = re.compile(
+        r"Failed to start sdn: interface MTU [(]([0-9]+)[)] is too small for specified overlay MTU [(]([0-9]+)[)]"
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Networks MTU Mismatch",
+            function_impact_label="mgmt13107",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        try:
+            sdn_logs = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]).get(
+                "controller_logs.tar.gz/must-gather.tar.gz/must-gather.local.*/*/namespaces/openshift-sdn/pods/sdn-*/sdn/sdn/logs/*.log"
+            )
+        except FileNotFoundError:
+            return
+        if match := self.LOG_PATTERN.search(sdn_logs):
+            self._update_triaging_ticket(
+                "SDN failed to start: Overlay (cluster) network MTU {}"
+                " is bigger than the interface MTU {}".format(match[2], match[1])
+            )
+
+
 class ErrorCreatingReadWriteLayer(ErrorSignature):
     def __init__(self, *args, **kwargs):
         super().__init__(
@@ -2678,6 +2705,7 @@ ALL_SIGNATURES = [
     HostsStatusSignature,
     HostsExtraDetailSignature,
     HostsInterfacesSignature,
+    NetworksMtuMismatch,
     StorageDetailSignature,
     InstallationDiskFIOSignature,
     LibvirtRebootFlagSignature,
