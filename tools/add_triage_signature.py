@@ -1393,8 +1393,19 @@ class MissingMustGatherLogs(ErrorSignature):
 
     def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
-        cluster_id = md["cluster"]["id"]
+        cluster_hosts = md["cluster"]["hosts"]
+        bootstrap_node = [host for host in cluster_hosts if host["bootstrap"]][0]
+
+        eligible_bootstrap_stages = ["Rebooting", "Configuring", "Joined", "Done"]
+        if len(cluster_hosts) <= 1:
+            # in SNO when the bootstrap node goes to reboot the controller is still not running
+            eligible_bootstrap_stages.remove("Rebooting")
+
+        if bootstrap_node["progress"]["current_stage"] not in eligible_bootstrap_stages:
+            return
+
         if md["cluster"]["logs_info"] in ("timeout", "completed"):
+            cluster_id = md["cluster"]["id"]
             triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
             try:
                 get_mustgather(triage_logs_tar)
