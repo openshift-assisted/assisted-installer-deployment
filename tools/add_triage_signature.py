@@ -2399,6 +2399,74 @@ class MissingOSTreePivot(ErrorSignature):
             )
 
 
+class ControllerFailedToStart(ErrorSignature):
+    """
+    This signature looks for missing pivot URL in rpm-ostree status of the control-plane hosts
+    """
+
+    PODS_PATH = "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/resources/pods.json"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            function_impact_label="assisted_controller_failed_to_start",
+            comment_identifying_string="h1. Assisted Installer Controller failed to start",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        cluster = get_metadata_json(url)["cluster"]
+        bootstrap_node = [host for host in cluster["hosts"] if host["bootstrap"]][0]
+
+        if bootstrap_node["progress"]["current_stage"] != "Waiting for controller":
+            return
+
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster["id"])
+        try:
+            # Fetch pods.json from the bootstrap log bundle
+            pods_json = triage_logs_tar.get(self.PODS_PATH)
+        except FileNotFoundError:
+            return
+
+        # Fetch assisted-controller status
+        try:
+            pods = json.loads(pods_json)
+            try:
+                controller_pod = [
+                    pod
+                    for pod in pods.get("items", [])
+                    if pod.get("metadata", {}).get("namespace") == "assisted-installer"
+                ][0]
+            except IndexError:
+                raise RuntimeError("Failed to find controller pod in pods json")
+            ready = False
+            try:
+                ready = [
+                    condition.get("status") == "True"
+                    for condition in controller_pod.get("status", {}).get("conditions", {})
+                    if condition.get("type") == "Ready"
+                ][0]
+            except IndexError:
+                raise RuntimeError(
+                    f"Failed to determine controller pod ready condition, here is it's status: {controller_pod['status']}"
+                )
+            self._update_triaging_ticket(
+                dedent(
+                    f"""
+            The controller pod {"is" if ready else "isn't"} ready, here is its status:
+            h3. conditions:
+            {self._generate_table_for_report(controller_pod["status"]["conditions"])}
+            h3. containerStatuses:
+            {self._generate_table_for_report(controller_pod["status"]["containerStatuses"])}
+            """
+                )
+            )
+        except Exception as e:
+            self._update_triaging_ticket(
+                f"Failed to get readiness of controller pod from installer-gather resources/pods.json: {e}"
+            )
+
+
 class MachineConfigDaemonErrorExtracting(ErrorSignature):
     """
     Looks for https://issues.redhat.com/browse/OCPBUGS-5352
@@ -2476,6 +2544,7 @@ ALL_SIGNATURES = [
     ControllerWarnings,
     MissingOSTreePivot,
     MachineConfigDaemonErrorExtracting,
+    ControllerFailedToStart,
 ]
 
 ############################
