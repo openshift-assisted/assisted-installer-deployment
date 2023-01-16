@@ -839,6 +839,53 @@ class InstallationDiskFIOSignature(Signature):
             self._update_triaging_ticket(report)
 
 
+class SlowImageDownload(ErrorSignature):
+    image_download_regex = re.compile(
+        r"Host (?P<hostname>.+?): New image status (?P<image>.+?). result:.+?; download rate: (?P<download_rate>.+?) MBps"
+    )
+    minimum_download_rate_mb = 10
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            function_impact_label="slow_image_download",
+            comment_identifying_string="h1. Host slow download rate:",
+        )
+
+    @classmethod
+    def _list_image_download_info(cls, events):
+        def get_image_download_info(event):
+            match = cls.image_download_regex.match(event["message"])
+            if match:
+                return match.groupdict()
+
+        return [image_info for event in events if (image_info := get_image_download_info(event)) is not None]
+
+    def _process_ticket(self, url, issue_key):
+        md = get_metadata_json(url)
+
+        cluster = md["cluster"]
+
+        cluster_id = cluster["id"]
+        events = get_cluster_installation_events(url, cluster_id)
+        image_info_list = self._list_image_download_info(events)
+
+        abnormal_image_info = []
+        for image_info in image_info_list:
+            if float(image_info["download_rate"]) < self.minimum_download_rate_mb:
+                abnormal_image_info.append(image_info)
+
+        if len(abnormal_image_info) > 0:
+            report = dedent(
+                """
+                        Detected slow image download rate (MBps):
+                        """
+            )
+            report += self._generate_table_for_report(abnormal_image_info)
+            self._update_triaging_ticket(report)
+
+
 class StorageDetailSignature(Signature):
     def __init__(self, *args, **kwargs):
         super().__init__(
@@ -2436,6 +2483,7 @@ class MachineConfigDaemonErrorExtracting(ErrorSignature):
 ############################
 JIRA_SERVER = "https://issues.redhat.com"
 ALL_SIGNATURES = [
+    SlowImageDownload,
     AllInstallationAttemptsSignature,
     EventsInstallationAttempts,
     ApiInvalidCertificateSignature,
