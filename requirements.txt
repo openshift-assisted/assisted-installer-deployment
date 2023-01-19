@@ -22,8 +22,6 @@ colorlog==4.7.2
     # via -r requirements.in
 cryptography==37.0.2
     # via secretstorage
-cycler==0.11.0
-    # via matplotlib
 decorator==4.4.2
     # via
     #   networkx
@@ -36,12 +34,12 @@ deprecated==1.2.13
     # via
     #   pygithub
     #   redis
-fonttools==4.33.3
-    # via matplotlib
 fuzzywuzzy==0.18.0
     # via -r requirements.in
 idna==3.3
     # via requests
+importlib-metadata==6.0.0
+    # via keyring
 iniconfig==1.1.1
     # via pytest
 insights-core==3.0.280
@@ -56,16 +54,12 @@ jira==3.1.1
     # via -r requirements.in
 keyring==23.6.0
     # via jira
-kiwisolver==1.4.3
-    # via matplotlib
 lockfile==0.12.2
     # via
     #   cachecontrol
     #   insights-core
 markupsafe==2.1.1
     # via jinja2
-matplotlib==3.5.1
-    # via -r requirements.in
 msgpack==1.0.4
     # via cachecontrol
 multi-key-dict==2.0.3
@@ -74,20 +68,15 @@ nestedarchive==0.2.4
     # via -r requirements.in
 networkx==2.5.1
     # via -r requirements.in
-numpy==1.23.0
-    # via matplotlib
 oauthlib==3.2.1
     # via requests-oauthlib
 packaging==21.0
     # via
     #   -r requirements.in
-    #   matplotlib
     #   pytest
     #   redis
 pbr==5.9.0
     # via python-jenkins
-pillow==9.3.0
-    # via matplotlib
 pluggy==1.0.0
     # via pytest
 py==1.11.0
@@ -103,15 +92,11 @@ pyjwt==2.4.0
 pynacl==1.5.0
     # via pygithub
 pyparsing==3.0.9
-    # via
-    #   matplotlib
-    #   packaging
+    # via packaging
 pytest==7.1.1
     # via -r requirements.in
 python-dateutil==2.8.2
-    # via
-    #   -r requirements.in
-    #   matplotlib
+    # via -r requirements.in
 python-gitlab==2.10.1
     # via -r requirements.in
 python-jenkins==1.7.0
@@ -146,6 +131,8 @@ retry==0.9.2
     # via -r requirements.in
 ruamel-yaml==0.17.16
     # via -r requirements.in
+ruamel-yaml-clib==0.2.7
+    # via ruamel-yaml
 secretstorage==3.3.2
     # via keyring
 six==1.16.0
@@ -163,6 +150,8 @@ urllib3==1.26.9
     # via requests
 wrapt==1.14.1
     # via deprecated
+zipp==3.11.0
+    # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
