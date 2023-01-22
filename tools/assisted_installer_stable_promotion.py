@@ -2,7 +2,6 @@
 import argparse
 import logging
 import os
-import subprocess
 from datetime import datetime
 
 import yaml
@@ -39,7 +38,6 @@ def main():
         tags.append(timestamped_tag)
 
     tag_manifest_images(tags)
-    tag_repo(tags)
 
 
 def tag_manifest_images(tags):
@@ -60,17 +58,10 @@ def tag_image(image, revision, tags):
         skopeo_client = skopeo_utils.Skopeo()
         source_tags = skopeo_client.get_image_tags_by_pattern(repository=image, pattern=f"^(latest|hotfix)-{revision}$")
 
-        if len(source_tags) != 1:
-            raise RuntimeError(f"Expected exactly 1 tag for revision {image} at revision {revision}. Got: {source_tags}")
+        if not source_tags:
+            raise RuntimeError(f"Could not find any tag for image {image} at revision {revision}")
 
         skopeo_client.tag_image(image=image, source_tag=source_tags[0], target_tag=tag)
-
-
-def tag_repo(tags):
-    for tag in tags:
-        logging.info(f"Tagging repo with {tag}")
-        subprocess.check_call(["git", "tag", tag, "-f"])
-        subprocess.check_call(["git", "push", "origin", tag, "-f"])
 
 
 if __name__ == "__main__":
