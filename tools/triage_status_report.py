@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-import os
-import sys
-import json
 import argparse
 import dataclasses
+import json
+import os
+import sys
 from typing import List
 
+import consts
 import jira
 import requests
 
-import consts
-
-
 FILTER_ID = 12380672
+MISSING_VALUE = "<MISSING>"
 
 
 @dataclasses.dataclass(order=True)
@@ -26,7 +25,10 @@ class IssueData:
     def __post_init__(self):
         for field, value in self.__dict__.items():
             if value is None:
-                raise ValueError(f"Field '{field}' cannot be None")
+                if field == "features":
+                    self.features = [MISSING_VALUE]
+                else:
+                    setattr(self, field, MISSING_VALUE)
 
 
 def _parse_issue_data(issue):
