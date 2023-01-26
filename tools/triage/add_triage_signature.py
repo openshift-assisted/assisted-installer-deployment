@@ -30,7 +30,7 @@ from retry import retry
 from tabulate import tabulate
 
 from tools.jira_client import JiraClientFactory
-from tools.triage.common import get_cluster_logs_base_url
+from tools.triage.common import JIRA_PROJECT, get_cluster_logs_base_url
 
 DEFAULT_DAYS_TO_HANDLE = 30
 SUMMARY_PATTERN = r"cloud\.redhat\.com failure: (?P<failure_id>.+)"
@@ -98,14 +98,6 @@ def config_logger(verbose):
 
 def format_description(failure_data):
     return JIRA_DESCRIPTION.format(**failure_data)
-
-
-def days_ago(datestr):
-    try:
-        return (datetime.now() - dateutil.parser.isoparse(datestr)).days
-    except Exception:
-        logger.debug("Cannot parse date: %s", datestr)
-        return 9999
 
 
 class FailedToGetMetadataException(Exception):
@@ -1158,7 +1150,7 @@ class AllInstallationAttemptsSignature(Signature):
         cluster = md["cluster"]
         cluster_id = cluster["id"]
         cluster_triage_tickets = self._jira_client.search_issues(
-            f"""project = AITRIAGE AND "Cluster ID" ~ {cluster_id}"""
+            f"""project = {JIRA_PROJECT} AND "Cluster ID" ~ {cluster_id}"""
         )
         for ticket in cluster_triage_tickets:
             if issue_key == ticket.key:
@@ -2744,7 +2736,7 @@ def get_logs_url_from_issue(issue):
 
 def get_all_triage_tickets(jira_client, only_recent=False):
     recent_filter = "" if not only_recent else "and created >= -31d"
-    query = f"project = AITRIAGE AND component = Cloud-Triage {recent_filter}"
+    query = f"project = {JIRA_PROJECT} AND component = Cloud-Triage {recent_filter}"
 
     return jira_client.search_issues(query, maxResults=None)
 

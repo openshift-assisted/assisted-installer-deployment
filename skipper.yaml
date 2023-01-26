@@ -7,5 +7,6 @@ volumes:
   - $PWD/assisted-installer.yaml:/assisted-installer.yaml:rw
   - $HOME/.ssh/known_hosts:/root/.ssh/known_hosts:ro
   - ${XDG_RUNTIME_DIR}/containers/auth.json:/run/user/0/containers/auth.json:ro
+  - /var/ai-logs:/var/ai-logs # using this when downloading triage logs
 env:
   REGISTRY_AUTH_FILE: /run/user/0/containers/auth.json

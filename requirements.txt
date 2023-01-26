@@ -6,13 +6,13 @@
 #
 async-timeout==4.0.2
     # via redis
-attrs==21.4.0
+attrs==22.2.0
     # via pytest
-cachecontrol==0.12.11
+cachecontrol[filecache]==0.12.11
     # via insights-core
-certifi==2022.6.15
+certifi==2022.12.7
     # via requests
-cffi==1.15.0
+cffi==1.15.1
     # via
     #   cryptography
     #   pynacl
@@ -20,7 +20,7 @@ charset-normalizer==2.0.12
     # via requests
 colorlog==4.7.2
     # via -r requirements.in
-cryptography==37.0.2
+cryptography==39.0.0
     # via secretstorage
 decorator==4.4.2
     # via
@@ -31,17 +31,19 @@ defusedxml==0.7.1
     #   insights-core
     #   jira
 deprecated==1.2.13
-    # via
-    #   pygithub
-    #   redis
+    # via pygithub
 fuzzywuzzy==0.18.0
     # via -r requirements.in
-idna==3.3
+idna==3.4
     # via requests
-iniconfig==1.1.1
+importlib-metadata==6.0.0
+    # via keyring
+iniconfig==2.0.0
     # via pytest
-insights-core==3.0.280
+insights-core==3.1.4
     # via -r requirements.in
+jaraco-classes==3.2.3
+    # via keyring
 jeepney==0.8.0
     # via
     #   keyring
@@ -50,12 +52,16 @@ jinja2==3.1.2
     # via insights-core
 jira==3.1.1
     # via -r requirements.in
-keyring==23.6.0
+keyring==23.13.1
     # via jira
 lockfile==0.12.2
-    # via insights-core
-markupsafe==2.1.1
+    # via
+    #   cachecontrol
+    #   insights-core
+markupsafe==2.1.2
     # via jinja2
+more-itertools==9.0.0
+    # via jaraco-classes
 msgpack==1.0.4
     # via cachecontrol
 multi-key-dict==2.0.3
@@ -64,14 +70,13 @@ nestedarchive==0.2.4
     # via -r requirements.in
 networkx==2.5.1
     # via -r requirements.in
-oauthlib==3.2.1
+oauthlib==3.2.2
     # via requests-oauthlib
 packaging==21.0
     # via
     #   -r requirements.in
     #   pytest
-    #   redis
-pbr==5.9.0
+pbr==5.11.1
     # via python-jenkins
 pluggy==1.0.0
     # via pytest
@@ -81,9 +86,11 @@ py==1.11.0
     #   retry
 pycparser==2.21
     # via cffi
+pyfakefs==5.1.0
+    # via -r requirements.in
 pygithub==1.55
     # via -r requirements.in
-pyjwt==2.4.0
+pyjwt==2.6.0
     # via pygithub
 pynacl==1.5.0
     # via pygithub
@@ -103,7 +110,7 @@ pyyaml==6.0
     # via
     #   -r requirements.in
     #   insights-core
-redis==4.3.4
+redis==4.4.2
     # via insights-core
 requests==2.26.0
     # via
@@ -119,7 +126,7 @@ requests==2.26.0
     #   requests-toolbelt
 requests-oauthlib==1.3.1
     # via jira
-requests-toolbelt==0.9.1
+requests-toolbelt==0.10.1
     # via
     #   jira
     #   python-gitlab
@@ -127,7 +134,7 @@ retry==0.9.2
     # via -r requirements.in
 ruamel-yaml==0.17.16
     # via -r requirements.in
-secretstorage==3.3.2
+secretstorage==3.3.3
     # via keyring
 six==1.16.0
     # via
@@ -140,10 +147,12 @@ tomli==2.0.1
     # via pytest
 tqdm==4.59.0
     # via -r requirements.in
-urllib3==1.26.9
+urllib3==1.26.14
     # via requests
 wrapt==1.14.1
     # via deprecated
+zipp==3.12.0
+    # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools

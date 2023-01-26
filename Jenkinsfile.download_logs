@@ -34,6 +34,9 @@ pipeline {
                     sh "scripts/install_environment.sh install_skipper"
                     sh "make image_build"
                 }
+
+                sh "rm -rf assisted-installer-deployment"
+                sh "git clone ${ASSISTED_INSTALLER_DEPLOYMENT_REMOTE} --branch ${ASSISTED_INSTALLER_DEPLOYMENT_BRANCH}"
             }
         }
 
@@ -42,14 +45,15 @@ pipeline {
                 dir ('assisted-test-infra') {
                     sh "make download_cluster_logs"
                 }
+
+                dir ('assisted-installer-deployment') {
+                    sh "skipper run ./tools/triage/attach_logs_in_jira.py --source-dir ${LOGS_DEST} --jira-access-token ${JIRA_ACCESS_TOKEN} --verbose"
+                }
             }
         }
 
         stage('Create tickets') {
             steps {
-                sh "rm -rf assisted-installer-deployment"
-                sh "git clone ${ASSISTED_INSTALLER_DEPLOYMENT_REMOTE} --branch ${ASSISTED_INSTALLER_DEPLOYMENT_BRANCH}"
-
                 dir ('assisted-installer-deployment') {
                     sh "skipper run ./tools/triage/create_triage_tickets.py --jira-access-token ${JIRA_ACCESS_TOKEN} -v"
                 }

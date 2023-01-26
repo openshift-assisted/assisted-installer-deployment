@@ -1,4 +1,11 @@
 import netrc
+from datetime import datetime
+
+import dateutil.parser
+
+
+def days_ago(datestr):
+    return (datetime.now() - dateutil.parser.isoparse(datestr)).days
 
 
 def get_credentials_from_netrc(*, hostname, netrc_file=None):
