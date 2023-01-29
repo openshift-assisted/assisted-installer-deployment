@@ -8,7 +8,7 @@ import yaml
 
 import skopeo_utils
 
-logging.basicConfig(format='%(asctime)s %(message)s')
+logging.basicConfig(format="%(asctime)s %(message)s")
 logging.getLogger().setLevel(logging.INFO)
 
 IMAGE_FORMAT = "quay.io/ocpmetal/{image_name}:{tag}"
@@ -23,10 +23,16 @@ IMAGE_FORMAT = "quay.io/ocpmetal/{image_name}:{tag}"
 #######################################################################################################
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--deployment", help="deployment yaml file to update", type=str,
-                    default=os.path.join(os.path.dirname(__file__), "../assisted-installer.yaml"))
+parser.add_argument(
+    "--deployment",
+    help="deployment yaml file to update",
+    type=str,
+    default=os.path.join(os.path.dirname(__file__), "../assisted-installer.yaml"),
+)
 parser.add_argument("--tag", help="image tagging", type=str)
-parser.add_argument("--version-tag", help="promote to a version based tag. Will not add tag with date", action='store_true')
+parser.add_argument(
+    "--version-tag", help="promote to a version based tag. Will not add tag with date", action="store_true"
+)
 args = parser.parse_args()
 
 timestamped_tag = f'{args.tag}.{datetime.now().strftime("%d.%m.%Y-%H.%M")}'

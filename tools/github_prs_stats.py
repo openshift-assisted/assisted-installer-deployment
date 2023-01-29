@@ -21,7 +21,7 @@ def add_pr_duration(pr):
 
     createDate = created
     endDate = end
-    duration = (endDate - createDate).days*3600*24 + (endDate - createDate).seconds
+    duration = (endDate - createDate).days * 3600 * 24 + (endDate - createDate).seconds
     return user, duration
 
 
@@ -54,9 +54,15 @@ def main(args):
 
 def print_stats(stats, hours_resolution=False):
     print("")
-    print("|------------------------|----------------|----------------|----------------|----------------|----------------|")
-    print("|                   user |    average (h) |     median (h) |        max (h) |        min (h) |      PRs count |")
-    print("|------------------------|----------------|----------------|----------------|----------------|----------------|")
+    print(
+        "|------------------------|----------------|----------------|----------------|----------------|----------------|"
+    )
+    print(
+        "|                   user |    average (h) |     median (h) |        max (h) |        min (h) |      PRs count |"
+    )
+    print(
+        "|------------------------|----------------|----------------|----------------|----------------|----------------|"
+    )
 
     resolution = 60.0 * 60.0 * 24.0
     if hours_resolution:
@@ -72,13 +78,17 @@ def print_stats(stats, hours_resolution=False):
         min_duration = min(pr_open_durations) / resolution
         median_duration = statistics.median(pr_open_durations) / resolution
 
-        print("| %22s | %14.4f | %14.4f | %14.4f | %14.4f | %14d |" %
-              (user, average_duration, median_duration, max_duration, min_duration, pr_count))
-    print("|------------------------|----------------|----------------|----------------|----------------|----------------|")
+        print(
+            "| %22s | %14.4f | %14.4f | %14.4f | %14.4f | %14d |"
+            % (user, average_duration, median_duration, max_duration, min_duration, pr_count)
+        )
+    print(
+        "|------------------------|----------------|----------------|----------------|----------------|----------------|"
+    )
 
 
 if __name__ == "__main__":
-    valid_status = ['closed', 'open']
+    valid_status = ["closed", "open"]
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--repo", required=True, help="repo name. For example 'openshift/assisted-service'")
     parser.add_argument("-s", "--status", default="open", choices=valid_status, help="PR status to filter")

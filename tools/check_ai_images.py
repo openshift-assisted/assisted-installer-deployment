@@ -7,7 +7,7 @@ import subprocess
 import yaml
 from retry import retry
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)-10s %(filename)s:%(lineno)d %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(levelname)-10s %(filename)s:%(lineno)d %(message)s")
 logger = logging.getLogger(__name__)
 logging.getLogger("__main__").setLevel(logging.INFO)
 
@@ -45,7 +45,8 @@ def main():
     parser.add_argument(
         "--deployment",
         default=pathlib.Path(__file__).parent.parent / "assisted-installer.yaml",
-        help="deployment yaml file to update", type=str,
+        help="deployment yaml file to update",
+        type=str,
     )
     args = parser.parse_args()
 

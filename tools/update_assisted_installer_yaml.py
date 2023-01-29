@@ -7,9 +7,13 @@ import update_hash
 import skopeo_utils
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--deployment", help="deployment yaml file to update", type=str,
-                    default=os.path.join(os.path.dirname(__file__), "../assisted-installer.yaml"))
-parser.add_argument('--full', help='update all hashes to master', action='store_true')
+parser.add_argument(
+    "--deployment",
+    help="deployment yaml file to update",
+    type=str,
+    default=os.path.join(os.path.dirname(__file__), "../assisted-installer.yaml"),
+)
+parser.add_argument("--full", help="update all hashes to master", action="store_true")
 args = parser.parse_args()
 
 
@@ -28,8 +32,7 @@ def get_ref_by_docker_image(images):
     tag_pattern = "^latest-[a-f0-9]{40}$"
     tag_prefix = "latest-"
     skopeo_client = skopeo_utils.Skopeo()
-    image_tags = [skopeo_client.get_image_tags_by_pattern(image, tag_pattern)
-                  for image in images]
+    image_tags = [skopeo_client.get_image_tags_by_pattern(image, tag_pattern) for image in images]
 
     if len(image_tags) == 0:
         raise IndexError(f"Could not find any tags matching pattern `{tag_pattern}` for images `{images}`")
@@ -56,7 +59,7 @@ def main():
             hash = ui_repo.get_commit(latest_release.tag_name).sha
 
         elif full_release:
-            hash = get_ref_by_docker_image(deployment[rep]['images'])
+            hash = get_ref_by_docker_image(deployment[rep]["images"])
 
         else:
             hash = os.environ.get(rep, None)

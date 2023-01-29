@@ -14,6 +14,7 @@ class TriageStats:
 
         def my_exit(msg):
             pass
+
         parser.error = my_exit
         self.args = parser.parse_args([])
         self.args.print_json = True
@@ -23,18 +24,20 @@ class TriageStats:
     def add_past_week(self, past_week_num):
         self.args.search_query = (
             f'project = MGMT AND component = "Assisted-installer Triage AND '
-            f'labels in (AI_CLOUD_TRIAGE) AND created < -{past_week_num - 1}w AND created >= -{past_week_num}w')
+            f"labels in (AI_CLOUD_TRIAGE) AND created < -{past_week_num - 1}w AND created >= -{past_week_num}w"
+        )
         if past_week_num == 1:
             self.args.search_query = (
                 'project = MGMT AND component = "Assisted-installer Triage" AND '
-                'labels in (AI_CLOUD_TRIAGE) AND created >= -1w')
+                "labels in (AI_CLOUD_TRIAGE) AND created >= -1w"
+            )
 
         j = jira_cmd.main(self.args)
         data = json.loads(j)
         for i in data:
-            if i['key'] not in self.stats:
-                self.stats[i['key']] = dict(key=i['key'], summary=i['summary'], status=i['status'])
-            self.stats[i['key']]['week -{}'.format(past_week_num)] = i['count']
+            if i["key"] not in self.stats:
+                self.stats[i["key"]] = dict(key=i["key"], summary=i["summary"], status=i["status"])
+            self.stats[i["key"]]["week -{}".format(past_week_num)] = i["count"]
 
 
 if __name__ == "__main__":
