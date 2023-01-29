@@ -5,6 +5,7 @@ import json
 import os
 import sys
 from typing import List
+from urllib import parse
 
 import consts
 import jira
@@ -72,8 +73,9 @@ def triage_status_report(jira_client, filter_id, webhook):
     filter_url = jira_filter.viewUrl
 
     # Temporary focus
-    metal_4_11_multi = "https://issues.redhat.com/issues/?jql=project%20%3D%20AI-Triage%20AND%20component%20%3D%20Cloud-Triage%20AND%20created%20%3E%3D%20-7d%20AND%20labels%20%3D%20FEATURE-Platform-baremetal%20AND%20labels%20!%3D%20FEATURE-SNO%20AND%20affectedVersion%20%3D%20%22OpenShift%204.11%22%20ORDER%20BY%20key%20DESC"
-
+    ocp_4_12 = "https://issues.redhat.com/issues/?jql=" + parse.quote(
+        'project = AI-Triage AND component = Cloud-Triage AND created >= -7d AND affectedVersion = "OpenShift 4.12" ORDER BY key DESC'
+    )
     issues = []
     errors = []
     for issue in jira_issues:
@@ -88,7 +90,7 @@ def triage_status_report(jira_client, filter_id, webhook):
 
         raise RuntimeError(f"Failed parsing all jira issues. Had {len(errors)} errors")
 
-    text = f"There are <{filter_url}|{len(jira_issues)} new triage tickets> but please focus on <{metal_4_11_multi}|these> from the past week because we had a low success rate with 4.11 multinode metal clusters recently\n"
+    text = f"There are <{filter_url}|{len(jira_issues)} new triage tickets> but please focus on <{ocp_4_12}|these> from the past week because we had a low success rate with 4.12 clusters recently\n"
 
     table = ""
     for issue in sorted(issues):
