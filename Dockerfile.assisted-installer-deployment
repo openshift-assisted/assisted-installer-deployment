@@ -25,7 +25,7 @@ ARG INSTALL_CCX=true
 
 COPY ccx/ ./ccx
 RUN if [ "${INSTALL_CCX}" == "true" ]; then \
-        ./ccx/install.sh; \
+	dnf install -y openssl && ./ccx/install.sh; \
     fi
 
 WORKDIR /home/assisted-installer-deployment
