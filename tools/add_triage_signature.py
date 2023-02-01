@@ -1519,8 +1519,8 @@ class OSInstallationTime(Signature):
     writing_image_end_event_regex = re.compile(r".*reached installation stage Writing image to disk: 100%$")
 
     unknown_message = "{color:darkgreen}OS installation time duration could not be determined for this host{color}"
-    slow_message = "{{color:red}}OS installation to disk was rather slow, it took {} seconds{{color}}"
-    fast_message = "{{color:darkgreen}}OS installation to disk was relatively okay, it took {} seconds{{color}}"
+    slow_message = "{{color:red}}OS installation was rather slow, it took {} seconds{{color}}"
+    fast_message = "{{color:darkgreen}}OS installation was relatively okay, it took {} seconds{{color}}"
 
     slow_threshold_seconds = 300
 
@@ -1603,8 +1603,10 @@ class OSInstallationTime(Signature):
 
         # Only report if we have at least one slow host
         if any("slow" in host["duration"] for host in host_entries):
+            report = "Some hosts had a slow OS installation. This is usually due to slow installation media (e.g. virtual media), but it could also be because of a slow disk\n"
+            report += self._generate_table_for_report(host_entries)
             self._update_triaging_ticket(
-                comment=self._generate_table_for_report(host_entries),
+                comment=report,
             )
 
 
