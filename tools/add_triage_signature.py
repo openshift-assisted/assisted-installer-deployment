@@ -17,7 +17,6 @@ import ipaddress
 import pathlib
 from collections import OrderedDict, defaultdict, Counter
 from datetime import datetime
-from enum import Flag, auto
 from textwrap import dedent
 
 import colorlog
@@ -894,101 +893,6 @@ class StorageDetailSignature(Signature):
             comment_identifying_string="h1. Host storage details:",
         )
 
-    class SmartctlExitCode(Flag):
-        """Taken from `man smartctl` "EXIT STATUS" section"""
-
-        COMMANDLINE_DID_NOT_PARSE = auto()
-        DEVICE_OPEN_FAILED = auto()
-        SOME_ATA_COMMAND_FAILED_OR_SMART_CHECKSUM_ERROR = auto()
-        DISK_FAILING = auto()
-        PREFAIL_ATTRIBUTRES_UNDER_THRESHOLD = auto()
-        DISK_OK_SOME_ATTRIBUTES_UNDER_THRESHOLD = auto()
-        LOG_HAS_RECORDS_OF_ERRORS = auto()
-        SELF_TEST_LOG_HAS_RECORDS_OF_ERRORS = auto()
-
-    @classmethod
-    def _parse_smart_internal(cls, smart):
-        output = []
-        smartctl = smart["smartctl"]
-        exit_code = smartctl["exit_status"]
-
-        if exit_code != 0:
-            output.append(
-                "non-zero smartctl exit code: "
-                + ", ".join(flag.name for flag in cls.SmartctlExitCode if flag in cls.SmartctlExitCode(exit_code))
-            )
-            if "smart_status" not in smart:
-                if (
-                    cls.SmartctlExitCode(exit_code)
-                    == cls.SmartctlExitCode.SOME_ATA_COMMAND_FAILED_OR_SMART_CHECKSUM_ERROR
-                ):
-                    output.append(
-                        "{color:green}*this typically happens on virtual disks*{color} that don't actually have S.M.A.R.T. information,"
-                        " but may also happen due to other reasons"
-                    )
-                if cls.SmartctlExitCode(exit_code) == cls.SmartctlExitCode.COMMANDLINE_DID_NOT_PARSE:
-                    output.append("{color:green}*this is not a disk problem*{color} but the smartctl runtime issue")
-
-        for message in smartctl.get("messages", []):
-            severity = message.get("severity", "unknown")
-            message_string = message.get("string", "")
-            output.append(f'smartctl message with severity "{severity}": "{message_string}"')
-
-        if "smart_status" in smart:
-            passed = smart["smart_status"]["passed"]
-            if passed:
-                if "model_name" in smart:
-                    if smart["model_name"] == "QEMU HARDDISK":
-                        return "{color:green}*Virtual QEMU HARDDISK pretending to have S.M.A.R.T.*{color}"
-
-                output.append("{color:green}*Disk S.M.A.R.T. status OK*{color}")
-            else:
-                output.append("{color:red}*Disk S.M.A.R.T. status BAD*{color}")
-
-        if "power_cycle_count" in smart:
-            output.append(f"disk has been power cycled {smart['power_cycle_count']} times throughout its life")
-
-        if "power_on_time" in smart:
-            if "hours" in smart["power_on_time"]:
-                hours = smart["power_on_time"]["hours"]
-                output.append(
-                    f"disk has been powered on for {hours // 24} days and {hours % 24} hours throughout its life"
-                )
-
-        if "ata_smart_attributes" in smart:
-            table = smart["ata_smart_attributes"].get("table", [])
-            interesting_attributes = (
-                "Program_Fail_Count",
-                "Erase_Fail_Count",
-                "Offline_Uncorrectable",
-            )
-            table_filtered = [
-                entry
-                for entry in table
-                if entry.get("name") in interesting_attributes and entry.get("raw")["value"] > 0
-            ]
-
-            output.extend(
-                f'ata_smart_attribute *{entry["name"]}* has notable value *{entry["raw"]["value"]}*'
-                for entry in table_filtered
-            )
-
-        if "nvme_smart_health_information_log" in smart:
-            nvme_log = smart["nvme_smart_health_information_log"]
-            if "percentage_used" in nvme_log:
-                output.append(f"SSD percentage used: %{nvme_log['percentage_used']}")
-
-        return ", ".join(output)
-
-    @classmethod
-    def _parse_smart(cls, smart_json):
-        try:
-            return cls._parse_smart_internal(json.loads(smart_json))
-        except json.JSONDecodeError as e:
-            return f"Failed to decode S.M.A.R.T. JSON, error: {e}"
-        except Exception as e:
-            return f"S.M.A.R.T. JSON has an unexpected structure, error: {e}"
-
     def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
 
@@ -1006,13 +910,6 @@ class StorageDetailSignature(Signature):
                 disks_details["name"].append(d.get("name", "Not available"))
                 disks_details["path"].append(d.get("path", "Not available"))
                 disks_details["by-path"].append(d.get("by_path", "Not available"))
-                disks_details["smart"].append(
-                    (
-                        self._parse_smart(d.get("smart", "N/A"))
-                        if disk_type != "ODD"
-                        else "{color:green}*N/A for optical drives*{color}"
-                    )
-                )
             hosts.append(
                 OrderedDict(
                     {
@@ -1023,7 +920,6 @@ class StorageDetailSignature(Signature):
                         "Disk Path": "\n".join(disks_details["path"]),
                         "Disk Bootable": "\n".join(disks_details["bootable"]),
                         "Disk by-path": "\n".join(disks_details["by-path"]),
-                        "S.M.A.R.T.": "\n".join(disks_details["smart"]),
                     }
                 )
             )
