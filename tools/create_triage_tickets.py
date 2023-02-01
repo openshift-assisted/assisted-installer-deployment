@@ -155,7 +155,7 @@ if __name__ == "__main__":
         "-a",
         "--all",
         action="store_true",
-        help="Try creating Triage Tickets for all failures. " + "Default is just for failures in the past 30 days",
+        help="Try creating Triage Tickets for all failures. Default is just for failures in the past 30 days",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Output verbose logging")
     parser.add_argument(

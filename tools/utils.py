@@ -16,7 +16,7 @@ def normalize_jira_title(s):
     # We use non-compiled regex as based on the benchmark from StackOverflow
     # (https://stackoverflow.com/a/1277047/1864702) it is one of the fastest methods
     # that also allows for an easy syntax and reuse of the function.
-    return re.sub(TITLE_NORMALIZATION_REGEX, '', s)
+    return re.sub(TITLE_NORMALIZATION_REGEX, "", s)
 
 
 def normalize_jira_titles(titles):

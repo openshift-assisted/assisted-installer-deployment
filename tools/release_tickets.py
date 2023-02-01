@@ -325,7 +325,7 @@ if __name__ == "__main__":
         "-ut",
         "--update-ticket-fixed-in",
         action="store_true",
-        help="Update ticket " + "'fixed_in' field, if the ticket is in status 'QE REVIEW' or 'Done'",
+        help="Update ticket 'fixed_in' field, if the ticket is in status 'QE REVIEW' or 'Done'",
     )
     actionGroup.add_argument(
         "-fv",
@@ -339,11 +339,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.issue is None:
         if args.from_version is None:
-            parser.error("Must provide 'from-version'  parameter, if a specific issue is " + "not selected")
+            parser.error("Must provide 'from-version'  parameter, if a specific issue is not selected")
     else:
         if args.to_version is not None or args.from_version is not None:
             parser.error(
-                "If a specific issue is selected, 'from-version' and 'to-version' parameters cannot " + "be supplied"
+                "If a specific issue is selected, 'from-version' and 'to-version' parameters cannot be supplied"
             )
     if args.update_ticket_fixed_in and args.to_version is None and args.fixed_in_value is None:
         parser.error("When updating 'fixed_in' and 'to_version' is not provided, 'fixed-in-value' must be supplied")

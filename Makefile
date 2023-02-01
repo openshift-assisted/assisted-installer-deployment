@@ -12,7 +12,7 @@ clean:
 
 # This affects the message at the top of the auto-generated files,
 # instruction users how they should be updated
-CUSTOM_COMPILE_COMMAND = "make pip-freeze" 
+CUSTOM_COMPILE_COMMAND = "make pip-freeze"
 
 .PHONY: pip-freeze requirements.txt dev-requirements.txt
 
@@ -32,11 +32,10 @@ pip-freeze: requirements.txt dev-requirements.txt
 lint: flake8 pylint black
 
 black:
-	black --check tools/close_by_signature.py
-	black --check tools/add_triage_signature.py
-	black --check tools/test_add_triage_signature.py
-	black --check tools/create_triage_tickets.py
-	black --check tools/triage_status_report.py
+	black --check --diff tools/
+
+format:
+	black tools/
 
 flake8:
 	flake8 .
