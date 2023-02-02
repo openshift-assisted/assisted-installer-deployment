@@ -1,5 +1,5 @@
 flake8
-pylint
+pylint>=2.16.0  # support for Python 3.11
 autopep8
 ipdb
 pip-tools

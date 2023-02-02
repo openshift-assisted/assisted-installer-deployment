@@ -87,14 +87,14 @@ def check_images_exists(manifest, tag):
                 missing_images.append(image)
 
     if missing_images:
-        raise Exception(f"Missing images {missing_images}")
+        raise RuntimeError(f"Missing images {missing_images}")
 
 
 def image_exists(image_name, tag, required_sha):
     '''Get the image tags list and find another tag matching the required sha with the same image id'''
     url = IMAGE_TAGS_URL_TEMPLATE.format(image_name)
     # get the image tags
-    response = requests.get(url=url)
+    response = requests.get(url=url, timeout=60)
     # if list tags failed return False
     if not response.ok:
         return False

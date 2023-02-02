@@ -28,8 +28,8 @@ class GitApiUtils():
 
         :return str: tag url
         """
-        logging.info('Creating tag %(tag)s for repository: %(repo)s, revision: %(revision)s',
-                     dict(tag=tag, repo=repo, revision=revision))
+        logging.info('Creating tag %s for repository: %s, revision: %s',
+                     tag, repo, revision)
         data = {
             "tag": tag,
             "object": revision,
@@ -52,7 +52,7 @@ class GitApiUtils():
         :param str repo: repository name
         :param str tag: The tag to delete (e.g. 'v1.0.0')
         """
-        logging.info('Deleting tag %(tag)s in repository: %(repo)s', dict(tag=tag, repo=repo))
+        logging.info('Deleting tag %s in repository %s', tag, repo)
         ref_url = f"{self.GIT_API_REPOS}/{repo}/git/refs/tags/{tag}"
         response = requests.delete(ref_url, auth=self._credentials, timeout=self.GIT_REQUEST_TIMEOUT)
         response.raise_for_status()
@@ -64,7 +64,7 @@ class GitApiUtils():
 
         :return list: List of tags
         """
-        logging.info('Listing tags in repository: %(repo)s', dict(repo=repo))
+        logging.info('Listing tags in repository: %s', repo)
         ref_url = f"{self.GIT_API_REPOS}/{repo}/git/refs/tags"
         response = requests.get(ref_url, auth=self._credentials, timeout=self.GIT_REQUEST_TIMEOUT)
         response.raise_for_status()

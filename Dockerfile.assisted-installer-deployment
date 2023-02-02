@@ -1,4 +1,4 @@
-FROM quay.io/centos/centos:stream8
+FROM quay.io/assisted-installer-ops/base-python:3.11.0
 
 RUN dnf install -y \
     jq \
@@ -6,12 +6,8 @@ RUN dnf install -y \
     git \
     make \
     skopeo \
-    python39 \
-    python39-pip \
-    python39-devel \
+    libffi-devel \
         && dnf clean all
-
-RUN alternatives --set python /usr/bin/python3.9
 
 RUN pip3 install pip --upgrade
 
