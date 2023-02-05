@@ -11,8 +11,18 @@ import consts
 import jira
 import requests
 
-FILTER_ID = 12380672
 MISSING_VALUE = "<MISSING>"
+NEW_TICKETS_FILTER = (
+    "project = AI-Triage AND component = Cloud-Triage "
+    'AND description !~ "Logs are still being uploaded" '
+    "AND status != Closed AND created >= -{time_duration} "
+    "ORDER BY key DESC"
+)
+OCP_4_12_LAST_WEEK = (
+    "project = AI-Triage AND component = Cloud-Triage "
+    'AND created >= -7d AND affectedVersion = "OpenShift 4.12" '
+    "ORDER BY key DESC"
+)
 
 
 @dataclasses.dataclass(order=True)
@@ -66,16 +76,16 @@ def _post_message(webhook, text):
         print("Message sent successfully!")
 
 
-def triage_status_report(jira_client, filter_id, webhook):
-    jira_filter = jira_client.filter(filter_id)
-    jira_issues = jira_client.search_issues(jira_filter.jql)
+def _get_filter_view(jql: str) -> str:
+    return f"https://issues.redhat.com/issues/?jql={parse.quote(jql)}"
 
-    filter_url = jira_filter.viewUrl
+
+def triage_status_report(jira_client, time_duration, webhook):
+    jira_filter = NEW_TICKETS_FILTER.format(time_duration=time_duration)
+    jira_issues = jira_client.search_issues(jira_filter)
 
     # Temporary focus
-    ocp_4_12 = "https://issues.redhat.com/issues/?jql=" + parse.quote(
-        'project = AI-Triage AND component = Cloud-Triage AND created >= -7d AND affectedVersion = "OpenShift 4.12" ORDER BY key DESC'
-    )
+    ocp_4_12 = _get_filter_view(OCP_4_12_LAST_WEEK)
     issues = []
     errors = []
     for issue in jira_issues:
@@ -90,6 +100,7 @@ def triage_status_report(jira_client, filter_id, webhook):
 
         raise RuntimeError(f"Failed parsing all jira issues. Had {len(errors)} errors")
 
+    filter_url = _get_filter_view(jira_filter)
     text = f"There are <{filter_url}|{len(jira_issues)} new triage tickets> but please focus on <{ocp_4_12}|these> from the past week because we had a low success rate with 4.12 clusters recently\n"
 
     table = ""
@@ -115,12 +126,14 @@ def main():
         default=os.environ.get("WEBHOOK"),
         help="Slack channel url to post information. Not specifying implies dry-run",
     )
-    parser.add_argument("--filter-id", default=FILTER_ID, help="Jira filter id")
+    parser.add_argument(
+        "--time-duration", default="1d", help="Display statistics for the specified duration, e.g. '1d', '1w', '8h'"
+    )
     args = parser.parse_args()
 
     client = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
 
-    triage_status_report(client, args.filter_id, args.webhook)
+    triage_status_report(client, args.time_duration, args.webhook)
 
 
 if __name__ == "__main__":
