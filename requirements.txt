@@ -8,7 +8,7 @@ async-timeout==4.0.2
     # via redis
 attrs==21.4.0
     # via pytest
-cachecontrol[filecache]==0.12.11
+cachecontrol==0.12.11
     # via insights-core
 certifi==2022.6.15
     # via requests
@@ -38,8 +38,6 @@ fuzzywuzzy==0.18.0
     # via -r requirements.in
 idna==3.3
     # via requests
-importlib-metadata==6.0.0
-    # via keyring
 iniconfig==1.1.1
     # via pytest
 insights-core==3.0.280
@@ -55,9 +53,7 @@ jira==3.1.1
 keyring==23.6.0
     # via jira
 lockfile==0.12.2
-    # via
-    #   cachecontrol
-    #   insights-core
+    # via insights-core
 markupsafe==2.1.1
     # via jinja2
 msgpack==1.0.4
@@ -68,7 +64,7 @@ nestedarchive==0.2.4
     # via -r requirements.in
 networkx==2.5.1
     # via -r requirements.in
-oauthlib==3.2.1
+oauthlib==3.2.2
     # via requests-oauthlib
 packaging==21.0
     # via
@@ -131,8 +127,6 @@ retry==0.9.2
     # via -r requirements.in
 ruamel-yaml==0.17.16
     # via -r requirements.in
-ruamel-yaml-clib==0.2.7
-    # via ruamel-yaml
 secretstorage==3.3.2
     # via keyring
 six==1.16.0
@@ -150,8 +144,6 @@ urllib3==1.26.9
     # via requests
 wrapt==1.14.1
     # via deprecated
-zipp==3.11.0
-    # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
