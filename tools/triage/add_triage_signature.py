@@ -4,6 +4,7 @@
 import abc
 import argparse
 import functools
+import gzip
 import ipaddress
 import itertools
 import json
@@ -213,17 +214,17 @@ def get_host_log_file(triage_logs_tar, host_id, filename):
         return triage_logs_tar.get(old_logs_path)
 
 
-def get_journal(triage_logs_tar, host_ip, journal_file):
+def get_journal(triage_logs_tar, host_ip, journal_file, **kwargs):
     new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/control-plane/{host_ip}/journals/{journal_file}"
     old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/control-plane/{host_ip}/journals/{journal_file}"
     try:
-        logs = triage_logs_tar.get(new_logs_path)
+        logs = triage_logs_tar.get(new_logs_path, **kwargs)
         logger.debug("Found logs under the new location %s", new_logs_path)
         return logs
     except FileNotFoundError:  # backward compatibility
         # TODO(MGMT-13705): Remove this when MGMT-13454 is in production
         logger.debug("Searching logs under the old location %s", old_logs_path)
-        return triage_logs_tar.get(old_logs_path)
+        return triage_logs_tar.get(old_logs_path, **kwargs)
 
 
 def get_events_by_host(logs_url, cluster_id):
@@ -1321,6 +1322,78 @@ class CoreOSInstallerErrorSignature(ErrorSignature):
             )
             report += self._generate_table_for_report(hosts)
             self._update_triaging_ticket(report)
+
+
+class IpChangedAfterReboot(ErrorSignature):
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Ip changed after reboot",
+        )
+
+    agent_log_regex = re.compile(r"Sending step <inventory-[0-9a-f]{8}> reply output <(.+)> error <.*> exit-code <0>")
+    journal_lease_regex = re.compile(r"state changed new lease, address=([^ \n]*)")
+
+    def _get_inventory(self, triage_logs_tar, host_id):
+        try:
+            agent_logs = get_host_log_file(triage_logs_tar, host_id, "agent.logs")
+        except FileNotFoundError:
+            return None
+        match = self.agent_log_regex.search(agent_logs)
+        return json.loads(match.group(1).replace('\\"', '"')) if match else None
+
+    def _get_address_map(self, inventory):
+        address_map = {}
+        interfaces = inventory.get("interfaces")
+        if interfaces:
+            for interface in interfaces:
+                for key in ["ipv4_addresses", "ipv6_addresses"]:
+                    addresses = interface.get(key)
+                    if addresses:
+                        for addr in addresses:
+                            intf = ipaddress.ip_interface(addr)
+                            n = str(intf.network)
+                            a = str(intf.ip)
+                            address_map[a] = n
+        return address_map
+
+    def _process_ticket(self, url, issue_key):
+        md = get_metadata_json(url)
+
+        cluster = md["cluster"]
+        cluster_id = cluster["id"]
+
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+
+        for host in cluster["hosts"]:
+            host_id = host["id"]
+
+            inventory = self._get_inventory(triage_logs_tar, host_id)
+            if not inventory:
+                return
+            address_map = self._get_address_map(inventory)
+            if not address_map:
+                return
+            for addr, n in address_map.items():
+                net = ipaddress.ip_network(n)
+                try:
+                    journal = gzip.decompress(get_journal(triage_logs_tar, addr, "journal.log.gz", mode="rb"))
+                except FileNotFoundError:
+                    continue
+
+                if journal:
+                    for match in self.journal_lease_regex.finditer(journal.decode("utf-8")):
+                        cidr = address_map.get(match.group(1))
+
+                        if not cidr:
+                            ipaddr = ipaddress.ip_address(match.group(1))
+                            if ipaddr in net:
+                                report = "Discovered address {} changed by leased address {} after reboot for host {}".format(
+                                    addr, match.group(1), host_id
+                                )
+                                self._update_triaging_ticket(report)
+                                break
 
 
 class AgentStepFailureSignature(Signature):
@@ -2737,6 +2810,7 @@ ALL_SIGNATURES = [
     MachineConfigDaemonErrorExtracting,
     ControllerFailedToStart,
     UserHasLoggedIntoCluster,
+    IpChangedAfterReboot,
 ]
 
 ############################
