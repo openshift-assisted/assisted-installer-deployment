@@ -32,7 +32,7 @@ flake8==4.0.1
     # via -r dev-requirements.in
 ipdb==0.13.9
     # via -r dev-requirements.in
-ipython==8.4.0
+ipython==8.10.0
     # via ipdb
 isort==5.10.1
     # via pylint
