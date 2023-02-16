@@ -31,6 +31,10 @@ from tabulate import tabulate
 
 DEFAULT_DAYS_TO_HANDLE = 30
 
+
+NEW_LOG_BUNDLE_PATH = "*_bootstrap_*.tar/*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/"
+OLD_LOG_BUNDLE_PATH = "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/"
+
 FIELD_LABELS = "labels"
 CUSTOM_FIELD_USER = "12319044"
 CUSTOM_FIELD_DOMAIN = "12319045"
@@ -201,13 +205,29 @@ def get_host_log_file(triage_logs_tar, host_id, filename):
     # The file is already uniquely determined by the host_id, we can omit the hostname
     hostname = "*"
 
-    return triage_logs_tar.get(f"{hostname}.tar.gz/logs_host_{host_id}/{filename}")
+    new_logs_path = f"{hostname}.tar/{hostname}.tar.gz/logs_host_{host_id}/{filename}"
+    old_logs_path = f"{hostname}.tar.gz/logs_host_{host_id}/{filename}"
+    try:
+        agent_logs = triage_logs_tar.get(new_logs_path)
+    except FileNotFoundError:  # backward compatibility
+        # TODO(MGMT-13705): Remove this when MGMT-13454 is in production
+        logger.warning(f"Could not find logs under {new_logs_path}, attempting {old_logs_path}")
+        return triage_logs_tar.get(old_logs_path)
+
+    return agent_logs
 
 
 def get_journal(triage_logs_tar, host_ip, journal_file):
-    return triage_logs_tar.get(
-        f"*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/control-plane/{host_ip}/journals/{journal_file}"
-    )
+    new_logs_path = NEW_LOG_BUNDLE_PATH + f"control-plane/{host_ip}/journals/{journal_file}"
+    old_logs_path = OLD_LOG_BUNDLE_PATH + f"control-plane/{host_ip}/journals/{journal_file}"
+    try:
+        logs = triage_logs_tar.get(new_logs_path)
+    except FileNotFoundError:  # backward compatibility
+        # TODO(MGMT-13705): Remove this when MGMT-13454 is in production
+        logger.warning(f"Could not find the journal log under {new_logs_path}, attempting {old_logs_path}")
+        return triage_logs_tar.get(old_logs_path)
+
+    return logs
 
 
 def get_events_by_host(logs_url, cluster_id):
@@ -1085,13 +1105,11 @@ class ApiExpiredCertificateSignature(ErrorSignature):
             comment_identifying_string="h1. Expired Certificate",
         )
 
-    def _process_ticket(self, url, issue_key):
+    def _process_ticket_helper(self, url, path):
         try:
             bootstrap_kube_apiserver_logs = get_triage_logs_tar(
                 triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]
-            ).get(
-                "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/bootstrap/containers/bootstrap-control-plane/kube-apiserver.log"
-            )
+            ).get(path)
         except FileNotFoundError:
             return
         if invalid_api_log_lines := self.LOG_PATTERN.findall(bootstrap_kube_apiserver_logs):
@@ -1099,6 +1117,15 @@ class ApiExpiredCertificateSignature(ErrorSignature):
             if (num_lines := len(invalid_api_log_lines)) > 1:
                 report += f"\n additional {num_lines} relevant similar error log lines are found"
             self._update_triaging_ticket(report)
+
+    def _process_ticket(self, url, issue_key):
+        new_logs_path = NEW_LOG_BUNDLE_PATH + "bootstrap/containers/bootstrap-control-plane/kube-apiserver.log"
+        old_logs_path = OLD_LOG_BUNDLE_PATH + "bootstrap/containers/bootstrap-control-plane/kube-apiserver.log"
+        try:
+            self._process_ticket_helper(url, new_logs_path)
+        except FileNotFoundError:
+            logger.warning(f"Could not find the kube-apiserver log under {new_logs_path}, attempting {old_logs_path}")
+            self._process_ticket_helper(url, old_logs_path)
 
 
 class AllInstallationAttemptsSignature(Signature):
@@ -1787,10 +1814,10 @@ class DualStackBadRoute(ErrorSignature):
             function_impact_label="bz2088346",
         )
 
-    def _process_ticket(self, url, issue_key):
+    def _process_ticket_helper(self, url, path):
         try:
             ovnkube_logs = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]).get(
-                "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/control-plane/*/containers/ovnkube-node-*.log"
+                path
             )
         except FileNotFoundError:
             return
@@ -1803,6 +1830,15 @@ class DualStackBadRoute(ErrorSignature):
                     """.strip()
                 )
             )
+
+    def _process_ticket(self, url, issue_key):
+        new_logs_path = NEW_LOG_BUNDLE_PATH + "control-plane/*/containers/ovnkube-node-*.log"
+        old_logs_path = OLD_LOG_BUNDLE_PATH + "control-plane/*/containers/ovnkube-node-*.log"
+        try:
+            self._process_ticket_helper(url, new_logs_path)
+        except FileNotFoundError:
+            logger.warning(f"Could not find the ovnkube-node log under {new_logs_path}, attempting {old_logs_path}")
+            self._process_ticket_helper(url, old_logs_path)
 
 
 class StaticNetworking(Signature):
@@ -1865,10 +1901,10 @@ class NodeStatus(Signature):
 
         return f"Status {condition['status']} with reason {condition['reason']}, message {condition['message']}"
 
-    def _process_ticket(self, url, issue_key):
+    def _process_ticket_helper(self, url, path):
         try:
             nodes_json = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]).get(
-                "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/resources/nodes.json"
+                path
             )
         except FileNotFoundError:
             return
@@ -1897,6 +1933,16 @@ class NodeStatus(Signature):
             report = "The nodes.json file doesn't have any node resources in it. You should probably check the kubelet logs for the 2 non-bootstrap control-plane hosts"
 
         self._update_triaging_ticket(report)
+
+    def _process_ticket(self, url, issue_key):
+        new_logs_path = NEW_LOG_BUNDLE_PATH + "resources/nodes.json"
+        old_logs_path = OLD_LOG_BUNDLE_PATH + "resources/nodes.json"
+        try:
+            report = self._process_ticket_helper(url, new_logs_path)
+        except FileNotFoundError:
+            logger.warning(f"Could not find nodes.json under {new_logs_path}, attempting {old_logs_path}")
+            return self._process_ticket_helper(url, old_logs_path)
+        return report
 
 
 class HostsInterfacesSignature(Signature):
@@ -2008,13 +2054,11 @@ class DualstackrDNSBug(ErrorSignature):
             function_impact_label="mgmt11651",
         )
 
-    def _process_ticket(self, url, issue_key):
+    def _process_ticket_helper(self, url, path):
         triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"])
 
         try:
-            kubeapiserver_logs = triage_logs_tar.get(
-                "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/bootstrap/containers/kube-apiserver-*.log"
-            )
+            kubeapiserver_logs = triage_logs_tar.get(path)
         except FileNotFoundError:
             return
 
@@ -2022,6 +2066,15 @@ class DualstackrDNSBug(ErrorSignature):
             self._update_triaging_ticket(
                 "kube-apiserver logs contain the message 'must match public address family', this is probably due to MGMT-11651"
             )
+
+    def _process_ticket(self, url, issue_key):
+        new_logs_path = NEW_LOG_BUNDLE_PATH + "bootstrap/containers/kube-apiserver-*.log"
+        old_logs_path = OLD_LOG_BUNDLE_PATH + "bootstrap/containers/kube-apiserver-*.log"
+        try:
+            self._process_ticket_helper(url, new_logs_path)
+        except FileNotFoundError:
+            logger.warning(f"Could not find kube-apiserver logs under {new_logs_path}, attempting {old_logs_path}")
+            self._process_ticket_helper(url, old_logs_path)
 
 
 class InsufficientLVMCleanup(ErrorSignature):
@@ -2289,7 +2342,6 @@ class MissingOSTreePivot(ErrorSignature):
     """
 
     PIVOT_URL_PATTERN = re.compile(r"pivot://.*")
-    CONTROL_PLANE_PATH = "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/control-plane"
 
     def __init__(self, *args, **kwargs):
         super().__init__(
@@ -2299,13 +2351,13 @@ class MissingOSTreePivot(ErrorSignature):
             comment_identifying_string="h1. MCO didn't pivot some hosts",
         )
 
-    def _process_ticket(self, url, issue_key):
+    def _process_ticket_helper(self, url, path):
         triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"])
         hosts = []
 
         try:
             # Fetch control-plane directory from the bootstrap log bundle
-            control_plane_dir = triage_logs_tar.get(self.CONTROL_PLANE_PATH)
+            control_plane_dir = triage_logs_tar.get(path)
         except FileNotFoundError:
             return
 
@@ -2313,7 +2365,7 @@ class MissingOSTreePivot(ErrorSignature):
             node_ip = os.path.basename(node_dir)
             try:
                 # Fetch ostree status file for the node
-                ostree_status_file = triage_logs_tar.get(f"{self.CONTROL_PLANE_PATH}/{node_ip}/rpm-ostree/status")
+                ostree_status_file = triage_logs_tar.get(f"{path}/{node_ip}/rpm-ostree/status")
             except FileNotFoundError:
                 return
 
@@ -2321,7 +2373,7 @@ class MissingOSTreePivot(ErrorSignature):
             if not self.PIVOT_URL_PATTERN.search(ostree_status_file):
                 try:
                     # Get hostname according to node_ip
-                    hostname = triage_logs_tar.get(f"{self.CONTROL_PLANE_PATH}/{node_ip}/network/hostname.txt")
+                    hostname = triage_logs_tar.get(f"{path}/{node_ip}/network/hostname.txt")
                 except FileNotFoundError:
                     return
 
@@ -2343,13 +2395,20 @@ class MissingOSTreePivot(ErrorSignature):
                 )
             )
 
+    def _process_ticket(self, url, issue_key):
+        new_logs_path = NEW_LOG_BUNDLE_PATH + "control-plane"
+        old_logs_path = OLD_LOG_BUNDLE_PATH + "control-plane"
+        try:
+            self._process_ticket_helper(url, new_logs_path)
+        except FileNotFoundError:
+            logger.warning(f"Could not find the host log under {new_logs_path}, attempting {old_logs_path}")
+            self._process_ticket_helper(url, old_logs_path)
+
 
 class ControllerFailedToStart(ErrorSignature):
     """
     This signature looks for missing pivot URL in rpm-ostree status of the control-plane hosts
     """
-
-    PODS_PATH = "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/resources/pods.json"
 
     def __init__(self, *args, **kwargs):
         super().__init__(
@@ -2359,7 +2418,7 @@ class ControllerFailedToStart(ErrorSignature):
             comment_identifying_string="h1. Assisted Installer Controller failed to start",
         )
 
-    def _process_ticket(self, url, issue_key):
+    def _process_ticket_helper(self, url, path):
         cluster = get_metadata_json(url)["cluster"]
         bootstrap_node = [host for host in cluster["hosts"] if host["bootstrap"]][0]
 
@@ -2369,7 +2428,7 @@ class ControllerFailedToStart(ErrorSignature):
         triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster["id"])
         try:
             # Fetch pods.json from the bootstrap log bundle
-            pods_json = triage_logs_tar.get(self.PODS_PATH)
+            pods_json = triage_logs_tar.get(path)
         except FileNotFoundError:
             return
 
@@ -2411,6 +2470,15 @@ class ControllerFailedToStart(ErrorSignature):
                 f"Failed to get readiness of controller pod from installer-gather resources/pods.json: {e}"
             )
 
+    def _process_ticket(self, url, issue_key):
+        new_logs_path = NEW_LOG_BUNDLE_PATH + "resources/pods.json"
+        old_logs_path = OLD_LOG_BUNDLE_PATH + "resources/pods.json"
+        try:
+            self._process_ticket_helper(url, new_logs_path)
+        except FileNotFoundError:
+            logger.warning(f"Could not find the host log under {new_logs_path}, attempting {old_logs_path}")
+            self._process_ticket_helper(url, old_logs_path)
+
 
 class MachineConfigDaemonErrorExtracting(ErrorSignature):
     """
@@ -2426,11 +2494,9 @@ class MachineConfigDaemonErrorExtracting(ErrorSignature):
             comment_identifying_string="h1. machine-config-daemon could not extract machine-os-content",
         )
 
-    def _process_ticket(self, url, issue_key):
+    def _process_ticket_helper(self, url, path):
         try:
-            mcd_logs = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]).get(
-                "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/control-plane/*/journals/machine-config-daemon-firstboot.log"
-            )
+            mcd_logs = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]).get(path)
         except FileNotFoundError:
             return
 
@@ -2442,6 +2508,17 @@ class MachineConfigDaemonErrorExtracting(ErrorSignature):
                     """.strip()
                 )
             )
+
+    def _process_ticket(self, url, issue_key):
+        new_logs_path = NEW_LOG_BUNDLE_PATH + "control-plane/*/journals/machine-config-daemon-firstboot.log"
+        old_logs_path = OLD_LOG_BUNDLE_PATH + "control-plane/*/journals/machine-config-daemon-firstboot.log"
+        try:
+            self._process_ticket_helper(url, new_logs_path)
+        except FileNotFoundError:
+            logger.warning(
+                f"Could not find the machine-config-daemon-firstboot log under {new_logs_path}, attempting {old_logs_path}"
+            )
+            self._process_ticket_helper(url, old_logs_path)
 
 
 ############################
