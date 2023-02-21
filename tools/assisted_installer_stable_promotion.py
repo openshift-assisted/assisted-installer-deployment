@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 import argparse
+import contextlib
 import logging
+import tempfile
 import os
+import subprocess
 from datetime import datetime
+from pathlib import Path
+from typing import Generator
 
 import yaml
 
 import skopeo_utils
+from tools.utils import get_credentials_from_netrc
 
 logging.basicConfig(format="%(asctime)s %(message)s")
 logging.getLogger().setLevel(logging.INFO)
@@ -44,6 +50,7 @@ def main():
         tags.append(timestamped_tag)
 
     tag_manifest_images(tags)
+    tag_repo(tags)
 
 
 def tag_manifest_images(tags):
@@ -68,6 +75,33 @@ def tag_image(image, revision, tags):
             raise RuntimeError(f"Could not find any tag for image {image} at revision {revision}")
 
         skopeo_client.tag_image(image=image, source_tag=source_tags[0], target_tag=tag)
+
+
+@contextlib.contextmanager
+def _git_password_provider() -> Generator[Path, None, None]:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        password_provider = Path(temp_dir) / "askpass.sh"
+        password_provider.write_text("exec echo $GITHUB_PASSWORD")
+        password_provider.chmod(0o700)
+
+        yield password_provider
+
+
+def tag_repo(tags):
+    for tag in tags:
+        logging.info(f"Tagging repo with {tag}")
+        subprocess.check_call(["git", "tag", tag, "-f"])
+
+        password = get_credentials_from_netrc(hostname="github.com")[1]
+        if password is None:
+            raise ValueError("Must provide a password in ~/.netrc file")
+
+        with _git_password_provider() as password_provider:
+            env = os.environ.copy()
+            env["GIT_ASKPASS"] = str(password_provider)
+            env["GITHUB_PASSWORD"] = password
+
+            subprocess.check_call(["git", "push", "origin", tag, "-f"], env=env)
 
 
 if __name__ == "__main__":
