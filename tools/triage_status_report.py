@@ -4,12 +4,11 @@ import dataclasses
 import json
 import os
 import sys
+import requests
 from typing import List
 from urllib import parse
+from tools import jira_client
 
-import consts
-import jira
-import requests
 
 MISSING_VALUE = "<MISSING>"
 NEW_TICKETS_FILTER = (
@@ -131,7 +130,7 @@ def main():
     )
     args = parser.parse_args()
 
-    client = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
+    client = jira_client.JiraClientFactory.create(args.jira_access_token)
 
     triage_status_report(client, args.time_duration, args.webhook)
 

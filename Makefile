@@ -41,13 +41,13 @@ flake8:
 	flake8 .
 
 unit-test:
-	pytest tools/
+	pytest --disable-warnings tests/
 
 autopep8:
 	autopep8 --recursive --in-place .
 
 pylint:
-	pylint release/ tools/check_ai_images.py
+	pylint release/ tools/check_ai_images.py tools/jira_client tests/
 
 ###########
 # Release #

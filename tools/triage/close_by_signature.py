@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
 
+import argparse
+import json
+import logging
 import os
+import pprint
 import sys
 import tempfile
-import logging
-import argparse
-import pprint
 import textwrap
-import json
 
-import jira
-from jira.exceptions import JIRAError
-import retry
+from tools.jira_client import JiraClientFactory
+from tools.jira_client.jira_api import JiraAPI
 
-from tools import consts
-from tools.triage.add_triage_signature import (
+from tools.triage import Filters
+
+from add_triage_signature import (
     config_logger,
     get_issues,
-    ALL_SIGNATURES,
 )
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def parse_args():
@@ -90,33 +90,6 @@ def parse_args():
     return parser.parse_args()
 
 
-class Filter:
-    def __init__(self, signature, message, root_issue):
-        self.signature = signature
-        self.message = message
-        self.root_issue = root_issue
-
-
-class IssueData:
-    def __init__(self, issue, signature, root_issue, comment):
-        self.issue = issue
-        self.signature = signature
-        self.root_issue = root_issue
-        self.comment = comment
-
-
-def run_using_json(path, jira_client, issues, dry_run_stdout=None):
-    logger.debug("Starting issue resolver task using filters json=%s", path)
-    filters_json = read_filters_file(path)
-    filters = get_filters_from_json(filters_json, jira_client)
-    close_tickets_by_filters(
-        jira_client=jira_client,
-        filters=filters,
-        issues=issues,
-        dry_run_stdout=dry_run_stdout,
-    )
-
-
 def read_filters_file(path):
     # json format: { signature_type: { root_issue: { message } }
     with open(path) as fp:
@@ -126,175 +99,43 @@ def read_filters_file(path):
     return filters_json
 
 
-def get_filters_from_json(filters_json, jira_client):
-    signature_by_type = {signature_class.__name__.lower(): signature_class for signature_class in ALL_SIGNATURES}
-
-    filters = []
-    for sign_type, sign_data in filters_json.items():
-        sign_type = sign_type.lower().replace("-", "").replace("_", "")
-        signature_class = signature_by_type.get(sign_type)
-        assert signature_class is not None
-
-        for root_issue_key, message in sign_data.items():
-            signature_instance = signature_class(jira_client, root_issue_key)
-            root_issue = jira_client.issue(root_issue_key)
-            assert root_issue is not None
-
-            filters.append(Filter(signature_instance, message, root_issue))
-
-    return filters
-
-
-def filter_and_generate_issues(jira_client, filters, issues):
-    for issue in issues:
-        if issue.fields.status.name in ("Closed", "Done", "Obsolete"):
-            continue
-
-        comments = get_issue_comments(jira_client, issue)
-        if not comments:
-            continue
-
-        for _filter in filters:
-            comment = _filter.signature.find_signature_comment(comments=comments)
-            if comment is None:
-                continue
-
-            elif not _filter.message or _filter.message in comment.body:
-                yield IssueData(
-                    issue=issue,
-                    signature=_filter.signature,
-                    root_issue=_filter.root_issue,
-                    comment=comment,
-                )
-                break
-
-
-@retry.retry(exceptions=JIRAError, tries=3, delay=2)  # being resilient to 401 statuses
-def get_issue_comments(jira_client, issue):
-    if issue is None:
-        return None
-
-    try:
-        return jira_client.comments(issue)
-    except JIRAError as e:
-        if "Issue Does Not Exist" not in str(e):
-            raise
-
-    return None
-
-
-def get_dry_run_stdout(args):
+def get_dry_run_stream(args):
     if args.dry_run_temp:
         return tempfile.NamedTemporaryFile(mode="w", delete=False)
-
     elif args.dry_run:
         return sys.stdout
 
 
-def close_tickets_by_filters(jira_client, filters, issues, dry_run_stdout):
-    filtered_issues_generator = filter_and_generate_issues(
-        jira_client=jira_client,
-        filters=filters,
-        issues=issues,
-    )
-    close_and_link_issues(
-        jira_client=jira_client,
-        filtered_issues_generator=filtered_issues_generator,
-        dry_run_stdout=dry_run_stdout,
-    )
-
-
-TARGET_TRANSITION_ID = "41"  # '41' - 'Closed', see GET /rest/api/2/issue/{issueIdOrKey}/transitions
-
-
-def close_and_link_issues(jira_client, filtered_issues_generator, dry_run_stdout):
-    for issue_data in filtered_issues_generator:
-        if issue_data.root_issue:
-            link_issue_to_root_issue(
-                jira_client=jira_client,
-                issue=issue_data.issue,
-                root_issue=issue_data.root_issue,
-                dry_run_stdout=dry_run_stdout,
-            )
-
-        logger.debug(
-            "Closing issue with key=%s signature=%s comment=%s",
-            issue_data.issue.key,
-            type(issue_data.signature),
-            issue_data.comment.body,
-        )
-
-        if dry_run_stdout is None:
-            jira_client.transition_issue(issue_data.issue, TARGET_TRANSITION_ID)
-        else:
-            print(
-                f"Closed issue key={issue_data.issue.key} "
-                f"signature={type(issue_data.signature)} "
-                f"comment={issue_data.comment.body}\n",
-                file=dry_run_stdout,
-                flush=True,
-            )
-
-
-def link_issue_to_root_issue(jira_client, issue, root_issue, dry_run_stdout):
-    logger.info("Linking issue key=%s to root issue key=%s", issue.key, root_issue.key)
-
-    if dry_run_stdout is None:
-        jira_client.create_issue_link("relates to", issue.key, root_issue.key)
-    else:
-        print(
-            f"Linked issue key={issue.key} to root issue key={issue.key}\n",
-            file=dry_run_stdout,
-            flush=True,
-        )
-
-
-def get_filters_from_args(args, jira_client):
-    signature_by_type = dict(map(lambda x: (x.__name__.lower(), x(jira_client)), ALL_SIGNATURES))
-
-    filters = []
-    for _filter in args.filter:
-        assert _filter.count(":") == 2
-        sign_type, root_issue_key, message = _filter.split(":")
-
-        sign_type = sign_type.lower().replace("-", "").replace("_", "")
-        signature = signature_by_type.get(sign_type)
-        assert signature is not None
-
-        root_issue = jira_client.issue(root_issue_key)
-        assert root_issue is not None
-
-        filters.append(Filter(signature, message, root_issue))
-
-    return filters
+def run_using_json(path, jira_client, issues):
+    logger.debug("Starting issue resolver task using filters json=%s", path)
+    filters_json = read_filters_file(path)
+    filters = Filters.from_json(jira_client, filters_json)
+    logger.debug(f"Filtering issues: {filters}")
+    jira_api = JiraAPI(jira_client, logger)
+    Filters.close_issues_by_filters(jira_api, issues, filters)
 
 
 def run_using_cli(args):
     config_logger(args.verbose)
 
     logger.debug("Starting issue resolver task using CLI with args=%s", pprint.pformat(args.__dict__))
-
-    jira_client = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
-
-    if args.filters_json:
-        filters_json = read_filters_file(args.filters_json)
-        filters = get_filters_from_json(filters_json, jira_client)
-    else:
-        filters = get_filters_from_args(args, jira_client)
+    dry_run_stream = get_dry_run_stream(args)
+    jira_client = JiraClientFactory.create(args.jira_access_token, dry_run_stream)
 
     issues = get_issues(jira_client, args.issue, only_recent=args.recent_issues)
 
-    dry_run_stdout = get_dry_run_stdout(args)
+    jira_api = JiraAPI(jira_client, logger)
     try:
-        close_tickets_by_filters(
-            jira_client=jira_client,
-            filters=filters,
-            issues=issues,
-            dry_run_stdout=dry_run_stdout,
-        )
+        if args.filters_json:
+            filters_json = read_filters_file(args.filters_json)
+            filters = Filters.from_json(jira_client, filters_json)
+            Filters.close_issues_by_filters(jira_api, issues, filters)
+        else:
+            filters = Filters.from_args(jira_client, args)
+            Filters.close_issues_by_filters(jira_api, issues, filters)
     finally:
-        if dry_run_stdout:
-            dry_run_stdout.close()
+        if dry_run_stream:
+            dry_run_stream.close()
 
 
 if __name__ == "__main__":

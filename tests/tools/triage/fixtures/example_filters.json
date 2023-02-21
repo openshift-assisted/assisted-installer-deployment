@@ -1,0 +1,12 @@
+{
+  "signatures": {
+    "master_failed_to_pull_ignition_signature" : {
+      "MOCKISSUE-12345": "this is an example message"
+    }
+  },
+  "labels": {
+    "example_label": {
+      "MOCKISSUE-0000": "this is another example message"
+    }
+  }
+}

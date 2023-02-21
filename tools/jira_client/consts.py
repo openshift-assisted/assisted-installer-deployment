@@ -1,0 +1,1 @@
+CLOSED_STATUS = "Closed"

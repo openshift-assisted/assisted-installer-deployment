@@ -16,9 +16,7 @@ from collections import Counter
 from tabulate import tabulate
 import json
 
-import jira
-
-import consts
+from tools.jira_client import JiraClientFactory
 
 
 FIELD_SPRINT = "customfield_12310940"
@@ -534,7 +532,7 @@ def handle_sprint_update(args, jiraTool, issues):
 
 
 def main(args):
-    j = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
+    j = JiraClientFactory.create(args.jira_access_token)
 
     max_results = args.max_results
     if args.max_results == MAX_RESULTS and args.linked_issues:
