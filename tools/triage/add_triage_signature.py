@@ -371,6 +371,10 @@ class Signature(abc.ABC):
         i.update(fields={"description": new_description})
 
     def _update_fields(self, key, fields_dict):
+        if self.dry_run_file is not None:
+            self.dry_run_file.write(f"Updating issue {key} fields: {fields_dict}")
+            return
+
         i = self._jira_client.issue(key)
         i.update(fields=fields_dict)
 
@@ -496,7 +500,6 @@ class OpenShiftVersionSignature(Signature):
         major, minor, *_ = metadata["cluster"]["openshift_version"].split(".")
         ticket_affected_version_field = f"OpenShift {major}.{minor}"
 
-        logger.info("Updating affected version of %s to %s", issue_key, ticket_affected_version_field)
         self._update_fields(issue_key, {"versions": [{"name": ticket_affected_version_field}]})
 
 

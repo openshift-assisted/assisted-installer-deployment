@@ -68,9 +68,6 @@ def main(args):
         close_custom_domain_user_ticket(jira_client, issue.key)
         close_by_signature.run_using_json(args.filters_json, jira_client, [issue])
 
-    if not args.filters_json:
-        return
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
