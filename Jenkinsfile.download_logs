@@ -51,7 +51,7 @@ pipeline {
                 sh "git clone ${ASSISTED_INSTALLER_DEPLOYMENT_REMOTE} --branch ${ASSISTED_INSTALLER_DEPLOYMENT_BRANCH}"
 
                 dir ('assisted-installer-deployment') {
-                    sh "skipper run ./tools/create_triage_tickets.py --jira-access-token ${JIRA_ACCESS_TOKEN} -v"
+                    sh "skipper run ./tools/triage/create_triage_tickets.py --jira-access-token ${JIRA_ACCESS_TOKEN} -v"
                 }
             }
         }

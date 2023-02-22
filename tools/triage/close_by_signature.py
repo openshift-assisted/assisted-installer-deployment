@@ -13,8 +13,8 @@ import jira
 from jira.exceptions import JIRAError
 import retry
 
-import consts
-from add_triage_signature import (
+from tools import consts
+from tools.triage.add_triage_signature import (
     config_logger,
     get_issues,
     ALL_SIGNATURES,

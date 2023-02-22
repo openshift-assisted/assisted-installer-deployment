@@ -20,7 +20,6 @@ from datetime import datetime
 from textwrap import dedent
 
 import colorlog
-import consts
 import dateutil.parser
 import jira
 import nestedarchive
@@ -28,6 +27,8 @@ import requests
 import tqdm
 from fuzzywuzzy import fuzz
 from tabulate import tabulate
+
+from tools import consts
 
 DEFAULT_DAYS_TO_HANDLE = 30
 
@@ -484,6 +485,19 @@ class ErrorSignature(Signature, abc.ABC):
                     self.issue_key,
                     ["SIGNATURE_" + self._label],
                 )
+
+
+class OpenShiftVersionSignature(Signature):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs, comment_identifying_string="")
+
+    def _process_ticket(self, url, issue_key):
+        metadata = get_metadata_json(url)
+        major, minor, *_ = metadata["cluster"]["openshift_version"].split(".")
+        ticket_affected_version_field = f"OpenShift {major}.{minor}"
+
+        logger.info("Updating affected version of %s to %s", issue_key, ticket_affected_version_field)
+        self._update_fields(issue_key, {"versions": [{"name": ticket_affected_version_field}]})
 
 
 class HostsStatusSignature(Signature):
@@ -2526,6 +2540,8 @@ class MachineConfigDaemonErrorExtracting(ErrorSignature):
 ############################
 JIRA_SERVER = "https://issues.redhat.com"
 ALL_SIGNATURES = [
+    OpenShiftVersionSignature,
+    FailureDescription,
     SlowImageDownload,
     AllInstallationAttemptsSignature,
     EventsInstallationAttempts,
@@ -2533,7 +2549,6 @@ ALL_SIGNATURES = [
     ApiExpiredCertificateSignature,
     MissingMustGatherLogs,
     FailureDetails,
-    FailureDescription,
     ComponentsVersionSignature,
     HostsStatusSignature,
     HostsExtraDetailSignature,

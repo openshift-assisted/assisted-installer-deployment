@@ -22,5 +22,5 @@ docker run -v $(pwd)/assisted-installer.yaml:/assisted-installer.yaml -v $HOME/.
 Run the following commands for more details:
 
 ```bash
-./tools/add_triage_signature.py --help
+./tools/triage/add_triage_signature.py --help
 ```

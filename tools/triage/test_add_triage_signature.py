@@ -1,4 +1,4 @@
-from add_triage_signature import ALL_SIGNATURES
+from tools.triage.add_triage_signature import ALL_SIGNATURES
 
 
 def test_create_instances():
