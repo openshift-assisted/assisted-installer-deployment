@@ -13,7 +13,7 @@ def get_or_create_triage_ticket(jira_client: jira.JIRA, failure_id: str) -> jira
     summary = JIRA_SUMMARY.format(failure_id=failure_id)
 
     matching_issues = jira_client.search_issues(
-        f'project = "{JIRA_PROJECT}" AND summary ~ "{summary}"', fields=["attachment"]
+        f'project = "{JIRA_PROJECT}" AND summary ~ "{summary}"', fields=["attachment", "status"]
     )
 
     if len(matching_issues) == 0:
