@@ -1,7 +1,7 @@
 # Triage Signatures
 Signatures are modules that perform automatic processing and analysis of triage logs to generate useful snippets of information to aid the user triaging the cluster failure.
 
-If you're looking to add new triage signatures to help the triaging efforts, you can do so by implementing them as subclasses of the `Signature` class inside the `./tools/add_triage_signature.py` script. Don't forget to also add the new signature class type to the `ALL_SIGNATURES` global list.
+If you're looking to add new triage signatures to help the triaging efforts, you can do so by implementing them as subclasses of the `Signature` class inside the `./tools/triage/add_triage_signature.py` script. Don't forget to also add the new signature class type to the `ALL_SIGNATURES` global list.
 
 You can look at how other signatures perform various operations to take inspiration on how to write your own signature.
 
@@ -22,13 +22,13 @@ In order to test your new signatures, you can run the script locally to make sur
 
 6. Run `export JIRA_ACCESS_TOKEN=<my-secret-token>`
 
-7. Run `./tools/add_triage_signature.py`, using flags `--dry-run` or `--dry-run-temp`, along with `--issue AITRIAGE-3400` or `--recent-issues`
+7. Run `./tools/triage/add_triage_signature.py`, using flags `--dry-run` or `--dry-run-temp`, along with `--issue AITRIAGE-3400` or `--recent-issues`
 
 Examples:
 
-- Test all signatures against AITRIAGE-3400 `./tools/add_triage_signature.py --dry-run --issue AITRIAGE-3400`
-- Test all signatures against AITRIAGE-3400 and write output to files in /tmp/ `./tools/add_triage_signature.py --dry-run-temp --issue AITRIAGE-3400`
-- Test all signatures against all recent issues `./tools/add_triage_signature.py --dry-run --recent-issues`
+- Test all signatures against AITRIAGE-3400 `./tools/triage/add_triage_signature.py --dry-run --issue AITRIAGE-3400`
+- Test all signatures against AITRIAGE-3400 and write output to files in /tmp/ `./tools/triage/add_triage_signature.py --dry-run-temp --issue AITRIAGE-3400`
+- Test all signatures against all recent issues `./tools/triage/add_triage_signature.py --dry-run --recent-issues`
 
 8. Inspect the output to make sure everything is in order. Optionally, you can copy the generated output and paste it inside a JIRA comment textbox (make sure it's set to "Text" mode), then change the textbox to "Visual" mode to view the formatted output.
 
