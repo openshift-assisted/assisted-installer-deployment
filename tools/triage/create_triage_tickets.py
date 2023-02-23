@@ -23,6 +23,7 @@ from tools.triage.add_triage_signature import (
 from tools.triage.common import get_or_create_triage_ticket
 
 DEFAULT_DAYS_TO_HANDLE = 30
+DEFAULT_DAYS_TO_ADD_SIGNATURES = 3
 LOGS_COLLECTOR = "http://assisted-logs-collector.usersys.redhat.com"
 
 
@@ -44,7 +45,9 @@ def main(args):
 
     for failure in failed_clusters:
         date = failure["name"].split("_")[0]
-        if not args.all and days_ago(date) > DEFAULT_DAYS_TO_HANDLE:
+        days_ago_creation = days_ago(date)
+
+        if not args.all and days_ago_creation > DEFAULT_DAYS_TO_HANDLE:
             continue
 
         logs_url = f"{LOGS_COLLECTOR}/files/{failure['name']}"
@@ -58,6 +61,14 @@ def main(args):
 
         issue = get_or_create_triage_ticket(jira_client, failure["name"])
 
+        if issue.fields.status.name == "Closed":
+            logger.debug("Skipping closed issue %s", issue.key)
+            continue
+
+        if not args.all and days_ago_creation > DEFAULT_DAYS_TO_ADD_SIGNATURES:
+            logger.debug("Skipping issue %s which is %d days old", issue.key, days_ago_creation)
+            continue
+
         process_ticket_with_signatures(
             jira_client,
             logs_url,
@@ -65,6 +76,7 @@ def main(args):
             only_specific_signatures=None,
             dry_run_file=None,
         )
+
         close_custom_domain_user_ticket(jira_client, issue.key)
         close_by_signature.run_using_json(args.filters_json, jira_client, [issue])
 
