@@ -20,11 +20,10 @@ from tools.triage.add_triage_signature import (
     days_ago,
     process_ticket_with_signatures,
 )
-from tools.triage.common import get_or_create_triage_ticket
+from tools.triage.common import get_or_create_triage_ticket, LOGS_COLLECTOR, get_cluster_logs_base_url
 
 DEFAULT_DAYS_TO_HANDLE = 30
 DEFAULT_DAYS_TO_ADD_SIGNATURES = 3
-LOGS_COLLECTOR = "http://assisted-logs-collector.usersys.redhat.com"
 
 
 def close_custom_domain_user_ticket(jira_client, issue_key):
@@ -50,7 +49,7 @@ def main(args):
         if not args.all and days_ago_creation > DEFAULT_DAYS_TO_HANDLE:
             continue
 
-        logs_url = f"{LOGS_COLLECTOR}/files/{failure['name']}"
+        logs_url = get_cluster_logs_base_url(failure["name"])
 
         res = requests.get(f"{logs_url}/metadata.json")
         res.raise_for_status()

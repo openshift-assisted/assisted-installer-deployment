@@ -5,6 +5,7 @@ import jira
 
 JIRA_PROJECT = "AITRIAGE"
 JIRA_SUMMARY = "cloud.redhat.com failure: {failure_id}"
+LOGS_COLLECTOR = "http://assisted-logs-collector.usersys.redhat.com"
 
 log = logging.getLogger(__name__)
 
@@ -33,3 +34,7 @@ def get_or_create_triage_ticket(jira_client: jira.JIRA, failure_id: str) -> jira
     raise RuntimeError(
         f"Found more than one matching issue for '{summary}': {', '.join(issue.key for issue in matching_issues)}"
     )
+
+
+def get_cluster_logs_base_url(failure_id: str) -> str:
+    return f"{LOGS_COLLECTOR}/files/{failure_id}"

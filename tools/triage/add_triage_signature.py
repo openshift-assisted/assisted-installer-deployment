@@ -29,8 +29,10 @@ from fuzzywuzzy import fuzz
 from tabulate import tabulate
 
 from tools import consts
+from tools.triage.common import get_cluster_logs_base_url
 
 DEFAULT_DAYS_TO_HANDLE = 30
+SUMMARY_PATTERN = r"cloud\.redhat\.com failure: (?P<failure_id>.+)"
 
 
 NEW_LOG_BUNDLE_PATH = "*_bootstrap_*.tar/*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/"
@@ -628,10 +630,7 @@ class FailureDescription(Signature):
 
         return format_description(cluster_data)
 
-    def _process_ticket(self, url, issue_key, should_reevaluate=False):
-        if not should_reevaluate:
-            logger.debug("Not updating description of %s", issue_key)
-            return
+    def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
 
         cluster = md["cluster"]
@@ -2591,13 +2590,6 @@ ALL_SIGNATURES = [
 ############################
 # Signature runner functionality
 ############################
-# These regexes help us extract the URL of the logs from the ticket descriptions
-# Multiple patterns maintained for backwards compatibility with older tickets
-LOGS_URL_REGEXES = [
-    re.compile(r".*\* \[Installation logs - requires VPN\|(http.*)\]"),
-    re.compile(r".*\* \[Installation logs\|(http.*)\]"),
-    re.compile(r".*\* \[[lL]ogs\|(http.*)\]"),
-]
 
 
 def search_patterns_in_string(string, patterns):
@@ -2696,24 +2688,8 @@ def get_issue(jira_client, issue_key):
 
 
 def get_logs_url_from_issue(issue):
-    for logs_url_pattern in LOGS_URL_REGEXES:
-        m = logs_url_pattern.search(issue.fields.description)
-
-        if m is not None:
-            break
-
-        logger.debug(
-            f"Cannot find {logs_url_pattern} format of URL for logs in %s, trying an older pattern",
-            issue.key,
-        )
-    else:
-        logger.warn(
-            "All patterns exhausted, no logs URL found. Giving up on this ticket",
-            issue.key,
-        )
-        return None
-
-    return m.groups()[0]
+    failure_id = re.match(SUMMARY_PATTERN, issue.fields.summary).groupdict()["failure_id"]
+    return get_cluster_logs_base_url(failure_id)
 
 
 def get_all_triage_tickets(jira_client, only_recent=False):
