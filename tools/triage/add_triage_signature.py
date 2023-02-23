@@ -27,6 +27,7 @@ import requests
 import tqdm
 from fuzzywuzzy import fuzz
 from tabulate import tabulate
+from retry import retry
 
 from tools import consts
 
@@ -2821,6 +2822,7 @@ def format_time(time_str):
     return dateutil.parser.isoparse(time_str).strftime("%Y-%m-%d %H:%M:%S")
 
 
+@retry(exceptions=jira.exceptions.JIRAError, tries=3, delay=10)
 def process_ticket_with_signatures(
     jira_client,
     ticket_logs_url,
