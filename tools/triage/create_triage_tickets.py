@@ -9,6 +9,7 @@ import os
 
 import jira
 import requests
+from retry import retry
 
 from tools import consts
 from tools.triage import close_by_signature
@@ -25,6 +26,7 @@ DEFAULT_DAYS_TO_HANDLE = 30
 DEFAULT_DAYS_TO_ADD_SIGNATURES = 3
 
 
+@retry(exceptions=jira.exceptions.JIRAError, tries=3, delay=10)
 def close_custom_domain_user_ticket(jira_client, issue_key):
     issue = jira_client.issue(issue_key)
     if issue.raw["fields"].get(custom_field_name(CUSTOM_FIELD_DOMAIN)) in CUSTOM_FIELD_IGNORED_DOMAINS:
