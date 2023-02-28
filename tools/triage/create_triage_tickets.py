@@ -68,6 +68,7 @@ def main(args):
             logger.debug("Skipping issue %s which is %d days old", issue.key, days_ago_creation)
             continue
 
+        logger.debug("Processing issue %s", issue.key)
         process_ticket_with_signatures(
             jira_client,
             logs_url,
