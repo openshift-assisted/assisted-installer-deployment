@@ -660,7 +660,7 @@ class FailureDetails(Signature):
         ]
 
     def _process_ticket(self, url, issue_key):
-        def extract_cluster_md_from_existing_labels():
+        def extract_cluster_md_from_existing_labels(issue):
             label_prefix_to_property = {
                 "AI_CLUSTER_": "id",
                 "AI_DOMAIN_": "email_domain",
@@ -668,9 +668,8 @@ class FailureDetails(Signature):
             }
             r = re.compile(r"(AI_[^_]*_)(.*)")
 
-            i = self._jira_client.issue(issue_key)
             cluster_md = {}
-            for label in i.fields.labels:
+            for label in issue.fields.labels:
                 m = r.match(label)
                 if m is None or len(m.groups()) != 2:
                     continue
@@ -680,6 +679,7 @@ class FailureDetails(Signature):
                 cluster_md[label_prefix_to_property[prefix]] = value
             return cluster_md
 
+        issue = self._jira_client.issue(issue_key)
         cluster_md = []
         try:
             md = get_metadata_json(url)
@@ -689,10 +689,13 @@ class FailureDetails(Signature):
             # have in the 'labels' field of the ticket
             # this is mainly relevant for triage tickets that were moved from 'MGMT' project to 'AITRIAGE'
             # project
-            cluster_md = extract_cluster_md_from_existing_labels()
+            cluster_md = extract_cluster_md_from_existing_labels(issue)
 
+        existing_labels = issue.fields.__dict__["labels"] or []
+
+        logger.info(f"ISSUE {issue.key} existing labels: {existing_labels}")
         update_fields = {
-            "labels": [],
+            "labels": existing_labels,
         }
         if "user_name" in cluster_md:
             update_fields[custom_field_name(CUSTOM_FIELD_USER)] = cluster_md["user_name"]
@@ -707,7 +710,7 @@ class FailureDetails(Signature):
             operators = [feature for feature in feature_usage.keys() if self.is_olm_operator(feature)]
             other_features = [feature for feature in feature_usage.keys() if not self.is_olm_operator(feature)]
             if len(operators + other_features) > 0:
-                labels = []
+                labels = existing_labels
                 for f in operators + other_features:
                     labels.append("FEATURE-" + f.replace(" ", "-"))
 
