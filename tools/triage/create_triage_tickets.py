@@ -9,7 +9,6 @@ import os
 
 import jira
 import requests
-from retry import retry
 
 from tools import consts
 from tools.triage import close_by_signature
@@ -34,7 +33,6 @@ def close_custom_domain_user_ticket(jira_client, issue_key):
         jira_client.add_comment(issue, "Automatically closing the issue for the specified domain.")
 
 
-@retry(exceptions=jira.exceptions.JIRAError, tries=3, delay=10)
 def main(args):
     jira_client = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
 

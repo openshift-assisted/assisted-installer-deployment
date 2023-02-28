@@ -1,6 +1,7 @@
 import logging
 
 import jira
+from retry import retry
 
 
 JIRA_PROJECT = "AITRIAGE"
@@ -10,6 +11,7 @@ LOGS_COLLECTOR = "http://assisted-logs-collector.usersys.redhat.com"
 log = logging.getLogger(__name__)
 
 
+@retry(exceptions=jira.exceptions.JIRAError, tries=3, delay=10)
 def get_or_create_triage_ticket(jira_client: jira.JIRA, failure_id: str) -> jira.Issue:
     summary = JIRA_SUMMARY.format(failure_id=failure_id)
 
