@@ -274,7 +274,7 @@ class Signature(abc.ABC):
         should_reevaluate=False,
         old_comment_string=None,
     ):
-        self._jira_client = jira_client
+        self._jira_client: jira.JIRA = jira_client
         self._identifing_string = comment_identifying_string
         self._old_identifing_string = old_comment_string
         self.dry_run_file = dry_run_file
@@ -1414,6 +1414,11 @@ class MustGatherAnalysis(Signature):
         )
 
     def _process_ticket(self, url, issue_key):
+        for attachment in self._jira_client.issue(issue_key).fields.attachment:
+            if attachment.filename.startswith("insights-report-"):
+                logger.debug("must-gather analysis already exists as attachment %s", attachment.filename)
+                return
+
         md = get_metadata_json(url)
         cluster_id = md["cluster"]["id"]
         triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
@@ -1773,6 +1778,11 @@ class ControllerOperatorStatus(Signature):
         )
 
     def _process_ticket(self, url, issue_key):
+        for attachment in self._jira_client.issue(issue_key).fields.attachment:
+            if attachment.filename.startswith("controller-logs-operators-status-"):
+                logger.debug("Degraded operators analysis already exists as attachment %s", attachment.filename)
+                return
+
         try:
             controller_logs = get_controller_logs(url)
         except FileNotFoundError:
