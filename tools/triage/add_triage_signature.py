@@ -691,9 +691,8 @@ class FailureDetails(Signature):
             # project
             cluster_md = extract_cluster_md_from_existing_labels(issue)
 
-        existing_labels = issue.fields.__dict__["labels"] or []
+        existing_labels = issue.fields.labels
 
-        logger.info(f"ISSUE {issue.key} existing labels: {existing_labels}")
         update_fields = {
             "labels": existing_labels,
         }
