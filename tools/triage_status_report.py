@@ -7,7 +7,7 @@ import sys
 import requests
 from typing import List
 from urllib import parse
-from tools import jira_client
+from tools.jira_client import JiraClientFactory
 
 
 MISSING_VALUE = "<MISSING>"
@@ -130,7 +130,7 @@ def main():
     )
     args = parser.parse_args()
 
-    client = jira_client.JiraClientFactory.create(args.jira_access_token)
+    client = JiraClientFactory.create(args.jira_access_token)
 
     triage_status_report(client, args.time_duration, args.webhook)
 
