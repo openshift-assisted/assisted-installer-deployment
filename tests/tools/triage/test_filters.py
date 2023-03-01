@@ -101,35 +101,36 @@ def test_load_simple_filters_from_args():
 
 
 def test_get_triage_issue_filtered_by_labels():
-    issues = []
-    # to be discarded: already closed
-    issues.append(get_mock_issue("ISSUE-1", "Closed", ["example_label"]))
-    # to be selected
-    issues.append(get_mock_issue("ISSUE-2", "Open", ["example_label"]))
-    # to be discarded: no matching label
-    issues.append(get_mock_issue("ISSUE-3", "Open", ["some_label"]))
-    issues.append(get_mock_issue("ISSUE-4", "Open", ["some_label", "example_label"]))
+    issues = [
+        # to be discarded: already closed
+        get_mock_issue("ISSUE-1", "Closed", ["example_label"]),
+        # to be selected
+        get_mock_issue("ISSUE-2", "Open", ["example_label"]),
+        # to be discarded: no matching label
+        get_mock_issue("ISSUE-3", "Open", ["some_label"]),
+        get_mock_issue("ISSUE-4", "Open", ["some_label", "example_label"]),
+    ]
 
-    filters = []
-    filters.append(
+    filters = [
         LabelFilter(
             identifier="example_label",
             root_issue=None,
             message="this is another example message",
         )
-    )
+    ]
     triage_issues = Filters.get_triage_issues(issues, filters)
     assert len(list(triage_issues)) == 2
 
 
 def test_get_triage_issue_filtered_by_signature():
-    issues = []
-    # to be discarded: already closed
-    issues.append(get_mock_issue("ISSUE-1", "Closed", ["example_label"]))
-    # the rest of the issues will be queried for comments
-    issues.append(get_mock_issue("ISSUE-2", "Open", ["example_label"]))
-    issues.append(get_mock_issue("ISSUE-3", "Open", ["some_label"]))
-    issues.append(get_mock_issue("ISSUE-4", "Open", ["some_label", "example_label"]))
+    issues = [
+        # to be discarded: already closed
+        get_mock_issue("ISSUE-1", "Closed", ["example_label"]),
+        # the rest of the issues will be queried for comments
+        get_mock_issue("ISSUE-2", "Open", ["example_label"]),
+        get_mock_issue("ISSUE-3", "Open", ["some_label"]),
+        get_mock_issue("ISSUE-4", "Open", ["some_label", "example_label"]),
+    ]
 
     comments = [
         # issue 2
@@ -152,14 +153,14 @@ def test_get_triage_issue_filtered_by_signature():
     jira_client = Mock()
     jira_client.comments = Mock(side_effect=comments)
     filters = []
-    filters.append(
+    filters = [
         SignatureFilter(
             jira_client=jira_client,
             identifier="master_failed_to_pull_ignition_signature",
             root_issue=None,
             message="Master nodes failed to pull ignition",
         )
-    )
+    ]
     triage_issues = Filters.get_triage_issues(issues, filters)
     assert len(list(triage_issues)) == 2
     jira_client.comments.assert_has_calls([
@@ -170,28 +171,23 @@ def test_get_triage_issue_filtered_by_signature():
 
 
 def test_close_triage_issues():
-    triage_issues = []
-    triage_issues.append(
+    triage_issues = [
         TriageIssue(
             issue=get_mock_issue("ISSUE-1"),
             root_issue=get_mock_issue("ROOT-1"),
             message="any message",
-        )
-    )
-    triage_issues.append(
+        ),
         TriageIssue(
             issue=get_mock_issue("ISSUE-2"),
             root_issue=get_mock_issue("ROOT-1"),
             message="any message",
-        )
-    )
-    triage_issues.append(
+        ),
         TriageIssue(
             issue=get_mock_issue("ISSUE-3"),
             root_issue=None,
             message="any message",
-        )
-    )
+        ),
+    ]
     jira_api = Mock()
     Filters.close_triage_issues(jira_api, triage_issues)
     jira_api.link_and_close_issue.assert_has_calls([
