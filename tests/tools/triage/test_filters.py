@@ -41,7 +41,7 @@ def test_create_signature_filter():
 def test_create_invalid_type_filter():
     root_issue_key = "MGMT-0000"
     jira_client = Mock()
-    with pytest.raises(Exception, match="unknown filter type invalid-type"):
+    with pytest.raises(ValueError, match="unknown filter type invalid-type"):
         Filters.create_filter(jira_client, "invalid-type", "whatever", root_issue_key, "my message")
 
 
