@@ -1,5 +1,5 @@
-import jira
 import sys
+import jira
 from tools.jira_client import (
    JiraClientFactory,
    JiraDryRunClient

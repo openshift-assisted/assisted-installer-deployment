@@ -1,6 +1,7 @@
 import pytest
 
 from unittest.mock import Mock
+
 from tools.jira_client import JiraAPI, CLOSED_STATUS
 
 
