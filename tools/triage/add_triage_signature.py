@@ -2384,19 +2384,22 @@ class UserHasLoggedIntoCluster(Signature):
 
         report = ""
         for host in cluster["hosts"]:
-                    host_id = host["id"]
+            host_id = host["id"]
 
-                    try:
-                        journal_logs = get_host_log_file(triage_logs_tar, host_id, "journal.logs")
-                    except FileNotFoundError:
-                        logger.info("Could not get host log file for %s", host_id)
-                        continue
-                    
-                    if self.USER_LOGIN_PATTERN.findall(journal_logs):
-                        report += dedent(f"""h2. Host {host_id}: found evidence of a user login during installation. This might indicate that some settings have been changed manually, moreover if these settings were incorrect they could contribute to failure of the installation.""")
-                
+            try:
+                journal_logs = get_host_log_file(triage_logs_tar, host_id, "journal.logs")
+            except FileNotFoundError:
+                logger.info("Could not get host log file for %s", host_id)
+                continue
+
+            if self.USER_LOGIN_PATTERN.findall(journal_logs):
+                report += dedent(
+                    f"""h2. Host {host_id}: found evidence of a user login during installation. This might indicate that some settings have been changed manually, moreover if these settings were incorrect they could contribute to failure of the installation."""
+                )
+
         if len(report) != 0:
             self._update_triaging_ticket(report)
+
 
 class MissingOSTreePivot(ErrorSignature):
     """
