@@ -1,6 +1,9 @@
 import json
 import logging
 
+import retry
+from jira.exceptions import JIRAError
+
 from tools.jira_client import JiraAPI
 
 from .add_triage_signature import ALL_SIGNATURES
@@ -87,6 +90,7 @@ class SignatureFilter(Filter):
 
 class Filters:
     @staticmethod
+    @retry.retry(exceptions=JIRAError, tries=3, delay=2)
     def create_filter(jira_client, filter_type, identifier, root_issue_key, message):
         root_issue = jira_client.issue(root_issue_key)
 
