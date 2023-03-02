@@ -2,9 +2,10 @@
 # This tool finds what direct dependencies caused the given inderect dependency
 
 
-import subprocess
-import networkx as nx
 import argparse
+import subprocess
+
+import networkx as nx
 
 g = nx.DiGraph()
 

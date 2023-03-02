@@ -1,6 +1,8 @@
 # pylint: disable=too-few-public-methods
 import jira
+
 from tools import consts
+
 from .jira_dryrun_client import JiraDryRunClient
 
 

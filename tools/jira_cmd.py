@@ -3,21 +3,21 @@
 
 # A tool to perform various operations on Jira
 
-import os
-import io
-import sys
-import re
-import csv
 import argparse
-import logging
-import textwrap
-import pprint
-from collections import Counter
-from tabulate import tabulate
+import csv
+import io
 import json
+import logging
+import os
+import pprint
+import re
+import sys
+import textwrap
+from collections import Counter
+
+from tabulate import tabulate
 
 from tools.jira_client import JiraClientFactory
-
 
 FIELD_SPRINT = "customfield_12310940"
 FIELD_CONTRIBUTORS = "customfield_12315950"

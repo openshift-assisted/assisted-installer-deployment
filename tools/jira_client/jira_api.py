@@ -1,5 +1,5 @@
-from jira.exceptions import JIRAError
 import retry
+from jira.exceptions import JIRAError
 
 from .consts import CLOSED_STATUS
 

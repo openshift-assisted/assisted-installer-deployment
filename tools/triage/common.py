@@ -3,7 +3,6 @@ import logging
 import jira
 from retry import retry
 
-
 JIRA_PROJECT = "AITRIAGE"
 JIRA_SUMMARY = "cloud.redhat.com failure: {failure_id}"
 LOGS_COLLECTOR = "http://assisted-logs-collector.usersys.redhat.com"

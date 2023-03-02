@@ -1,9 +1,8 @@
 import sys
+
 import jira
-from tools.jira_client import (
-   JiraClientFactory,
-   JiraDryRunClient
-)
+
+from tools.jira_client import JiraClientFactory, JiraDryRunClient
 
 
 def test_should_create_real_jira_client_when_output_stream_is_none():

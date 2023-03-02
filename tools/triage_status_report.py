@@ -4,11 +4,12 @@ import dataclasses
 import json
 import os
 import sys
-import requests
 from typing import List
 from urllib import parse
-from tools.jira_client import JiraClientFactory
 
+import requests
+
+from tools.jira_client import JiraClientFactory
 
 MISSING_VALUE = "<MISSING>"
 NEW_TICKETS_FILTER = (

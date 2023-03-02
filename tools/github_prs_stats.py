@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-from datetime import datetime
-import statistics
 import argparse
+import statistics
+from datetime import datetime
 
 from github import Github, GithubException
-
 from utils import get_credentials_from_netrc
 
 

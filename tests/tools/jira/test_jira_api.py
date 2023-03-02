@@ -1,8 +1,8 @@
-import pytest
-
 from unittest.mock import Mock
 
-from tools.jira_client import JiraAPI, CLOSED_STATUS
+import pytest
+
+from tools.jira_client import CLOSED_STATUS, JiraAPI
 
 
 @pytest.fixture()

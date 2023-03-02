@@ -4,18 +4,17 @@
 import abc
 import argparse
 import functools
+import ipaddress
 import itertools
 import json
 import logging
 import os
+import pathlib
 import re
 import subprocess
 import sys
 import tempfile
-import yaml
-import ipaddress
-import pathlib
-from collections import OrderedDict, defaultdict, Counter
+from collections import Counter, OrderedDict, defaultdict
 from datetime import datetime
 from textwrap import dedent
 
@@ -25,12 +24,13 @@ import jira
 import nestedarchive
 import requests
 import tqdm
+import yaml
 from fuzzywuzzy import fuzz
-from tabulate import tabulate
 from retry import retry
+from tabulate import tabulate
 
-from tools.triage.common import get_cluster_logs_base_url
 from tools.jira_client import JiraClientFactory
+from tools.triage.common import get_cluster_logs_base_url
 
 DEFAULT_DAYS_TO_HANDLE = 30
 SUMMARY_PATTERN = r"cloud\.redhat\.com failure: (?P<failure_id>.+)"

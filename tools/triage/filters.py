@@ -1,8 +1,9 @@
-import logging
 import json
+import logging
+
+from tools.jira_client import JiraAPI
 
 from .add_triage_signature import ALL_SIGNATURES
-from tools.jira_client import JiraAPI
 
 SIGNATURE_BY_TYPE = {signature_class.__name__.lower(): signature_class for signature_class in ALL_SIGNATURES}
 

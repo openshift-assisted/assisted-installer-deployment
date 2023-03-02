@@ -1,4 +1,4 @@
-.PHONY: all clean lint flake8 unit-test autopep8 pylint snapshot verify_snapshot tag_images release
+.PHONY: all clean lint flake8 unit-test autopep8 isort pylint snapshot verify_snapshot tag_images release
 
 all: lint
 
@@ -29,7 +29,7 @@ pip-freeze: requirements.txt dev-requirements.txt
 # Verify #
 ##########
 
-lint: flake8 pylint black
+lint: flake8 pylint isort black
 
 black:
 	black --check --diff tools/
@@ -48,6 +48,9 @@ autopep8:
 
 pylint:
 	pylint release/ tools/check_ai_images.py tools/jira_client tests/
+
+isort:
+	isort --check-only release/ tools/ tests/
 
 ###########
 # Release #

@@ -9,15 +9,11 @@ import sys
 import tempfile
 import textwrap
 
+from add_triage_signature import config_logger, get_issues
+
 from tools.jira_client import JiraClientFactory
 from tools.jira_client.jira_api import JiraAPI
-
 from tools.triage import Filters
-
-from add_triage_signature import (
-    config_logger,
-    get_issues,
-)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

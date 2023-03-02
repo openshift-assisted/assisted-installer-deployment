@@ -1,6 +1,7 @@
 import os
-import pytest
 from unittest.mock import Mock
+
+import pytest
 
 from tools.jira_client.jira_api import CLOSED_STATUS
 from tools.jira_client.jira_dryrun_client import JiraDryRunClient

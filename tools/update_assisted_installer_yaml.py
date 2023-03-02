@@ -1,10 +1,10 @@
 import argparse
-import yaml
 import os
-import github
 
-import update_hash
+import github
 import skopeo_utils
+import update_hash
+import yaml
 
 parser = argparse.ArgumentParser()
 parser.add_argument(

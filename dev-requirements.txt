@@ -34,8 +34,10 @@ ipdb==0.13.9
     # via -r dev-requirements.in
 ipython==8.10.0
     # via ipdb
-isort==5.10.1
-    # via pylint
+isort==5.12.0
+    # via
+    #   -r dev-requirements.in
+    #   pylint
 jedi==0.18.1
     # via ipython
 lazy-object-proxy==1.7.1

@@ -1,9 +1,9 @@
-import pytest
 import os
-
 from unittest.mock import Mock, call
 
-from tools.triage import SignatureFilter, LabelFilter, Filters, TriageIssue
+import pytest
+
+from tools.triage import Filters, LabelFilter, SignatureFilter, TriageIssue
 
 
 def get_mock_comment(body):

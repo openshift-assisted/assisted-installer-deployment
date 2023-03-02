@@ -11,17 +11,14 @@ import jira
 import requests
 from retry import retry
 
-from tools.jira_client import JiraClientFactory
+from tools.jira_client import CLOSED_STATUS, JiraClientFactory
 from tools.triage import close_by_signature
-from tools.triage.add_triage_signature import (
-    CUSTOM_FIELD_DOMAIN,
-    CUSTOM_FIELD_IGNORED_DOMAINS,
-    custom_field_name,
-    days_ago,
-    process_ticket_with_signatures,
-)
-from tools.triage.common import get_or_create_triage_ticket, LOGS_COLLECTOR, get_cluster_logs_base_url
-from tools.jira_client import CLOSED_STATUS
+from tools.triage.add_triage_signature import (CUSTOM_FIELD_DOMAIN,
+                                               CUSTOM_FIELD_IGNORED_DOMAINS,
+                                               custom_field_name, days_ago,
+                                               process_ticket_with_signatures)
+from tools.triage.common import (LOGS_COLLECTOR, get_cluster_logs_base_url,
+                                 get_or_create_triage_ticket)
 
 DEFAULT_DAYS_TO_HANDLE = 30
 DEFAULT_DAYS_TO_ADD_SIGNATURES = 3

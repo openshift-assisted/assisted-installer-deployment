@@ -3,10 +3,11 @@
 import argparse
 import logging
 import sys
+
 import requests
 import yaml
-from release import gittools
 
+from release import gittools
 
 IMAGE_TAGS_URL_TEMPLATE = "https://quay.io/v1/repositories/ocpmetal/{}/tags"
 
