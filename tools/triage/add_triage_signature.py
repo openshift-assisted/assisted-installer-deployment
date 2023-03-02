@@ -2362,6 +2362,42 @@ class ControllerWarnings(Signature):
             self._update_triaging_ticket("Controller logs contain some warnings:\n" + f"{{code}}{warning_text}{{code}}")
 
 
+class UserHasLoggedIntoCluster(Signature):
+    """
+    This signature will detect user login to the cluster.
+    """
+
+    USER_LOGIN_PATTERN = re.compile(r"session opened for user .+ by")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. User has logged into cluster nodes during installation",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        cluster = get_metadata_json(url)["cluster"]
+        cluster_id = cluster["id"]
+
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+
+        report = ""
+        for host in cluster["hosts"]:
+                    host_id = host["id"]
+
+                    try:
+                        journal_logs = get_host_log_file(triage_logs_tar, host_id, "journal.logs")
+                    except FileNotFoundError:
+                        logger.info("Could not get host log file for %s", host_id)
+                        continue
+                    
+                    if self.USER_LOGIN_PATTERN.findall(journal_logs):
+                        report += dedent(f"""h2. Host {host_id}: found evidence of a user login during installation. This might indicate that some settings have been changed manually, moreover if these settings were incorrect they could contribute to failure of the installation.""")
+                
+        if len(report) != 0:
+            self._update_triaging_ticket(report)
+
 class MissingOSTreePivot(ErrorSignature):
     """
     This signature looks for missing pivot URL in rpm-ostree status of the control-plane hosts
@@ -2595,6 +2631,7 @@ ALL_SIGNATURES = [
     MissingOSTreePivot,
     MachineConfigDaemonErrorExtracting,
     ControllerFailedToStart,
+    UserHasLoggedIntoCluster,
 ]
 
 ############################
