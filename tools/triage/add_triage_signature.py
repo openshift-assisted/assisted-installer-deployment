@@ -4,18 +4,17 @@
 import abc
 import argparse
 import functools
+import ipaddress
 import itertools
 import json
 import logging
 import os
+import pathlib
 import re
 import subprocess
 import sys
 import tempfile
-import yaml
-import ipaddress
-import pathlib
-from collections import OrderedDict, defaultdict, Counter
+from collections import Counter, OrderedDict, defaultdict
 from datetime import datetime
 from textwrap import dedent
 
@@ -25,11 +24,12 @@ import jira
 import nestedarchive
 import requests
 import tqdm
+import yaml
 from fuzzywuzzy import fuzz
-from tabulate import tabulate
 from retry import retry
+from tabulate import tabulate
 
-from tools import consts
+from tools.jira_client import JiraClientFactory
 from tools.triage.common import get_cluster_logs_base_url
 
 DEFAULT_DAYS_TO_HANDLE = 30
@@ -1079,7 +1079,6 @@ class LibvirtRebootFlagSignature(ErrorSignature):
 
 
 class ApiInvalidCertificateSignature(ErrorSignature):
-
     LOG_PATTERN = re.compile('time=".*" level=error msg=".*x509: certificate is valid.* not .*')
 
     def __init__(self, *args, **kwargs):
@@ -1113,7 +1112,6 @@ class ApiInvalidCertificateSignature(ErrorSignature):
 
 
 class ApiExpiredCertificateSignature(ErrorSignature):
-
     LOG_PATTERN = re.compile("x509: certificate has expired or is not yet valid.*")
 
     def __init__(self, *args, **kwargs):
@@ -1703,7 +1701,6 @@ class ReleasePullErrorSignature(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-
         md = get_metadata_json(url)
 
         cluster = md["cluster"]
@@ -2770,10 +2767,9 @@ def process_issues(
 
 
 def main(args):
-    jira_client = jira.JIRA(
-        consts.JIRA_SERVER,
-        token_auth=args.jira_access_token,
-        validate=True,
+    jira_client = JiraClientFactory.create(
+        args.jira_access_token,
+        dry_run_stream=sys.stdout if args.dry_run else None,
     )
 
     issues = get_issues(

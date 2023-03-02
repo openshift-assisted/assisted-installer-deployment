@@ -4,8 +4,9 @@
 # Script to output table with the count of triage related tickets, grouped by week for the past 3 weeks
 
 import json
-import tabulate
+
 import jira_cmd
+import tabulate
 
 
 class TriageStats:

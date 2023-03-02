@@ -2,16 +2,16 @@
 import argparse
 import contextlib
 import logging
-import tempfile
 import os
 import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Generator
 
+import skopeo_utils
 import yaml
 
-import skopeo_utils
 from tools.utils import get_credentials_from_netrc
 
 logging.basicConfig(format="%(asctime)s %(message)s")

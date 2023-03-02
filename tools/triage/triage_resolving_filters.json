@@ -1,0 +1,12 @@
+{
+  "signatures": {
+    "master_failed_to_pull_ignition_signature" : {
+      "MGMT-11089": "Master nodes failed to pull ignition"
+    }
+  },
+  "labels": {
+    "FEATURE-Validations-have-been-ignored-for-this-cluster": {
+      "MGMT-13442": "Clusters on which validations are ignored are unsupported."
+    }
+  }
+}

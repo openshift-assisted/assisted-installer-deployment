@@ -10,10 +10,10 @@ import subprocess
 import sys
 from collections import defaultdict
 
-import consts
-import jira
 import yaml
 from tabulate import tabulate
+
+from tools.jira_client import JiraClientFactory
 
 logging.basicConfig(level=logging.WARN, format="%(levelname)-10s %(message)s")
 logger = logging.getLogger(__name__)
@@ -354,7 +354,7 @@ if __name__ == "__main__":
     if args.verbose:
         logger.setLevel(logging.DEBUG)
 
-    jclient = jira.JIRA(consts.JIRA_SERVER, token_auth=args.jira_access_token, validate=True)
+    jclient = JiraClientFactory.create(args.jira_access_token)
 
     main(
         jclient,

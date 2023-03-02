@@ -5,15 +5,15 @@ import os
 import requests
 
 
-class GitApiUtils():
+class GitApiUtils:
     GIT_API_PREFIX = "https://api.github.com"
     GIT_API_REPOS = f"{GIT_API_PREFIX}/repos"
     GIT_REPO_TREES_URI_PREFIX = "/git/trees"
     GIT_REQUEST_TIMEOUT = 120
 
     def __init__(self):
-        self._github_user = os.getenv('GITHUB_USER', None)
-        self._github_password = os.getenv('GITHUB_PASS', None)
+        self._github_user = os.getenv("GITHUB_USER", None)
+        self._github_password = os.getenv("GITHUB_PASS", None)
         if self._github_user and self._github_password:
             self._credentials = (self._github_user, self._github_password)
         else:
@@ -28,8 +28,7 @@ class GitApiUtils():
 
         :return str: tag url
         """
-        logging.info('Creating tag %s for repository: %s, revision: %s',
-                     tag, repo, revision)
+        logging.info("Creating tag %s for repository: %s, revision: %s", tag, repo, revision)
         data = {
             "tag": tag,
             "object": revision,
@@ -40,11 +39,11 @@ class GitApiUtils():
         response = requests.post(url, auth=self._credentials, json=data, timeout=self.GIT_REQUEST_TIMEOUT)
         response.raise_for_status()
         tag_obj = response.json()
-        ref_data = {'ref': f'refs/tags/{tag}', 'sha': tag_obj.get('sha')}
+        ref_data = {"ref": f"refs/tags/{tag}", "sha": tag_obj.get("sha")}
         ref_url = f"{self.GIT_API_REPOS}/{repo}/git/refs"
         response = requests.post(ref_url, auth=self._credentials, json=ref_data, timeout=self.GIT_REQUEST_TIMEOUT)
         response.raise_for_status()
-        return response.json().get('url')
+        return response.json().get("url")
 
     def delete_tag(self, repo, tag):
         """Delete a tag from a repository
@@ -52,7 +51,7 @@ class GitApiUtils():
         :param str repo: repository name
         :param str tag: The tag to delete (e.g. 'v1.0.0')
         """
-        logging.info('Deleting tag %s in repository %s', tag, repo)
+        logging.info("Deleting tag %s in repository %s", tag, repo)
         ref_url = f"{self.GIT_API_REPOS}/{repo}/git/refs/tags/{tag}"
         response = requests.delete(ref_url, auth=self._credentials, timeout=self.GIT_REQUEST_TIMEOUT)
         response.raise_for_status()
@@ -64,7 +63,7 @@ class GitApiUtils():
 
         :return list: List of tags
         """
-        logging.info('Listing tags in repository: %s', repo)
+        logging.info("Listing tags in repository: %s", repo)
         ref_url = f"{self.GIT_API_REPOS}/{repo}/git/refs/tags"
         response = requests.get(ref_url, auth=self._credentials, timeout=self.GIT_REQUEST_TIMEOUT)
         response.raise_for_status()
@@ -83,7 +82,7 @@ class GitApiUtils():
     @staticmethod
     def _get_credentials_from_netrc(netrc_path=None):
         """Get the user credentials from .netrc file"""
-        ncfile = netrc.netrc(netrc_path or os.path.expanduser('~/.netrc'))
+        ncfile = netrc.netrc(netrc_path or os.path.expanduser("~/.netrc"))
         credentials = ncfile.authenticators("github.com")
 
         if credentials is None:

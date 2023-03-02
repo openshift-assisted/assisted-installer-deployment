@@ -1,9 +1,9 @@
-import subprocess
 import argparse
 import logging
-import shutil
 import os
 import re
+import shutil
+import subprocess
 
 logging.basicConfig(format="%(asctime)s %(message)s")
 logging.getLogger().setLevel(logging.INFO)

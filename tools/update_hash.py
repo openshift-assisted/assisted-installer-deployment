@@ -1,7 +1,7 @@
 import argparse
-import sys
 import os
 import re
+import sys
 
 from ruamel.yaml import YAML
 

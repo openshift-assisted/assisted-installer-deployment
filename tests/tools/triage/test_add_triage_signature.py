@@ -1,4 +1,4 @@
-from tools.triage.add_triage_signature import ALL_SIGNATURES
+from tools.triage import ALL_SIGNATURES
 
 
 def test_create_instances():
@@ -7,4 +7,5 @@ def test_create_instances():
     """
     for signature in ALL_SIGNATURES:
         jira_client = None
-        _ = signature(jira_client, "AITRIAGE-999999")
+        sig = signature(jira_client, "AITRIAGE-999999")
+        assert sig is not None
