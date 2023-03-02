@@ -15,7 +15,7 @@ IMAGE_TAGS_URL_TEMPLATE = "https://quay.io/v1/repositories/ocpmetal/{}/tags"
 def get_logger():
     logging.getLogger("requests").setLevel(logging.ERROR)
     logging.getLogger("urllib3").setLevel(logging.ERROR)
-    log = logging.getLogger('')
+    log = logging.getLogger("")
     log.setLevel(logging.DEBUG)
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
@@ -24,9 +24,9 @@ def get_logger():
 
 
 def tag_all(manifest, tag, delete_if_exists=False):
-    '''Read the manifest file and create a tag for each entry'''
+    """Read the manifest file and create a tag for each entry"""
     logger = get_logger()
-    with open(manifest, 'r') as manifest_file:
+    with open(manifest, "r") as manifest_file:
         manifest_content = yaml.safe_load(manifest_file)
     logger.info("Creating %s tag for all backend repos", tag)
     gtools = gittools.GitApiUtils()
@@ -48,16 +48,16 @@ def tag_all(manifest, tag, delete_if_exists=False):
         if "backend" not in component_data["categories"]:
             continue
 
-        logger.info("Creating %s tag in repo: %s, revision: %s", tag, repo, component_data['revision'])
-        gtools.create_tag(repo, component_data['revision'], tag)
+        logger.info("Creating %s tag in repo: %s, revision: %s", tag, repo, component_data["revision"])
+        gtools.create_tag(repo, component_data["revision"], tag)
 
     logger.info("Done")
 
 
 def untag_all(manifest, tag):
-    '''Read the manifest file and delete the tag for each entry'''
+    """Read the manifest file and delete the tag for each entry"""
     logger = get_logger()
-    with open(manifest, 'r') as manifest_file:
+    with open(manifest, "r") as manifest_file:
         manifest_contnet = yaml.safe_load(manifest_file)
     logger.info("Deleting %s tag from all repos", tag)
     gtools = gittools.GitApiUtils()
@@ -72,11 +72,11 @@ def untag_all(manifest, tag):
 
 
 def check_images_exists(manifest, tag):
-    '''Read the manifest file and check for each repository if all images exists with the given tag
+    """Read the manifest file and check for each repository if all images exists with the given tag
     Raise exception in case one or more images are missing
-    '''
+    """
     logger = get_logger()
-    with open(manifest, 'r') as manifest_file:
+    with open(manifest, "r") as manifest_file:
         manifest_contnet = yaml.safe_load(manifest_file)
     logger.info("Checking images with %s tag exists for all repos", tag)
     missing_images = []
@@ -92,7 +92,7 @@ def check_images_exists(manifest, tag):
 
 
 def image_exists(image_name, tag, required_sha):
-    '''Get the image tags list and find another tag matching the required sha with the same image id'''
+    """Get the image tags list and find another tag matching the required sha with the same image id"""
     url = IMAGE_TAGS_URL_TEMPLATE.format(image_name)
     # get the image tags
     response = requests.get(url=url, timeout=60)
@@ -115,13 +115,15 @@ def image_exists(image_name, tag, required_sha):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Tag all assisted installer repositories')
-    parser.add_argument('-t', '--tag', help='The tag to create', type=str, required=True)
+    parser = argparse.ArgumentParser(description="Tag all assisted installer repositories")
+    parser.add_argument("-t", "--tag", help="The tag to create", type=str, required=True)
     tag_options = parser.add_mutually_exclusive_group()
-    tag_options.add_argument('-d', '--delete', help='Delete the tag from all repos', action="store_true")
-    tag_options.add_argument('-f', '--force', help='Override the tag if previously exists', action="store_true")
-    tag_options.add_argument('-c', '--check', help='Check if the repository images with the given tag exists', action="store_true")
-    parser.add_argument('-m', '--manifest', help='Path to manifest file', type=str, default="./assisted-installer.yaml")
+    tag_options.add_argument("-d", "--delete", help="Delete the tag from all repos", action="store_true")
+    tag_options.add_argument("-f", "--force", help="Override the tag if previously exists", action="store_true")
+    tag_options.add_argument(
+        "-c", "--check", help="Check if the repository images with the given tag exists", action="store_true"
+    )
+    parser.add_argument("-m", "--manifest", help="Path to manifest file", type=str, default="./assisted-installer.yaml")
     args = parser.parse_args()
     if args.delete:
         untag_all(args.manifest, args.tag)

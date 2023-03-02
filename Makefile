@@ -50,7 +50,7 @@ pylint:
 	pylint release/ tools/check_ai_images.py tools/jira_client tests/
 
 isort:
-	isort --check-only release/ tools/ tests/
+	isort --profile black --check-only release/ tools/ tests/
 
 ###########
 # Release #

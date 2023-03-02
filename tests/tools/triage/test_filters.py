@@ -33,7 +33,9 @@ def test_create_signature_filter():
     root_issue_key = "MGMT-0000"
     jira_client = Mock()
     jira_client.issue = Mock(return_value=get_mock_issue(root_issue_key))
-    triage_filter = Filters.create_filter(jira_client, "signatures", "master_failed_to_pull_ignition_signature", root_issue_key, "my message")
+    triage_filter = Filters.create_filter(
+        jira_client, "signatures", "master_failed_to_pull_ignition_signature", root_issue_key, "my message"
+    )
     assert isinstance(triage_filter, SignatureFilter)
     assert triage_filter.root_issue.key == root_issue_key
     jira_client.issue.assert_called_with(root_issue_key)
@@ -163,11 +165,13 @@ def test_get_triage_issue_filtered_by_signature():
     ]
     triage_issues = Filters.get_triage_issues(issues, filters)
     assert len(list(triage_issues)) == 2
-    jira_client.comments.assert_has_calls([
-        call(issues[1]),
-        call(issues[2]),
-        call(issues[3]),
-    ])
+    jira_client.comments.assert_has_calls(
+        [
+            call(issues[1]),
+            call(issues[2]),
+            call(issues[3]),
+        ]
+    )
 
 
 def test_close_triage_issues():
@@ -190,8 +194,10 @@ def test_close_triage_issues():
     ]
     jira_api = Mock()
     Filters.close_triage_issues(jira_api, triage_issues)
-    jira_api.link_and_close_issue.assert_has_calls([
-        call(triage_issues[0].issue, triage_issues[0].root_issue),
-        call(triage_issues[1].issue, triage_issues[1].root_issue),
-        call(triage_issues[2].issue, triage_issues[2].root_issue),
-    ])
+    jira_api.link_and_close_issue.assert_has_calls(
+        [
+            call(triage_issues[0].issue, triage_issues[0].root_issue),
+            call(triage_issues[1].issue, triage_issues[1].root_issue),
+            call(triage_issues[2].issue, triage_issues[2].root_issue),
+        ]
+    )
