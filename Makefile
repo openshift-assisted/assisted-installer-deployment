@@ -36,6 +36,7 @@ black:
 
 format:
 	black tools/
+	isort --profile black tools/ tests/
 
 flake8:
 	flake8 .
