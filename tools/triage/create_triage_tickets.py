@@ -17,7 +17,6 @@ from tools.triage.add_triage_signature import (
     CUSTOM_FIELD_DOMAIN,
     CUSTOM_FIELD_IGNORED_DOMAINS,
     custom_field_name,
-    days_ago,
     process_ticket_with_signatures,
 )
 from tools.triage.common import (
@@ -25,6 +24,7 @@ from tools.triage.common import (
     get_cluster_logs_base_url,
     get_or_create_triage_ticket,
 )
+from tools.utils import days_ago
 
 DEFAULT_DAYS_TO_HANDLE = 30
 DEFAULT_DAYS_TO_ADD_SIGNATURES = 3
