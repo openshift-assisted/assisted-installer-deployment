@@ -13,12 +13,6 @@ def devnull_stream():
         yield devnull
 
 
-def get_mock_issue(key="foobar"):
-    issue = Mock()
-    issue.key = key
-    return issue
-
-
 class MockAttributeErrorJiraClient:
     pass
 
@@ -42,7 +36,7 @@ def test_should_not_proxy_calls_to_real_jira_client_when_calling_create_issue_li
     mock_jira_client = Mock()
     mock_jira_client.create_issue_link = Mock(return_value=[])
     jira_dryrun_client = JiraDryRunClient(jira_client=mock_jira_client, dry_run_stream=devnull_stream)
-    jira_dryrun_client.create_issue_link(link_name="link_name", issue=get_mock_issue(), root_issue=get_mock_issue())
+    jira_dryrun_client.create_issue_link(link_name="link_name", issue_key="issue_key", root_issue_key="root_issue_key")
     mock_jira_client.create_issue_link.assert_not_called()
 
 
@@ -50,5 +44,5 @@ def test_should_not_proxy_calls_to_real_jira_client_when_calling_transition_issu
     mock_jira_client = Mock()
     mock_jira_client.transition_issue = Mock(return_value=[])
     jira_dryrun_client = JiraDryRunClient(jira_client=mock_jira_client, dry_run_stream=devnull_stream)
-    jira_dryrun_client.transition_issue(issue=get_mock_issue(), target_status=CLOSED_STATUS)
+    jira_dryrun_client.transition_issue(issue_key="issue_key", target_status=CLOSED_STATUS)
     mock_jira_client.transition_issue.assert_not_called()
