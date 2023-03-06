@@ -36,8 +36,8 @@ DEFAULT_DAYS_TO_HANDLE = 30
 SUMMARY_PATTERN = r"cloud\.redhat\.com failure: (?P<failure_id>.+)"
 
 
-NEW_LOG_BUNDLE_PATH = "*_bootstrap_*.tar/*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/"
-OLD_LOG_BUNDLE_PATH = "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*/"
+NEW_LOG_BUNDLE_PATH = "*_bootstrap_*.tar/*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*"
+OLD_LOG_BUNDLE_PATH = "*_bootstrap_*.tar.gz/logs_host_*/log-bundle-*.tar.gz/log-bundle-*"
 
 FIELD_LABELS = "labels"
 CUSTOM_FIELD_USER = "12319044"
@@ -213,25 +213,25 @@ def get_host_log_file(triage_logs_tar, host_id, filename):
     old_logs_path = f"{hostname}.tar.gz/logs_host_{host_id}/{filename}"
     try:
         agent_logs = triage_logs_tar.get(new_logs_path)
+        logger.debug("Found logs under the new location %s", new_logs_path)
+        return agent_logs
     except FileNotFoundError:  # backward compatibility
         # TODO(MGMT-13705): Remove this when MGMT-13454 is in production
-        logger.warning(f"Could not find logs under {new_logs_path}, attempting {old_logs_path}")
+        logger.debug("Searching logs under the old location %s", old_logs_path)
         return triage_logs_tar.get(old_logs_path)
-
-    return agent_logs
 
 
 def get_journal(triage_logs_tar, host_ip, journal_file):
-    new_logs_path = NEW_LOG_BUNDLE_PATH + f"control-plane/{host_ip}/journals/{journal_file}"
-    old_logs_path = OLD_LOG_BUNDLE_PATH + f"control-plane/{host_ip}/journals/{journal_file}"
+    new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/control-plane/{host_ip}/journals/{journal_file}"
+    old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/control-plane/{host_ip}/journals/{journal_file}"
     try:
         logs = triage_logs_tar.get(new_logs_path)
+        logger.debug("Found logs under the new location %s", new_logs_path)
+        return logs
     except FileNotFoundError:  # backward compatibility
         # TODO(MGMT-13705): Remove this when MGMT-13454 is in production
-        logger.warning(f"Could not find the journal log under {new_logs_path}, attempting {old_logs_path}")
+        logger.debug("Searching logs under the old location %s", old_logs_path)
         return triage_logs_tar.get(old_logs_path)
-
-    return logs
 
 
 def get_events_by_host(logs_url, cluster_id):
@@ -1136,12 +1136,13 @@ class ApiExpiredCertificateSignature(ErrorSignature):
             self._update_triaging_ticket(report)
 
     def _process_ticket(self, url, issue_key):
-        new_logs_path = NEW_LOG_BUNDLE_PATH + "bootstrap/containers/bootstrap-control-plane/kube-apiserver.log"
-        old_logs_path = OLD_LOG_BUNDLE_PATH + "bootstrap/containers/bootstrap-control-plane/kube-apiserver.log"
+        new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/bootstrap/containers/bootstrap-control-plane/kube-apiserver.log"
+        old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/bootstrap/containers/bootstrap-control-plane/kube-apiserver.log"
         try:
             self._process_ticket_helper(url, new_logs_path)
+            logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
-            logger.warning(f"Could not find the kube-apiserver log under {new_logs_path}, attempting {old_logs_path}")
+            logger.debug("Searching logs under the old location %s", old_logs_path)
             self._process_ticket_helper(url, old_logs_path)
 
 
@@ -1858,12 +1859,13 @@ class DualStackBadRoute(ErrorSignature):
             )
 
     def _process_ticket(self, url, issue_key):
-        new_logs_path = NEW_LOG_BUNDLE_PATH + "control-plane/*/containers/ovnkube-node-*.log"
-        old_logs_path = OLD_LOG_BUNDLE_PATH + "control-plane/*/containers/ovnkube-node-*.log"
+        new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/control-plane/*/containers/ovnkube-node-*.log"
+        old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/control-plane/*/containers/ovnkube-node-*.log"
         try:
             self._process_ticket_helper(url, new_logs_path)
+            logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
-            logger.warning(f"Could not find the ovnkube-node log under {new_logs_path}, attempting {old_logs_path}")
+            logger.debug("Searching logs under the old location %s", old_logs_path)
             self._process_ticket_helper(url, old_logs_path)
 
 
@@ -1961,12 +1963,13 @@ class NodeStatus(Signature):
         self._update_triaging_ticket(report)
 
     def _process_ticket(self, url, issue_key):
-        new_logs_path = NEW_LOG_BUNDLE_PATH + "resources/nodes.json"
-        old_logs_path = OLD_LOG_BUNDLE_PATH + "resources/nodes.json"
+        new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/resources/nodes.json"
+        old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/resources/nodes.json"
         try:
             report = self._process_ticket_helper(url, new_logs_path)
+            logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
-            logger.warning(f"Could not find nodes.json under {new_logs_path}, attempting {old_logs_path}")
+            logger.debug("Searching logs under the old location %s", old_logs_path)
             return self._process_ticket_helper(url, old_logs_path)
         return report
 
@@ -2094,12 +2097,13 @@ class DualstackrDNSBug(ErrorSignature):
             )
 
     def _process_ticket(self, url, issue_key):
-        new_logs_path = NEW_LOG_BUNDLE_PATH + "bootstrap/containers/kube-apiserver-*.log"
-        old_logs_path = OLD_LOG_BUNDLE_PATH + "bootstrap/containers/kube-apiserver-*.log"
+        new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/bootstrap/containers/kube-apiserver-*.log"
+        old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/bootstrap/containers/kube-apiserver-*.log"
         try:
             self._process_ticket_helper(url, new_logs_path)
+            logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
-            logger.warning(f"Could not find kube-apiserver logs under {new_logs_path}, attempting {old_logs_path}")
+            logger.debug("Searching logs under the old location %s", old_logs_path)
             self._process_ticket_helper(url, old_logs_path)
 
 
@@ -2461,12 +2465,13 @@ class MissingOSTreePivot(ErrorSignature):
             )
 
     def _process_ticket(self, url, issue_key):
-        new_logs_path = NEW_LOG_BUNDLE_PATH + "control-plane"
-        old_logs_path = OLD_LOG_BUNDLE_PATH + "control-plane"
+        new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/control-plane"
+        old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/control-plane"
         try:
             self._process_ticket_helper(url, new_logs_path)
+            logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
-            logger.warning(f"Could not find the host log under {new_logs_path}, attempting {old_logs_path}")
+            logger.debug("Searching logs under the old location %s", old_logs_path)
             self._process_ticket_helper(url, old_logs_path)
 
 
@@ -2536,12 +2541,13 @@ class ControllerFailedToStart(ErrorSignature):
             )
 
     def _process_ticket(self, url, issue_key):
-        new_logs_path = NEW_LOG_BUNDLE_PATH + "resources/pods.json"
-        old_logs_path = OLD_LOG_BUNDLE_PATH + "resources/pods.json"
+        new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/resources/pods.json"
+        old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/resources/pods.json"
         try:
             self._process_ticket_helper(url, new_logs_path)
+            logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
-            logger.warning(f"Could not find the host log under {new_logs_path}, attempting {old_logs_path}")
+            logger.debug("Searching logs under the old location %s", old_logs_path)
             self._process_ticket_helper(url, old_logs_path)
 
 
@@ -2575,14 +2581,13 @@ class MachineConfigDaemonErrorExtracting(ErrorSignature):
             )
 
     def _process_ticket(self, url, issue_key):
-        new_logs_path = NEW_LOG_BUNDLE_PATH + "control-plane/*/journals/machine-config-daemon-firstboot.log"
-        old_logs_path = OLD_LOG_BUNDLE_PATH + "control-plane/*/journals/machine-config-daemon-firstboot.log"
+        new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/control-plane/*/journals/machine-config-daemon-firstboot.log"
+        old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/control-plane/*/journals/machine-config-daemon-firstboot.log"
         try:
             self._process_ticket_helper(url, new_logs_path)
+            logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
-            logger.warning(
-                f"Could not find the machine-config-daemon-firstboot log under {new_logs_path}, attempting {old_logs_path}"
-            )
+            logger.debug("Searching logs under the old location %s", old_logs_path)
             self._process_ticket_helper(url, old_logs_path)
 
 
