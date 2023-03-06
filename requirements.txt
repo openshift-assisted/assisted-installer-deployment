@@ -8,7 +8,7 @@ async-timeout==4.0.2
     # via redis
 attrs==22.2.0
     # via pytest
-cachecontrol[filecache]==0.12.11
+cachecontrol==0.12.11
     # via insights-core
 certifi==2022.12.7
     # via requests
@@ -20,7 +20,7 @@ charset-normalizer==2.0.12
     # via requests
 colorlog==4.7.2
     # via -r requirements.in
-cryptography==39.0.0
+cryptography==39.0.1
     # via secretstorage
 decorator==4.4.2
     # via
@@ -55,9 +55,7 @@ jira==3.1.1
 keyring==23.13.1
     # via jira
 lockfile==0.12.2
-    # via
-    #   cachecontrol
-    #   insights-core
+    # via insights-core
 markupsafe==2.1.2
     # via jinja2
 more-itertools==9.0.0
