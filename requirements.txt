@@ -8,7 +8,7 @@ async-timeout==4.0.2
     # via redis
 attrs==22.2.0
     # via pytest
-cachecontrol==0.12.11
+cachecontrol[redis]==0.12.11
     # via insights-core
 certifi==2022.12.7
     # via requests
@@ -94,7 +94,9 @@ pyyaml==6.0
     #   -r requirements.in
     #   insights-core
 redis==4.4.2
-    # via insights-core
+    # via
+    #   cachecontrol
+    #   insights-core
 requests==2.26.0
     # via
     #   -r requirements.in
@@ -122,6 +124,8 @@ six==1.16.0
     #   insights-core
     #   python-dateutil
     #   python-jenkins
+slack-sdk==3.19.2
+    # via -r requirements.in
 tabulate==0.8.9
     # via -r requirements.in
 tomli==2.0.1

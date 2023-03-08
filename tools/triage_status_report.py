@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import dataclasses
-import json
 import os
 import sys
 from typing import List
 from urllib import parse
 
-import requests
+from slack_sdk import WebhookClient
 
 from tools.jira_client import JiraClientFactory
 
@@ -65,15 +64,65 @@ def _parse_issue_data(issue):
     return IssueData(key=key, url=url, user=user, email_domain=email_domain, features=features)
 
 
-def _post_message(webhook, text):
+def _split_to_messages(header, table, size_limit):
+    if len(table) <= size_limit:
+        yield [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": header,
+                },
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "```{}```".format("\n".join(table)),
+                },
+            },
+        ]
+
+        return
+
+    yield [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": header,
+            },
+        }
+    ]
+
+    for i in range(0, len(table), size_limit):
+        yield [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "```{}```".format("\n".join(table[i : i + size_limit])),
+                },
+            }
+        ]
+
+
+def _post_message(webhook, header, table):
     if webhook is None:
         # dry-run mode, just printing it raw
-        print(text)
-    else:
-        response = requests.post(webhook, data=json.dumps({"text": text}), headers={"Content-type": "application/json"})
-        response.raise_for_status()
+        for row in [header] + table:
+            print(row)
 
-        print("Message sent successfully!")
+        return
+
+    webhook_client = WebhookClient(webhook)
+
+    for message in _split_to_messages(header, table, size_limit=7):
+        response = webhook_client.send(blocks=message)
+        if response.status_code >= 400:
+            raise RuntimeError(f"Slack returned status code {response.status_code}. Reason: {response.body}")
+
+    print("Messages sent successfully!")
 
 
 def _get_filter_view(jql: str) -> str:
@@ -101,16 +150,13 @@ def triage_status_report(jira_client, time_duration, webhook):
         raise RuntimeError(f"Failed parsing all jira issues. Had {len(errors)} errors")
 
     filter_url = _get_filter_view(jira_filter)
-    text = f"There are <{filter_url}|{len(jira_issues)} new triage tickets> but please focus on <{ocp_4_12}|these> from the past week because we had a low success rate with 4.12 clusters recently\n"
+    header = f"There are <{filter_url}|{len(jira_issues)} new triage tickets> but please focus on <{ocp_4_12}|these> from the past week because we had a low success rate with 4.12 clusters recently"
 
-    table = ""
+    table = []
     for issue in sorted(issues):
-        table += f"<{issue.url}|{issue.key}>   {issue.user:<15} {issue.email_domain:<15} {issue.features}\n"
+        table.append(f"<{issue.url}|{issue.key}>   {issue.user:<15} {issue.email_domain:<15} {issue.features}")
 
-    if table:
-        text += "```{}```".format(table)
-
-    _post_message(webhook, text)
+    _post_message(webhook, header, table)
 
 
 def main():

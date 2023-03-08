@@ -18,3 +18,4 @@ pytest==7.1.1
 networkx==2.5.1
 insights-core>3.0.276
 pyfakefs==5.1.0
+slack_sdk==3.19.2
