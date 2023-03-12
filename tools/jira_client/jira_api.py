@@ -1,12 +1,12 @@
 import retry
-from jira.exceptions import JIRAError
+from jira import JIRA, JIRAError
 
 from .consts import CLOSED_STATUS
 
 
 class JiraAPI:
     def __init__(self, jira_client, logger) -> None:
-        self._jira_client = jira_client
+        self._jira_client: JIRA = jira_client
         self._logger = logger
 
     def link_issue_to_root_issue(self, issue, root_issue):

@@ -194,8 +194,7 @@ class JiraTool:
     def link_tickets(self, ticket, to_ticket):
         try:
             logger.info("linking %s to %s", to_ticket.key, ticket.key)
-            res = self._jira.create_issue_link("relates to", ticket, to_ticket)
-            res.raise_for_status()
+            self._jira.create_issue_link("relates to", ticket.key, to_ticket.key)
         except Exception:
             logger.exception("Error linking to %s", to_ticket.key)
 

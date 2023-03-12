@@ -35,8 +35,8 @@ def close_custom_domain_user_ticket(jira_client, issue_key):
     issue = jira_client.issue(issue_key)
     if issue.raw["fields"].get(custom_field_name(CUSTOM_FIELD_DOMAIN)) in CUSTOM_FIELD_IGNORED_DOMAINS:
         logger.info("closing custom user's issue: %s", issue_key)
-        jira_client.transition_issue(issue, CLOSED_STATUS)
-        jira_client.add_comment(issue, "Automatically closing the issue for the specified domain.")
+        jira_client.transition_issue(issue_key, CLOSED_STATUS)
+        jira_client.add_comment(issue_key, "Automatically closing the issue for the specified domain.")
 
 
 def main(args):
