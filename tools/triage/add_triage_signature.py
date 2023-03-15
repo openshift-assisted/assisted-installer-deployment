@@ -1103,6 +1103,82 @@ class ApiInvalidCertificateSignature(ErrorSignature):
             self._update_triaging_ticket(report)
 
 
+class NameserverInClusterNetwork(ErrorSignature):
+    NAMESERVER_PATTERN = "^nameserver (.*)$"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            function_impact_label="bad_nameserver",
+            comment_identifying_string="h1. Nameserver in internal network",
+        )
+
+    def _get_resolv_conf_files(self, url, base_path):
+        files = []
+        try:
+            triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"])
+        except FileNotFoundError:
+            return files
+
+        # Fetch control-plane directory from the bootstrap log bundle
+        control_plane_dir = triage_logs_tar.get(f"{base_path}/control-plane/")
+        for node_dir in control_plane_dir.iterdir():
+            try:
+                node_ip = os.path.basename(node_dir)
+                # Fetch resolv.conf file for this host
+                resolvconf = triage_logs_tar.get(f"{base_path}/control-plane/{node_ip}/network/resolv.conf")
+                files.append(resolvconf)
+            except FileNotFoundError:
+                logger.error(f"could not find resolv.conf for {node_ip}")
+                continue
+
+        # Fetch resolv.conf from the bootstrap host
+        resolvconf = triage_logs_tar.get(f"{base_path}/bootstrap/network/resolv.conf")
+        files.append(resolvconf)
+
+        return files
+
+    def _check_ip_in_cidr(self, ip_str, cidr_str):
+        ip_address = ipaddress.ip_address(ip_str)
+        network = ipaddress.ip_network(cidr_str, strict=False)
+        return ip_address in network
+
+    def _get_nameservers(self, url, base_path):
+        nameservers = set()
+        for resolvconf in self._get_resolv_conf_files(url, base_path):
+            for line in resolvconf.splitlines():
+                match = re.search(self.NAMESERVER_PATTERN, line)
+                if match:
+                    nameservers.add(match.group(1))
+
+        return nameservers
+
+    def _process_ticket_helper(self, path, url, issue_key):
+        md = get_metadata_json(url)
+        cidrs = [network["cidr"] for network in md["cluster"]["cluster_networks"]]
+
+        report = ""
+        for nameserver in self._get_nameservers(url, path):
+            for cidr in cidrs:
+                if self._check_ip_in_cidr(nameserver, cidr):
+                    report += f"user defined nameserver {nameserver} which overlaps with the cluster nw {cidr}\n"
+
+        if len(report) != 0:
+            self._update_triaging_ticket(report)
+
+    def _process_ticket(self, url, issue_key):
+        try:
+            self._process_ticket_helper(NEW_LOG_BUNDLE_PATH, url, issue_key)
+        except FileNotFoundError:
+            try:
+                self._process_ticket_helper(OLD_LOG_BUNDLE_PATH, url, issue_key)
+                logger.info("found logs under the old location %s", OLD_LOG_BUNDLE_PATH)
+            except FileNotFoundError:
+                logger.debug("no logs-bundle available")
+                return
+
+
 class ApiExpiredCertificateSignature(ErrorSignature):
     LOG_PATTERN = re.compile("x509: certificate has expired or is not yet valid.*")
 
@@ -2589,6 +2665,7 @@ class MachineConfigDaemonErrorExtracting(ErrorSignature):
 JIRA_SERVER = "https://issues.redhat.com"
 ALL_SIGNATURES = [
     OpenShiftVersionSignature,
+    NameserverInClusterNetwork,
     FailureDescription,
     SlowImageDownload,
     AllInstallationAttemptsSignature,
