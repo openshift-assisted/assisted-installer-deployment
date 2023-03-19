@@ -19,7 +19,13 @@ NEW_TICKETS_FILTER = (
 )
 OCP_4_12_LAST_WEEK = (
     "project = AI-Triage AND component = Cloud-Triage "
-    'AND created >= -7d AND affectedVersion = "OpenShift 4.12" '
+    'AND created >= -7d AND affectedVersion = "OpenShift 4.12" AND status = "New" '
+    "ORDER BY key DESC"
+)
+
+OCP_MULTI_NODE_LAST_WEEK = (
+    "project = AI-Triage AND component = Cloud-Triage "
+    'AND created >= -7d AND status = "New" AND labels != FEATURE-SNO '
     "ORDER BY key DESC"
 )
 
@@ -134,7 +140,7 @@ def triage_status_report(jira_client, time_duration, webhook):
     jira_issues = jira_client.search_issues(jira_filter)
 
     # Temporary focus
-    ocp_4_12 = _get_filter_view(OCP_4_12_LAST_WEEK)
+    ocp_multi_node = _get_filter_view(OCP_MULTI_NODE_LAST_WEEK)
     issues = []
     errors = []
     for issue in jira_issues:
@@ -150,7 +156,7 @@ def triage_status_report(jira_client, time_duration, webhook):
         raise RuntimeError(f"Failed parsing all jira issues. Had {len(errors)} errors")
 
     filter_url = _get_filter_view(jira_filter)
-    header = f"There are <{filter_url}|{len(jira_issues)} new triage tickets> but please focus on <{ocp_4_12}|these> from the past week because we had a low success rate with 4.12 clusters recently"
+    header = f"There are <{filter_url}|{len(jira_issues)} new triage tickets> but please focus on <{ocp_multi_node}|these> from the past week because we had a low success rate with multi node clusters recently"
 
     table = []
     for issue in sorted(issues):
