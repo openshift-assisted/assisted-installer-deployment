@@ -7,10 +7,10 @@ JIRA_PROJECT = "AITRIAGE"
 JIRA_SUMMARY = "cloud.redhat.com failure: {failure_id}"
 LOGS_COLLECTOR = "http://assisted-logs-collector.usersys.redhat.com"
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
-@retry(exceptions=jira.exceptions.JIRAError, tries=3, delay=10)
+@retry(exceptions=jira.exceptions.JIRAError, tries=3, delay=10, logger=logger)
 def get_or_create_triage_ticket(jira_client: jira.JIRA, failure_id: str) -> jira.Issue:
     summary = JIRA_SUMMARY.format(failure_id=failure_id)
 
@@ -19,7 +19,7 @@ def get_or_create_triage_ticket(jira_client: jira.JIRA, failure_id: str) -> jira
     )
 
     if len(matching_issues) == 0:
-        log.info("Creating an issue for %s", summary)
+        logger.info("Creating an issue for %s", summary)
         return jira_client.create_issue(
             project=JIRA_PROJECT,
             summary=summary,
@@ -29,7 +29,7 @@ def get_or_create_triage_ticket(jira_client: jira.JIRA, failure_id: str) -> jira
         )
 
     if len(matching_issues) == 1:
-        log.debug("Using pre-existing issue %s", matching_issues[0])
+        logger.debug("Using pre-existing issue %s", matching_issues[0])
         return matching_issues[0]
 
     raise RuntimeError(

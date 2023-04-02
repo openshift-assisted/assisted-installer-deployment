@@ -61,7 +61,7 @@ class SignatureFilter(Filter):
         if root_issue:
             root_issue_key = root_issue.key
         self.signature_instance = self._signature_class_name(jira_client, root_issue_key)
-        self.jira_api = JiraAPI(jira_client, logger)
+        self.jira_api = JiraAPI(jira_client)
 
     def _get_signature_class_name(self, signature_class_alias_name):
         signature_class_alias_name = signature_class_alias_name.lower().replace("-", "").replace("_", "")
@@ -90,7 +90,7 @@ class SignatureFilter(Filter):
 
 class Filters:
     @staticmethod
-    @retry.retry(exceptions=JIRAError, tries=3, delay=2)
+    @retry.retry(exceptions=JIRAError, tries=3, delay=2, logger=logger)
     def create_filter(jira_client, filter_type, identifier, root_issue_key, message):
         root_issue = jira_client.issue(root_issue_key)
 

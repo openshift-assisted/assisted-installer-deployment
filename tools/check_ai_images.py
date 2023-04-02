@@ -14,7 +14,7 @@ logging.getLogger("__main__").setLevel(logging.INFO)
 DEFAULT_REGISTRY = "quay.io/edge-infrastructure"
 
 
-@retry(exceptions=subprocess.SubprocessError, tries=3, delay=10)
+@retry(exceptions=subprocess.SubprocessError, tries=3, delay=10, logger=logger)
 def does_image_exist(pull_spec: str) -> bool:
     cmd = ["skopeo", "inspect", "--config", f"docker://{pull_spec}"]
     return subprocess.call(cmd, stdout=subprocess.DEVNULL) == 0

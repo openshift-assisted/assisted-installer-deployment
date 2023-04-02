@@ -18,15 +18,15 @@ from tools.utils import days_ago
 DEFAULT_DAYS_TO_ATTACH_LOGS = 3
 JIRA_ATTACHMENT_MAX_SIZE = 50 * 2**20  # 50MiB
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 stream_handler = logging.StreamHandler(sys.stderr)
 stream_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-log.addHandler(stream_handler)
+logger.addHandler(stream_handler)
 
 
 def _archive_dir(directory: Path) -> Path:
     archived_file = Path(f"{directory}.tar.gz")
-    log.info("Archiving directory %s to %s", directory, archived_file)
+    logger.info("Archiving directory %s to %s", directory, archived_file)
     with tarfile.open(archived_file, "w:gz") as tar:
         tar.add(directory, directory.name)
 
@@ -34,7 +34,7 @@ def _archive_dir(directory: Path) -> Path:
 
 
 def _split_file(path: Path, chunk_size: int) -> None:
-    log.info("Splitting %s to several files", path)
+    logger.info("Splitting %s to several files", path)
     with path.open("rb") as whole_file:
         read_chunk = partial(whole_file.read, chunk_size)
         for i, chunk in enumerate(iter(read_chunk, b"")):
@@ -42,14 +42,14 @@ def _split_file(path: Path, chunk_size: int) -> None:
                 part_file.write(chunk)
 
 
-@retry.retry(exceptions=jira.JIRAError, tries=3, logger=log)
+@retry.retry(exceptions=jira.JIRAError, tries=3, logger=logger)
 def _attach_logs_for_cluster(jira_client: jira.JIRA, cluster_logs_dir: Path):
     issue = get_or_create_triage_ticket(jira_client=jira_client, failure_id=cluster_logs_dir.name)
 
     for artifact in cluster_logs_dir.iterdir():
         if artifact.is_dir():
             if Path(f"{artifact}.tar.gz").exists():
-                log.debug("Skip archiving %s as it's already archived", artifact)
+                logger.debug("Skip archiving %s as it's already archived", artifact)
             else:
                 artifact = _archive_dir(artifact)
 
@@ -58,17 +58,17 @@ def _attach_logs_for_cluster(jira_client: jira.JIRA, cluster_logs_dir: Path):
 
     for artifact in cluster_logs_dir.iterdir():
         if artifact.is_dir() or artifact.stat().st_size > JIRA_ATTACHMENT_MAX_SIZE:
-            log.debug("Skip %s as it had been replaced with other files", artifact)
+            logger.debug("Skip %s as it had been replaced with other files", artifact)
             continue
 
         matching_attachments = [
             attachment for attachment in issue.fields.attachment if artifact.name == attachment.filename
         ]
         if len(matching_attachments) > 0 and matching_attachments[0].size == artifact.stat().st_size:
-            log.debug("File %s already exists at %s. Skipping upload", artifact, issue)
+            logger.debug("File %s already exists at %s. Skipping upload", artifact, issue)
             continue
 
-        log.info("Attaching %s to issue %s", artifact, issue)
+        logger.info("Attaching %s to issue %s", artifact, issue)
         jira_client.add_attachment(issue=issue, attachment=str(artifact))
 
 
@@ -80,7 +80,7 @@ def attach_logs_in_jira(source_dir: Path, jira_access_token: str, max_days: Opti
     for cluster_logs_dir in source_dir.iterdir():
         date = cluster_logs_dir.name.split("_")[0]
         if max_days is not None and days_ago(date) > max_days:
-            log.debug(
+            logger.debug(
                 "Ignoring old cluster dir %s as it was created more than %d days ago", cluster_logs_dir.name, max_days
             )
             continue
@@ -92,7 +92,7 @@ def attach_logs_in_jira(source_dir: Path, jira_access_token: str, max_days: Opti
 
     if errors:
         for error in errors:
-            log.error("Error while attaching logs in Jira", exc_info=error)
+            logger.error("Error while attaching logs in Jira", exc_info=error)
 
         raise ExceptionGroup("Failed attaching logs for all issues", errors)
 
@@ -120,9 +120,9 @@ def main():
     args = parser.parse_args()
 
     if args.verbose:
-        log.setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
     else:
-        log.setLevel(logging.INFO)
+        logger.setLevel(logging.INFO)
 
     attach_logs_in_jira(
         source_dir=Path(args.source_dir),

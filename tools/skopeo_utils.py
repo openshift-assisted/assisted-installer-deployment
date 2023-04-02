@@ -1,12 +1,15 @@
 import json
+import logging
 import re
 import subprocess
 
 from retry import retry
 
+logger = logging.getLogger(__name__)
+
 
 class Skopeo:
-    @retry(exceptions=subprocess.SubprocessError, tries=3, delay=10)
+    @retry(exceptions=subprocess.SubprocessError, tries=3, delay=10, logger=logger)
     def get_image_tags_by_pattern(self, repository: str, pattern: str) -> list[str]:
         """Returns prefixed tags ordered by most recent to least recent"""
         docker_uri = f"docker://{repository}"
