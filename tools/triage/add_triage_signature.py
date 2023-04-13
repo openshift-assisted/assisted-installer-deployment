@@ -2686,6 +2686,44 @@ class MachineConfigDaemonErrorExtracting(ErrorSignature):
             self._process_ticket_helper(url, old_logs_path)
 
 
+class ConfiguringHostAndMachineConfigServerError(ErrorSignature):
+    """
+    Looks for a host that timed out in "Configuring" in addition to errors in the MCS logs
+    """
+
+    mcs_error = re.compile(r"couldn't get config for req")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            function_impact_label="configuring_host_mcs_error",
+            comment_identifying_string="h1. machine-config-server failed to serve ignition",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        cluster = get_metadata_json(url)["cluster"]
+
+        if not any(host["progress"]["current_stage"] == "Configuring" for host in cluster["hosts"]):
+            return
+
+        try:
+            mco_pods = get_triage_logs_tar(triage_url=url, cluster_id=cluster["id"]).get(
+                "controller_logs.tar.gz/must-gather.tar.gz/must-gather.local.*/*/namespaces/openshift-machine-config-operator/pods"
+            )
+        except FileNotFoundError:
+            logger.debug("failed to find mcs pods in must-gather")
+            return
+
+        for log in mco_pods.glob("machine-config-server-*/**/*.log"):
+            with open(log, "r") as f:
+                if self.mcs_error.search(f.read()):
+                    self._update_triaging_ticket(
+                        'machine-config-server logs seem to indicate a failure to serve ignition. This may be why hosts are stuck in "Configuring"'
+                    )
+                    break
+
+
 ############################
 # Common functionality
 ############################
@@ -2737,6 +2775,7 @@ ALL_SIGNATURES = [
     MachineConfigDaemonErrorExtracting,
     ControllerFailedToStart,
     UserHasLoggedIntoCluster,
+    ConfiguringHostAndMachineConfigServerError,
 ]
 
 ############################
