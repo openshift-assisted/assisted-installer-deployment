@@ -176,8 +176,6 @@ def main(
 
         for repo, _ in to_manifest.items():
             if not requested_repos or os.path.basename(repo) in requested_repos:
-                if repo == "openshift-assisted/assisted-ui" and from_commit == "v1.0.12.1":
-                    continue
                 repo_to_commit = get_commit_from_manifest(to_manifest, repo)
                 repo_from_commit = get_commit_from_manifest(from_manifest, repo)
                 keys = get_issues_list_for_repo(repo, repo_from_commit, repo_to_commit)
@@ -261,7 +259,7 @@ if __name__ == "__main__":
         "assisted-installer",
         "assisted-service",
         "assisted-installer-agent",
-        "assisted-ui",
+        "assisted-installer-ui",
         "assisted-image-service",
     ]
     parser = argparse.ArgumentParser()

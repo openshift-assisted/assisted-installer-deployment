@@ -51,7 +51,7 @@ def main():
         deployment = yaml.safe_load(f)
 
     for rep in deployment:
-        if rep == "openshift-assisted/assisted-ui":
+        if rep == "openshift-assisted/assisted-installer-ui":
             # for UI we're only updating when new releases are being published
             github_client = github.Github()
             ui_repo = github_client.get_repo(rep)

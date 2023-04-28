@@ -11,7 +11,7 @@ openshift/assisted-service:
   - backend
   images:
   - quay.io/edge-infrastructure/assisted-service
-openshift-assisted/assisted-ui:
+openshift-assisted/assisted-installer-ui:
   categories:
   - frontend
   revision: 822a4a08993e260466d22ac9b20429ec80be9cef
