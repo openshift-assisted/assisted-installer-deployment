@@ -18,7 +18,7 @@ openshift-assisted/assisted-ui:
   images:
   - quay.io/edge-infrastructure/assisted-installer-ui
 openshift/assisted-installer-agent:
-  revision: b6dae70b4f1c50a52d742d385ec68150ab010d0b
+  revision: 6df17d62783961136c82393e45a936a0acc44174
   categories:
   - backend
   images:
