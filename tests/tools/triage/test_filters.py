@@ -7,8 +7,7 @@ from tools.triage import Filters, LabelFilter, SignatureFilter, TriageIssue
 
 
 def get_mock_comment(body):
-    comment = Mock(body=body)
-    return comment
+    return Mock(body=body)
 
 
 def get_mock_issue(key="foobar", status="Open", labels=[]):
