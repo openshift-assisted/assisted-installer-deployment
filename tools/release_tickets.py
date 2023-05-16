@@ -13,7 +13,9 @@ from collections import defaultdict
 import yaml
 from tabulate import tabulate
 
+from tools.consts import JIRA_SERVER
 from tools.jira_client import JiraClientFactory
+from tools.utils import get_credentials_from_netrc
 
 logging.basicConfig(level=logging.WARN, format="%(levelname)-10s %(message)s")
 logger = logging.getLogger(__name__)
@@ -259,7 +261,6 @@ if __name__ == "__main__":
         "assisted-installer",
         "assisted-service",
         "assisted-installer-agent",
-        "assisted-installer-ui",
         "assisted-image-service",
     ]
     parser = argparse.ArgumentParser()
@@ -352,7 +353,12 @@ if __name__ == "__main__":
     if args.verbose:
         logger.setLevel(logging.DEBUG)
 
-    jclient = JiraClientFactory.create(args.jira_access_token)
+    if args.jira_access_token:
+        jira_access_token = args.jira_access_token
+    else:
+        _, jira_access_token = get_credentials_from_netrc(hostname=JIRA_SERVER)
+
+    jclient = JiraClientFactory.create(jira_access_token)
 
     main(
         jclient,
