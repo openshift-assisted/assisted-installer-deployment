@@ -17,6 +17,7 @@ import sys
 import tempfile
 from collections import Counter, OrderedDict, defaultdict
 from datetime import datetime
+from itertools import filterfalse
 from textwrap import dedent
 
 import colorlog
@@ -109,12 +110,26 @@ class FailedToGetInstallConfigException(Exception):
     pass
 
 
+def clean_metadata_json(md):
+    installation_start_time = dateutil.parser.isoparse(md["cluster"]["install_started_at"])
+
+    def host_deleted_before_installation_started(host):
+        if deleted_at := host.get("deleted_at"):
+            return dateutil.parser.isoparse(deleted_at) < installation_start_time
+        return False
+
+    md["cluster"]["deleted_hosts"] = list(filter(host_deleted_before_installation_started, md["cluster"]["hosts"]))
+    md["cluster"]["hosts"] = list(filterfalse(host_deleted_before_installation_started, md["cluster"]["hosts"]))
+
+    return md
+
+
 @functools.lru_cache(maxsize=1000)
 def get_metadata_json(cluster_url):
     try:
         res = requests.get("{}/metadata.json".format(cluster_url))
         res.raise_for_status()
-        return res.json()
+        return clean_metadata_json(res.json())
     except Exception as e:
         raise FailedToGetMetadataException from e
 
@@ -560,6 +575,44 @@ class HostsStatusSignature(Signature):
         if summary:
             report += "\nHost status summary:\n"
             report += summary
+        self._update_triaging_ticket(report)
+
+
+class DeletedHostsStatusSignature(Signature):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs, comment_identifying_string="h1. Deleted hosts status")
+
+    def _process_ticket(self, url, issue_key):
+        md = get_metadata_json(url)
+
+        hosts = []
+        for host in md["cluster"]["deleted_hosts"]:
+            info = host["status_info"]
+            role = host["role"]
+            inventory = json.loads(host["inventory"])
+            if host.get("bootstrap", False):
+                role = "bootstrap"
+            hosts.append(
+                OrderedDict(
+                    id=host["id"],
+                    hostname=self._get_hostname(host),
+                    progress=host["progress"]["current_stage"],
+                    status=host["status"],
+                    role=role,
+                    boot_mode=inventory.get("boot", {}).get("current_boot_mode", "N/A"),
+                    status_info=str(info),
+                    logs_info=host.get("logs_info", ""),
+                    last_checked_in_at=format_time(
+                        host.get(
+                            "checked_in_at",
+                            str(datetime.min),
+                        )
+                    ),
+                )
+            )
+
+        report = "Some hosts have been deleted before the installation started\n"
+        report += self._generate_table_for_report(hosts)
         self._update_triaging_ticket(report)
 
 
@@ -2776,6 +2829,7 @@ ALL_SIGNATURES = [
     FailureDetails,
     ComponentsVersionSignature,
     HostsStatusSignature,
+    DeletedHostsStatusSignature,
     HostsExtraDetailSignature,
     HostsInterfacesSignature,
     NetworksMtuMismatch,
