@@ -2539,7 +2539,7 @@ class UserHasLoggedIntoCluster(Signature):
     This signature will detect user login to the cluster.
     """
 
-    USER_LOGIN_PATTERN = re.compile(r"session opened for user .+ by")
+    USER_LOGIN_PATTERN = re.compile(r"pam_unix\((sshd|login):session\): session opened for user .+ by")
 
     def __init__(self, *args, **kwargs):
         super().__init__(
