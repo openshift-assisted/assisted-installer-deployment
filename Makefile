@@ -1,10 +1,22 @@
 .PHONY: all clean lint flake8 unit-test autopep8 isort pylint snapshot verify_snapshot tag_images release
 
+
+
 all: lint
 
 clean:
 	rm -rf build dist *egg-info ./__pycache__
 	find -name *.pyc -delete
+
+#
+# Triage search tool
+#
+days ?= 7
+build_image:
+	$(container_command) build . -t ticket-search-container -f Dockerfile.assisted-installer-deployment
+
+ticket_search:
+	@$(container_command) run -v ${PWD}/data/triage-tools-tickets:/data/triage-tools-tickets -e JIRA_ACCESS_TOKEN=${JIRA_ACCESS_TOKEN} -it ticket-search-container:latest ticket_search --content_search=$(content_search) --path_search $(path_search) --days $(days)
 
 ###############
 # Development #

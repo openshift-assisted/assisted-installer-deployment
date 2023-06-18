@@ -52,3 +52,15 @@ or if you prefer not to escape chars
 skipper shell (to open a shell)
 ticket_search --content_search "This is a match" --days=7 --path_search "\(.*version$\)" > data/reports/must-gather.json
 ```
+### Using the tool via docker or podman directly
+```
+# Set the appropriate container command
+export container_command=docker
+# or 
+export container_command=podman
+
+# Run this once to build the ticket search container
+make build_image
+
+# Run a search like this, you will need to escape chars such as brackets
+make ticket_search c="openshift/must-gather" p="\(.version*\)" | jq
