@@ -54,7 +54,7 @@ class JiraAttachmentDownloader:
                     content = attachment.get()
                     filename = os.path.join(destination_path, attachment.filename)
                     with open(filename, "wb") as out:
-                        out.write(content, "utf-8")
+                        out.write(bytes(content))
             else:
                 if "tickets_without_logs" not in self.workflow_data:
                     self.workflow_data["tickets_without_logs"] = 0
