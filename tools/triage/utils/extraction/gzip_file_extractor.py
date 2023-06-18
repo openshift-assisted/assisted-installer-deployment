@@ -29,7 +29,7 @@ class GzipFileExtractor(ExtractorInterface):
             basename = os.path.basename(filename)
             extraction_filename = os.path.join(destination_directory, "extracted_" + basename.replace(".", "_"))
             with open(extraction_filename, "wb") as out:
-                out.write(bytes(content, "utf-8"))
+                out.write(bytes(content))
             return destination_directory
         except OSError as e:
             message = f"An error was encountered during extraction of {filename} to {destination_directory}, the error was {e}"
