@@ -209,7 +209,7 @@ def get_triage_logs_tar(triage_url, cluster_id):
 
 def get_controller_logs(triage_url):
     return get_triage_logs_tar(triage_url=triage_url, cluster_id=get_metadata_json(triage_url)["cluster"]["id"]).get(
-        "controller_logs.tar.gz/assisted-installer-controller-*.logs"
+        "controller_logs.tar.gz/assisted-installer-controller*.logs"
     )
 
 
