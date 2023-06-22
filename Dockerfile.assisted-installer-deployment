@@ -7,7 +7,9 @@ RUN dnf install -y \
     make \
     skopeo \
     libffi-devel \
-        && dnf clean all
+        && dnf clean all \
+        && curl -L https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz | tar xzC /usr/local/bin
+
 
 RUN pip3 install pip --upgrade
 

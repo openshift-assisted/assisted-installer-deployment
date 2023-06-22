@@ -6,6 +6,7 @@ For each cluster, which does not already has a triaging Jira ticket, it creates 
 import argparse
 import logging
 import os
+import tempfile
 
 import jira
 import requests
@@ -41,6 +42,14 @@ def close_custom_domain_user_ticket(jira_client, issue_key):
 
 def main(args):
     jira_client = JiraClientFactory.create(args.jira_access_token)
+
+    pull_secret_file = args.pull_secret_file
+
+    if args.pull_secret_contents:
+        pull_secret_tmp_file = tempfile.NamedTemporaryFile(mode="w")
+        pull_secret_file = pull_secret_tmp_file.name
+        pull_secret_tmp_file.write(args.pull_secret_contents)
+        pull_secret_tmp_file.flush()
 
     res = requests.get("{}/files/".format(LOGS_COLLECTOR))
     res.raise_for_status()
@@ -79,6 +88,7 @@ def main(args):
             issue.key,
             only_specific_signatures=None,
             dry_run_file=None,
+            pull_secret_file=pull_secret_file,
         )
 
         close_custom_domain_user_ticket(jira_client, issue.key)
@@ -95,6 +105,22 @@ if __name__ == "__main__":
         required=False,
         help="PAT (personal access token) for accessing Jira",
     )
+
+    pull_secrets_group = parser.add_argument_group(title="Pull Secret")
+    pull_secrets = pull_secrets_group.add_mutually_exclusive_group(required=False)
+    pull_secrets.add_argument(
+        "--pull-secret-file",
+        default=os.environ.get("PULL_SECRET_FILE"),
+        required=False,
+        help="path to pull-secret.json file",
+    )
+    pull_secrets.add_argument(
+        "--pull-secret-contents",
+        default=os.environ.get("PULL_SECRET_CONTENTS"),
+        required=False,
+        help="pull secret acutal file contents",
+    )
+
     parser.add_argument(
         "-a",
         "--all",

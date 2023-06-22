@@ -282,6 +282,7 @@ class Signature(abc.ABC):
         dry_run_file=None,
         should_reevaluate=False,
         old_comment_string=None,
+        pull_secret_file=None,
     ):
         self._jira_client: jira.JIRA = jira_client
         self._identifing_string = comment_identifying_string
@@ -289,6 +290,7 @@ class Signature(abc.ABC):
         self.dry_run_file = dry_run_file
         self.should_reevaluate = should_reevaluate
         self.issue_key = issue_key
+        self.pull_secret_file = pull_secret_file
 
     def process_ticket(self, url, issue_key):
         try:
@@ -2626,51 +2628,109 @@ class UserHasLoggedIntoCluster(Signature):
             self._update_triaging_ticket(report)
 
 
-class MissingOSTreePivot(ErrorSignature):
+class OSTreeCommitMismatch(ErrorSignature):
     """
-    This signature looks for missing pivot URL in rpm-ostree status of the control-plane hosts
+    This signature looks that release_image ostree matches filesystem in rpm-ostree status of the control-plane hosts
     """
 
-    PIVOT_URL_PATTERN = re.compile(r"pivot://.*")
+    # machine_os_content tag name has been changing overtime, the first ones in
+    # the list have preference (since machine-os-content still exists in the
+    # release image)
+    machine_os_content_names = ["rhel-coreos", "rhel-coreos-8", "machine-os-content"]
+    # The name of the labels also have been changing
+    ostree_commit_labels = ["ostree.commit", "com.coreos.ostree-commit"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(
             *args,
             **kwargs,
-            function_impact_label="missing_pivot_ostree",
-            comment_identifying_string="h1. MCO didn't pivot some hosts",
+            function_impact_label="ostree_commit_mismatch",
+            comment_identifying_string="h1. ostree commitid does not match the one in openshift release image",
         )
 
+    @functools.lru_cache(maxsize=100)
+    def get_os_content_image(self, release_image):
+        command = ["oc", "adm", "release", "info", release_image, "-ojson"]
+        if self.pull_secret_file:
+            command += ["--registry-config", self.pull_secret_file]
+        release_json = json.loads(subprocess.check_output(command))
+        tags = release_json["references"]["spec"]["tags"]
+        tag_names = [tag["name"] for tag in tags]
+        # Get the first tag.from.name present in the release image that matches the machine_os_content list
+        # Order is important, since machine-os-content tag might be present on release_images where the correct one is rhel-coreos for example
+        for name in self.machine_os_content_names:
+            if name in tag_names:
+                for tag in tags:
+                    if tag["name"] == name:
+                        return tag["from"]["name"]
+        return None
+
+    @functools.lru_cache(maxsize=100)
+    def get_ostree_commitid_from_os_content_image(self, image):
+        command = [
+            "skopeo",
+            "inspect",
+            "--config",
+            f"docker://{image}",
+        ]
+        if self.pull_secret_file:
+            command += ["--authfile", self.pull_secret_file]
+        labels = json.loads(subprocess.check_output(command))["config"]["Labels"]
+        # Return the first occurrence that matches a label in self.ostree_commit_labels
+        return next(
+            (labels[label] for label in self.ostree_commit_labels if label in labels),
+            "Could not find label with ostree commitid",
+        )
+
+    @staticmethod
+    def status_matches_release(release_data, commitid, status):
+        if not status.startswith("quay.io"):
+            release_data = commitid
+        return status == release_data
+
     def _process_ticket_helper(self, url, path):
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"])
+        md = get_metadata_json(url)
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=md["cluster"]["id"])
+
+        if not (os_content_image := self.get_os_content_image(md["cluster"]["ocp_release_image"])):
+            self._update_triaging_ticket(
+                dedent(
+                    f"""Could not get machine-os-content value for release image {md["cluster"]["ocp_release_image"]}
+                     The following tags have been checked: {self.machine_os_content_names}"""
+                )
+            )
+            return
+
+        ostree_commitid = self.get_ostree_commitid_from_os_content_image(os_content_image)
         hosts = []
 
-        try:
-            # Fetch control-plane directory from the bootstrap log bundle
-            control_plane_dir = triage_logs_tar.get(path)
-        except FileNotFoundError:
-            return
+        control_plane_dir = triage_logs_tar.get(path)
 
         for node_dir in control_plane_dir.iterdir():
             node_ip = os.path.basename(node_dir)
-            try:
-                # Fetch ostree status file for the node
-                ostree_status_file = triage_logs_tar.get(f"{path}/{node_ip}/rpm-ostree/status")
-            except FileNotFoundError:
-                return
+            # Get rpm-ostree current deployment from status file
+            lines = triage_logs_tar.get(f"{path}/{node_ip}/rpm-ostree/status").splitlines()
 
-            # Search for the pivot URL
-            if not self.PIVOT_URL_PATTERN.search(ostree_status_file):
-                try:
-                    # Get hostname according to node_ip
-                    hostname = triage_logs_tar.get(f"{path}/{node_ip}/network/hostname.txt")
-                except FileNotFoundError:
-                    return
+            # Get the line following "Deployments:" string, and extracting the image path or ostree commit with the regex substitution
+            ostree_status_line = re.sub(
+                r"^. (ostree:\/\/|ostree-unverified-registry:|pivot:\/\/)?",
+                "",
+                next(
+                    (lines[i + 1].strip() for i, line in enumerate(lines[:-1]) if line.strip() == "Deployments:"),
+                    "Cannot get rpm-ostree deployment status",
+                ),
+            )
+
+            # Check if release_image machine-os-content matches rpmostree deployment
+            if not self.status_matches_release(os_content_image, ostree_commitid, ostree_status_line):
+                # Get hostname according to node_ip
+                hostname = triage_logs_tar.get(f"{path}/{node_ip}/network/hostname.txt")
 
                 hosts.append(
                     OrderedDict(
                         Hostname=hostname,
                         IP=node_ip,
+                        OStree_status=ostree_status_line,
                     )
                 )
 
@@ -2678,8 +2738,12 @@ class MissingOSTreePivot(ErrorSignature):
             self._update_triaging_ticket(
                 dedent(
                     f"""
-            MCO didn't invoke OSTree pivot on the following non-bootstrap control-plane hosts:
+            rpm-ostree status does not match image name or commitid from release_image
+            Check if MCO didn't invoke OSTree pivot or it failed for some reason
             [Could be related to this issue in MCO: https://issues.redhat.com/browse/OCPBUGS-5379]
+
+            Expected machine-os-config image: {os_content_image}
+            Expected ostree commitid: {ostree_commitid}
             {self._generate_table_for_report(hosts)}
             """
                 )
@@ -2688,12 +2752,17 @@ class MissingOSTreePivot(ErrorSignature):
     def _process_ticket(self, url, issue_key):
         new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/control-plane"
         old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/control-plane"
+
         try:
             self._process_ticket_helper(url, new_logs_path)
             logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
-            logger.debug("Searching logs under the old location %s", old_logs_path)
-            self._process_ticket_helper(url, old_logs_path)
+            try:
+                logger.debug("Searching logs under the old location %s", old_logs_path)
+                self._process_ticket_helper(url, old_logs_path)
+            except FileNotFoundError:
+                logger.debug("no logs-bundle available")
+                return
 
 
 class ControllerFailedToStart(ErrorSignature):
@@ -2860,7 +2929,7 @@ ALL_SIGNATURES = [
     SkipDisks,
     FailedRequestTriggersHostTimeout,
     ControllerWarnings,
-    MissingOSTreePivot,
+    OSTreeCommitMismatch,
     MachineConfigDaemonErrorExtracting,
     ControllerFailedToStart,
     UserHasLoggedIntoCluster,
@@ -3002,6 +3071,7 @@ def process_issues(
     should_reevaluate: bool,
     only_specific_signatures,
     dry_run_file,
+    pull_secret_file=None,
 ):
     logger.info(f"Found {len(issues)} tickets, processing...")
 
@@ -3029,6 +3099,7 @@ def process_issues(
             should_reevaluate=should_reevaluate,
             only_specific_signatures=only_specific_signatures,
             dry_run_file=dry_run_file,
+            pull_secret_file=pull_secret_file,
         )
 
         # Hacky solution to prevent tqdm from writing over the last line of the signature
@@ -3041,6 +3112,14 @@ def main(args):
         args.jira_access_token,
         dry_run_stream=sys.stdout if args.dry_run else None,
     )
+
+    pull_secret_file = args.pull_secret_file
+
+    if args.pull_secret_contents:
+        pull_secret_tmp_file = tempfile.NamedTemporaryFile(mode="w")
+        pull_secret_file = pull_secret_tmp_file.name
+        pull_secret_tmp_file.write(args.pull_secret_contents)
+        pull_secret_tmp_file.flush()
 
     issues = get_issues(
         jira_client,
@@ -3059,6 +3138,7 @@ def main(args):
                 should_reevaluate=args.update,
                 only_specific_signatures=args.update_signature,
                 dry_run_file=dry_run_file,
+                pull_secret_file=pull_secret_file,
             )
             logger.info(f"Dry run output written to {dry_run_file.name}")
         return
@@ -3069,6 +3149,7 @@ def main(args):
         should_reevaluate=args.update,
         only_specific_signatures=args.update_signature,
         dry_run_file=sys.stdout if args.dry_run else None,
+        pull_secret_file=pull_secret_file,
     )
 
 
@@ -3083,6 +3164,7 @@ def process_ticket_with_signatures(
     issue_key,
     only_specific_signatures,
     dry_run_file,
+    pull_secret_file=None,
     should_reevaluate=False,
 ):
     signatures = (
@@ -3100,6 +3182,7 @@ def process_ticket_with_signatures(
         logger.debug(f"Running signature {signature_class.__name__}")
         signature_class(
             jira_client=jira_client,
+            pull_secret_file=pull_secret_file,
             should_reevaluate=True if only_specific_signatures is not None else should_reevaluate,
             issue_key=issue_key,
             dry_run_file=dry_run_file,
@@ -3133,6 +3216,21 @@ def parse_args():
         default=os.environ.get("JIRA_ACCESS_TOKEN"),
         required=False,
         help="PAT (personal access token) for accessing Jira",
+    )
+
+    pull_secrets_group = parser.add_argument_group(title="Pull Secret")
+    pull_secrets = pull_secrets_group.add_mutually_exclusive_group(required=False)
+    pull_secrets.add_argument(
+        "--pull-secret-file",
+        default=os.environ.get("PULL_SECRET_FILE"),
+        required=False,
+        help="path to pull-secret.json file",
+    )
+    pull_secrets.add_argument(
+        "--pull-secret-contents",
+        default=os.environ.get("PULL_SECRET_CONTENTS"),
+        required=False,
+        help="pull secret acutal file contents",
     )
 
     selectors_group = parser.add_argument_group(title="Issues selection")
