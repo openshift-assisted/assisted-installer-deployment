@@ -7,6 +7,9 @@
   "labels": {
     "FEATURE-Validations-have-been-ignored-for-this-cluster": {
       "MGMT-13442": "Clusters on which validations are ignored are unsupported."
+    },
+   "SIGNATURE_pending_user_action": {
+     "MGMT-15127": "No need to triage installation failure due to timeout while pending user action."
     }
   }
 }
