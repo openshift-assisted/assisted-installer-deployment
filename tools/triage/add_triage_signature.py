@@ -585,6 +585,9 @@ class DeletedHostsStatusSignature(Signature):
     def _process_ticket(self, url, issue_key):
         md = get_metadata_json(url)
 
+        if len(md["cluster"]["deleted_hosts"]) < 1:
+            return
+
         hosts = []
         for host in md["cluster"]["deleted_hosts"]:
             info = host["status_info"]
