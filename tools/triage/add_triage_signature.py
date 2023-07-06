@@ -2815,6 +2815,35 @@ class MachineConfigDaemonErrorExtracting(ErrorSignature):
             self._process_ticket_helper(url, old_logs_path)
 
 
+class SNOHostnameHasEtcd(ErrorSignature):
+    """
+    Looks for https://issues.redhat.com/browse/OCPBUGS-15852
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. No etcd in SNO hostname",
+            function_impact_label="etcd_in_sno_hostname",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        cluster = get_metadata_json(url)["cluster"]
+
+        if cluster.get("high_availability_mode") != "None":
+            return
+
+        if len(cluster["hosts"]) != 1:
+            # weird hosts table
+            return
+
+        if "etcd" in self._get_hostname(cluster["hosts"][0]):
+            self._update_triaging_ticket(
+                "Hostname cannot contain etcd, see https://issues.redhat.com/browse/OCPBUGS-15852"
+            )
+
+
 ############################
 # Common functionality
 ############################
@@ -2868,6 +2897,7 @@ ALL_SIGNATURES = [
     ControllerFailedToStart,
     UserHasLoggedIntoCluster,
     IpChangedAfterReboot,
+    SNOHostnameHasEtcd,
 ]
 
 ############################
