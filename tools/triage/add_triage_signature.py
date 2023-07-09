@@ -973,6 +973,45 @@ class SlowImageDownload(ErrorSignature):
             self._update_triaging_ticket(report)
 
 
+class PendingUserAction(ErrorSignature):
+    cluster_status_regex = re.compile(r"Updated status of the cluster to (.*)")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            function_impact_label="pending_user_action",
+            comment_identifying_string="h1. Pending user action",
+            label="pending_user_action",
+        )
+
+    @classmethod
+    def _list_cluster_status_updates(cls, events):
+        def get_cluster_status(event):
+            match = cls.cluster_status_regex.match(event["message"])
+            if match:
+                return match.group(1)
+
+        return [status for event in events if (status := get_cluster_status(event)) is not None]
+
+    def _process_ticket(self, url, issue_key):
+        md = get_metadata_json(url)
+
+        cluster = md["cluster"]
+
+        cluster_id = cluster["id"]
+        events = get_cluster_installation_events(url, cluster_id)
+        cluster_status_list = self._list_cluster_status_updates(events)
+        # This is signing triage tickets where the last status is always "error"
+        if len(cluster_status_list) >= 2 and cluster_status_list[-2] == "installing-pending-user-action":
+            report = dedent(
+                """
+                        The cluster moved from Installing pending user action to error.
+                        """
+            )
+            self._update_triaging_ticket(report)
+
+
 class StorageDetailSignature(Signature):
     def __init__(self, *args, **kwargs):
         super().__init__(
@@ -2898,6 +2937,7 @@ ALL_SIGNATURES = [
     UserHasLoggedIntoCluster,
     IpChangedAfterReboot,
     SNOHostnameHasEtcd,
+    PendingUserAction,
 ]
 
 ############################
