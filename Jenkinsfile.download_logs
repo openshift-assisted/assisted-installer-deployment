@@ -20,6 +20,7 @@ pipeline {
         OFFLINE_TOKEN = credentials('admin_offline_token')
         JIRA_ACCESS_TOKEN = credentials('assisted-installer-bot-jira-access-token')
         SLACK_TOKEN = credentials('slack-token')
+        PULL_SECRET_CONTENTS = credentials('prod-pull-secret-text')
     }
     options {
       timeout(time: 90, unit: 'MINUTES')
@@ -55,7 +56,7 @@ pipeline {
         stage('Create tickets') {
             steps {
                 dir ('assisted-installer-deployment') {
-                    sh "skipper run ./tools/triage/create_triage_tickets.py --jira-access-token ${JIRA_ACCESS_TOKEN} -v"
+                  sh 'skipper run -e PULL_SECRET_CONTENTS ./tools/triage/create_triage_tickets.py --jira-access-token ${JIRA_ACCESS_TOKEN} -v'
                 }
             }
         }
