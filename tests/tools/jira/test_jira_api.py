@@ -8,7 +8,7 @@ from tools.jira_client import CLOSED_STATUS, JiraAPI
 @pytest.fixture()
 def jira_api_provider():
     client = Mock()
-    return (JiraAPI(jira_client=client, logger=Mock()), client)
+    return (JiraAPI(jira_client=client), client)
 
 
 def test_should_call_underlying_jira_client_to_link_issue_to_root_issue(jira_api_provider):

@@ -107,7 +107,7 @@ def run_using_json(path, jira_client, issues):
     filters_json = read_filters_file(path)
     filters = Filters.from_json(jira_client, filters_json)
     logger.debug(f"Filtering issues: {filters}")
-    jira_api = JiraAPI(jira_client, logger)
+    jira_api = JiraAPI(jira_client)
     Filters.close_issues_by_filters(jira_api, issues, filters)
 
 
@@ -120,7 +120,7 @@ def run_using_cli(args):
 
     issues = get_issues(jira_client, args.issue, only_recent=args.recent_issues)
 
-    jira_api = JiraAPI(jira_client, logger)
+    jira_api = JiraAPI(jira_client)
     try:
         if args.filters_json:
             filters_json = read_filters_file(args.filters_json)
