@@ -134,6 +134,17 @@ def get_metadata_json(cluster_url):
         raise FailedToGetMetadataException from e
 
 
+def get_manifests(cluster_url):
+    try:
+        res = requests.get("{}/cluster_files/manifests".format(cluster_url))
+        res.raise_for_status()
+
+        # the format is: [{"name": ..., "type": ..., "mtime": ..., "size": ...}, ...]
+        return res.json()
+    except Exception as e:
+        raise FailedToGetMetadataException from e
+
+
 @functools.lru_cache(maxsize=1000)
 def get_installconfig_yaml(cluster_url):
     try:
@@ -2952,6 +2963,26 @@ class SNOHostnameHasEtcd(ErrorSignature):
             )
 
 
+class EmptyManifest(ErrorSignature):
+    """
+    Looks for https://issues.redhat.com/browse/MGMT-15243
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. User used an empty manifest",
+            function_impact_label="empty_manifest",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        manifests = get_manifests(url)
+
+        if any(manifest.get("size", 1) == 0 for manifest in manifests):
+            self._update_triaging_ticket("see MGMT-15243")
+
+
 ############################
 # Common functionality
 ############################
@@ -3007,6 +3038,7 @@ ALL_SIGNATURES = [
     IpChangedAfterReboot,
     SNOHostnameHasEtcd,
     PendingUserAction,
+    EmptyManifest,
 ]
 
 ############################
