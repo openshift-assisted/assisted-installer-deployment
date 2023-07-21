@@ -2979,7 +2979,9 @@ class EmptyManifest(ErrorSignature):
     def _process_ticket(self, url, issue_key):
         manifests = get_manifests(url)
 
-        if any(manifest.get("size", 1) == 0 for manifest in manifests):
+        # Sometimes manifest have "empty" junk like spaces or "---", so if it's
+        # less than 30 bytes, it's probably "empty"
+        if any(manifest.get("size", 1) < 30 for manifest in manifests):
             self._update_triaging_ticket("see MGMT-15243")
 
 
