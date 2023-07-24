@@ -16,10 +16,10 @@ updates:
     groups:
       python-dependencies:
         patterns:
-          - "requirements.*"
+          - "^requirements.*"
       python-dev-dependencies:
         patterns:
-          - "dev-requirements.*"
+          - "^dev-requirements.*"
 
   - package-ecosystem: "docker"
     directory: "/"
@@ -34,4 +34,3 @@ updates:
       docker-dependencies:
         patterns:
           - "*"
-
