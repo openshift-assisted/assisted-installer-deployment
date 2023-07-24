@@ -14,10 +14,10 @@ updates:
     commit-message:
       prefix: "NO-ISSUE"
     groups:
-      python-dependencies: "PYTHON"
+      python-dependencies:
         patterns:
           - "^requirements.*"
-      python-dev-dependencies: "PYTHON-DEV"
+      python-dev-dependencies:
         patterns:
           - "^dev-requirements.*"
 
@@ -31,6 +31,6 @@ updates:
     commit-message:
       prefix: "NO-ISSUE"
     groups:
-      docker-dependencies: "DOCKER"
+      docker-dependencies:
         patterns:
           - "*"
