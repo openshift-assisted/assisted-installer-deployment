@@ -35,4 +35,4 @@ updates:
     groups:
       docker-dependencies:
         patterns:
-          - "*"
+          - "^Dockerfile*"
