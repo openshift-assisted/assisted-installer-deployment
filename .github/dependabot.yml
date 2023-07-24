@@ -17,17 +17,6 @@ updates:
       python-dependencies:
         patterns:
           - "requirements.*"
-
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    labels:
-      - "dependabot"
-      - "dev-python"
-    commit-message:
-      prefix: "NO-ISSUE"
-    groups:
       python-dev-dependencies:
         patterns:
           - "dev-requirements.*"
