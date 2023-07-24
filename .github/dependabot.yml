@@ -15,13 +15,8 @@ updates:
       prefix: "NO-ISSUE"
     groups:
       python-dependencies:
-        dependency-name: "python dependencies"
-        patterns:
-          - "^requirements.*"
-      python-dev-dependencies:
-        dependency-name: "python dev dependencies"
-        patterns:
-          - "^dev-requirements.*"
+          patterns:
+            - "*"
 
   - package-ecosystem: "docker"
     directory: "/"
