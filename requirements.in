@@ -1,5 +1,5 @@
 PyYAML==6.0
-requests==2.26.0
+requests==2.31.0
 ruamel.yaml==0.17.16
 PyGithub==1.55
 python-gitlab==2.10.1
