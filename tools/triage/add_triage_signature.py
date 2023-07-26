@@ -2633,13 +2633,11 @@ class ControllerWarnings(Signature):
         warnings = warnings_from_controller_logs(controller_logs)
         if len(warnings) != 0:
             warning_text = "\n".join(warnings[:max_shown])
-
+            warning_text = f"{{code}}{warning_text}{{code}}"
             if len(warnings) > max_shown:
-                warning_text += (
-                    "\n" + f"There are {len(warnings) - max_shown} additional warnings but they are not shown"
-                )
+                warning_text = f"{warning_text}\nh1. *{{color:red}}There are {len(warnings) - max_shown} additional warnings but they are not shown{{color}}*"
 
-            self._update_triaging_ticket("Controller logs contain some warnings:\n" + f"{{code}}{warning_text}{{code}}")
+            self._update_triaging_ticket(f"Controller logs contain some warnings:\n{warning_text}")
 
 
 class UserHasLoggedIntoCluster(Signature):
