@@ -8,7 +8,7 @@ async-timeout==4.0.2
     # via redis
 cachecontrol[filecache]==0.12.11
     # via insights-core
-certifi==2022.12.7
+certifi==2023.7.22
     # via requests
 cffi==1.15.1
     # via
