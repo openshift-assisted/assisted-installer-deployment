@@ -3047,7 +3047,7 @@ ALL_SIGNATURES = [
 
 
 def search_patterns_in_string(string, patterns):
-    if type(patterns) == str:
+    if isinstance(patterns, str):
         patterns = [patterns]
 
     combined_regex = re.compile(f'({"|".join(r".*%s.*" % pattern for pattern in patterns)})')
