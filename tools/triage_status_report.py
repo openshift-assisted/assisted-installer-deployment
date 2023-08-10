@@ -156,7 +156,7 @@ def triage_status_report(jira_client, time_duration, webhook):
         raise RuntimeError(f"Failed parsing all jira issues. Had {len(errors)} errors")
 
     filter_url = _get_filter_view(jira_filter)
-    header = f"There are <{filter_url}|{len(jira_issues)} new triage tickets> but please focus on <{ocp_multi_node}|these> from the past week because we had a low success rate with multi node clusters recently"
+    header = f"There are <{filter_url}|{len(jira_issues)} new triage tickets> (from {len({issue.user for issue in issues})} different users) but please focus on <{ocp_multi_node}|these> from the past week because we had a low success rate with multi node clusters recently"
 
     table = []
     for issue in sorted(issues):
