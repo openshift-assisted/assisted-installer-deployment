@@ -1,0 +1,53 @@
+pipeline {
+    agent any
+
+    triggers { cron('H 12 * * *') }
+
+    parameters {
+        string(name: 'ASSISTED_TEST_INFRA_REMOTE', defaultValue: 'https://github.com/openshift/assisted-test-infra', description: 'assisted-test-infra repo URL to use')
+        string(name: 'ASSISTED_TEST_INFRA_BRANCH', defaultValue: 'master', description: 'Branch on assisted-test-infra repo to use')
+        string(name: 'ASSISTED_INSTALLER_DEPLOYMENT_REMOTE', defaultValue: 'https://github.com/openshift-assisted/assisted-installer-deployment', description: 'assisted-installer-deployment repo URL to use')
+        string(name: 'ASSISTED_INSTALLER_DEPLOYMENT_BRANCH', defaultValue: 'master', description: 'Branch on assisted-installer-deployment repo to use')
+        string(name: 'LOG_LEVEL', defaultValue: 'INFO', description: 'Log level')
+        string(name: 'DAYS', defaultValue: '180', description: 'Age from which tickets are considered old and will be addressed in days')
+        string(name: 'ISSUES_LIMIT', defaultValue: '50', description: 'Maximum number of issues to update')
+    }
+
+    environment {
+        JIRA_ACCESS_TOKEN = credentials('assisted-installer-bot-jira-access-token')
+        SLACK_TOKEN = credentials('slack-token')
+    }
+
+    stages {
+        stage('Init') {
+            steps {
+                sh "rm -rf assisted-test-infra"
+                sh "git clone ${ASSISTED_TEST_INFRA_REMOTE} --branch ${ASSISTED_TEST_INFRA_BRANCH}"
+                dir ('assisted-test-infra') {
+                    sh "scripts/install_environment.sh install_skipper"
+                }
+
+                sh "rm -rf assisted-installer-deployment"
+                sh "git clone ${ASSISTED_INSTALLER_DEPLOYMENT_REMOTE} --branch ${ASSISTED_INSTALLER_DEPLOYMENT_BRANCH}"
+            }
+        }
+
+        stage('Delete old issues') {
+            steps {
+                dir ('assisted-installer-deployment') {
+                    sh "skipper run clean_old_issues --days ${DAYS} --issues-limit ${ISSUES_LIMIT} --log-level ${LOG_LEVEL} --jira-access-token ${JIRA_ACCESS_TOKEN}"
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            script {
+                def data = [text: "Attention! ${BUILD_TAG} job failed, see: ${BUILD_URL}"]
+                writeJSON(file: 'data.txt', json: data, pretty: 4)
+            }
+            sh '''curl -X POST -H 'Content-type: application/json' --data-binary "@data.txt"  https://hooks.slack.com/services/${SLACK_TOKEN}'''
+        }
+    }
+}

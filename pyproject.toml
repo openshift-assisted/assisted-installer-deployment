@@ -2,3 +2,11 @@
 line-length = 120
 target-version = ['py310']
 include = '\.pyi?$'
+
+[project]
+name = "assisted_installer_deployment"
+description = "CI/CD tools for Assisted Installer related operations"
+version = "0.0.0"
+
+[project.scripts]
+clean_old_issues = "tools.triage.clean_old_issues:main"
