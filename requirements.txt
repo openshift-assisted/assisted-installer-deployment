@@ -6,7 +6,7 @@
 #
 async-timeout==4.0.2
     # via redis
-cachecontrol[filecache]==0.12.11
+cachecontrol==0.12.11
     # via insights-core
 certifi==2022.12.7
     # via requests
@@ -34,7 +34,7 @@ idna==3.4
     # via requests
 iniconfig==2.0.0
     # via pytest
-insights-core==3.2.8
+insights-core==3.2.10
     # via -r requirements.in
 jinja2==3.1.2
     # via insights-core
@@ -43,9 +43,7 @@ jira==3.5.2
 levenshtein==0.21.1
     # via python-levenshtein
 lockfile==0.12.2
-    # via
-    #   cachecontrol
-    #   insights-core
+    # via insights-core
 markupsafe==2.1.2
     # via jinja2
 msgpack==1.0.4
@@ -73,7 +71,7 @@ pycparser==2.21
     # via cffi
 pyfakefs==5.2.3
     # via -r requirements.in
-pygithub==1.59.0
+pygithub==1.59.1
     # via -r requirements.in
 pyjwt[crypto]==2.6.0
     # via pygithub
@@ -130,7 +128,7 @@ slack-sdk==3.21.3
     # via -r requirements.in
 tabulate==0.9.0
     # via -r requirements.in
-tqdm==4.65.0
+tqdm==4.66.1
     # via -r requirements.in
 typing-extensions==4.5.0
     # via jira
