@@ -8,7 +8,7 @@ astroid==2.15.6
     # via pylint
 asttokens==2.0.5
     # via stack-data
-autopep8==1.6.0
+autopep8==2.0.2
     # via -r dev-requirements.in
 backcall==0.2.0
     # via ipython
@@ -64,7 +64,7 @@ pexpect==4.8.0
     # via ipython
 pickleshare==0.7.5
     # via ipython
-pip-tools==7.1.0
+pip-tools==7.3.0
     # via -r dev-requirements.in
 platformdirs==2.5.2
     # via
@@ -90,8 +90,6 @@ six==1.16.0
     # via asttokens
 stack-data==0.3.0
     # via ipython
-toml==0.10.2
-    # via autopep8
 tomli==2.0.1
     # via pep517
 tomlkit==0.11.0
