@@ -1,6 +1,20 @@
 .PHONY: all clean lint flake8 unit-test autopep8 isort pylint snapshot verify_snapshot tag_images release
 
+# backward compatibility 28-8-23
+ifdef container_command
+CONTAINER_CMD := $(container_command)
+endif
 
+
+CONTAINER_CMD := $(or $(CONTAINER_CMD), $(shell command -v podman 2> /dev/null))
+ifndef CONTAINER_CMD
+CONTAINER_CMD := docker
+endif
+
+TICKET_SEARCH_IMAGE := $(or $(TICKET_SEARCH_IMAGE), "ticket-search-container")
+ifdef TICKET_SEARCH_TAG
+TICKET_SEARCH_IMAGE := $(TICKET_SEARCH_IMAGE):$(TICKET_SEARCH_TAG)
+endif
 
 all: lint
 
@@ -13,10 +27,10 @@ clean:
 #
 days ?= 7
 build_image:
-	$(container_command) build . -t ticket-search-container -f Dockerfile.assisted-installer-deployment
+	$(CONTAINER_CMD) build $(CONTAINER_BUILD_EXTRA_PARAMS) -t $(TICKET_SEARCH_IMAGE) . -f Dockerfile.assisted-installer-deployment
 
 ticket_search:
-	@$(container_command) run -v ${PWD}/data/triage-tools-tickets:/data/triage-tools-tickets -e JIRA_ACCESS_TOKEN=${JIRA_ACCESS_TOKEN} -it ticket-search-container:latest ticket_search --content_search=$(content_search) --path_search $(path_search) --days $(days)
+	@$(CONTAINER_CMD) run -v ${PWD}/data/triage-tools-tickets:/data/triage-tools-tickets -e JIRA_ACCESS_TOKEN=${JIRA_ACCESS_TOKEN} -it $(TICKET_SEARCH_IMAGE) ticket_search --content_search=$(content_search) --path_search $(path_search) --days $(days)
 
 ###############
 # Development #
