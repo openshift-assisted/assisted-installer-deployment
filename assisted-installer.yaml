@@ -26,6 +26,6 @@ openshift/assisted-installer-agent:
 openshift/assisted-image-service:
   categories:
   - backend
-  revision: 32650e0357a4b6c025c9b7473cb34bfe0a698292
+  revision: 0b98ec74397b1860a55d75bc63d649f68cbc9364
   images:
   - quay.io/edge-infrastructure/assisted-image-service
