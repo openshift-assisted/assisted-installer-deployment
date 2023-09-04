@@ -6,7 +6,7 @@
 #
 async-timeout==4.0.2
     # via redis
-cachecontrol[filecache]==0.12.11
+cachecontrol[filecache,redis]==0.12.11
     # via insights-core
 certifi==2022.12.7
     # via requests
@@ -34,7 +34,7 @@ idna==3.4
     # via requests
 iniconfig==2.0.0
     # via pytest
-insights-core==3.2.8
+insights-core==3.2.14
     # via -r requirements.in
 jinja2==3.1.2
     # via insights-core
@@ -71,21 +71,21 @@ py==1.11.0
     # via retry
 pycparser==2.21
     # via cffi
-pyfakefs==5.2.3
+pyfakefs==5.2.4
     # via -r requirements.in
-pygithub==1.59.0
+pygithub==1.59.1
     # via -r requirements.in
 pyjwt[crypto]==2.6.0
     # via pygithub
 pynacl==1.5.0
     # via pygithub
-pytest==7.4.0
+pytest==7.4.1
     # via -r requirements.in
 python-dateutil==2.8.2
     # via -r requirements.in
 python-gitlab==3.15.0
     # via -r requirements.in
-python-jenkins==1.8.0
+python-jenkins==1.8.1
     # via -r requirements.in
 python-levenshtein==0.21.1
     # via -r requirements.in
@@ -96,7 +96,9 @@ pyyaml==6.0.1
 rapidfuzz==3.1.2
     # via levenshtein
 redis==4.4.2
-    # via insights-core
+    # via
+    #   cachecontrol
+    #   insights-core
 requests==2.31.0
     # via
     #   -r requirements.in
@@ -130,7 +132,7 @@ slack-sdk==3.21.3
     # via -r requirements.in
 tabulate==0.9.0
     # via -r requirements.in
-tqdm==4.65.0
+tqdm==4.66.1
     # via -r requirements.in
 typing-extensions==4.5.0
     # via jira
