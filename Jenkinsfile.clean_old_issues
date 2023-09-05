@@ -8,7 +8,7 @@ pipeline {
         string(name: 'ASSISTED_TEST_INFRA_BRANCH', defaultValue: 'master', description: 'Branch on assisted-test-infra repo to use')
         string(name: 'ASSISTED_INSTALLER_DEPLOYMENT_REMOTE', defaultValue: 'https://github.com/openshift-assisted/assisted-installer-deployment', description: 'assisted-installer-deployment repo URL to use')
         string(name: 'ASSISTED_INSTALLER_DEPLOYMENT_BRANCH', defaultValue: 'master', description: 'Branch on assisted-installer-deployment repo to use')
-        string(name: 'LOG_LEVEL', defaultValue: 'INFO', description: 'Log level')
+        string(name: 'LOG_LEVEL', defaultValue: 'DEBUG', description: 'Log level')
         string(name: 'DAYS', defaultValue: '180', description: 'Age from which tickets are considered old and will be addressed in days')
         string(name: 'ISSUES_LIMIT', defaultValue: '50', description: 'Maximum number of issues to update')
     }
