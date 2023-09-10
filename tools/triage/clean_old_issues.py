@@ -1,9 +1,10 @@
 import argparse
 import logging
 import os
-from typing import Final
+from typing import Callable, Final
 
 import jira
+from retry import retry
 
 from tools.jira_client import JiraClientFactory
 from tools.jira_client.consts import CLOSED_STATUS
@@ -51,7 +52,8 @@ def fetch_issues_from_jira(
         list of matching issues.
     """
 
-    result_list = jira_client.search_issues(
+    result_list = apply_function_with_retry(
+        jira_client.search_issues,
         f"project = {jira_project_key} AND attachments IS NOT EMPTY AND created <= -{created_before}d",
         maxResults=issues_limit,
     )
@@ -73,37 +75,55 @@ def update_issues(jira_client: jira.JIRA, issues: list[jira.Issue], logger: logg
     """
 
     errors = []
+    successfully_updated_issues: set[str] = set()
+    unsuccessfully_updated_issues: set[str] = set()
 
     for issue in issues:
-        for watcher in jira_client.watchers(issue).watchers:
+        for watcher in apply_function_with_retry(jira_client.watchers, issue).watchers:
             try:
-                jira_client.remove_watcher(issue.key, watcher.name)
+                apply_function_with_retry(jira_client.remove_watcher, issue.key, watcher.name)
                 logger.debug(f"Removed watcher {watcher.name} from issue {issue.key}.")
             except jira.JIRAError as e:
                 logger.debug(f"Failed to remove watcher {watcher.name} from issue {issue.key}: ", exc_info=str(e))
                 errors.append(e)
+                unsuccessfully_updated_issues.add(issue.key)
 
         for attachment in issue.fields.attachment:
             try:
-                jira_client.delete_attachment(attachment.id)
+                apply_function_with_retry(jira_client.delete_attachment, attachment.id)
                 logger.debug(f"Removed attachment {attachment.filename} from issue {issue.key}.")
             except jira.JIRAError as e:
                 logger.debug(
                     f"Failed to remove attachment {attachment.filename} from issue {issue.key}: ", exc_info=str(e)
                 )
                 errors.append(e)
+                unsuccessfully_updated_issues.add(issue.key)
 
         try:
-            jira_client.transition_issue(issue.key, CLOSED_STATUS)
+            apply_function_with_retry(jira_client.transition_issue, issue.key, CLOSED_STATUS)
             logger.debug(f"Closed issue {issue.key}.")
         except jira.JIRAError as e:
             logger.debug(f"Failed to close issue {issue.key}:", exc_info=str(e))
             errors.append(e)
+            unsuccessfully_updated_issues.add(issue.key)
+
+    logger.info("failed to update issues:")
+    for issue_key in unsuccessfully_updated_issues:
+        logger.info(issue_key)
+    successfully_updated_issues = {issue.key for issue in issues} - unsuccessfully_updated_issues
+    logger.info("successfully updates issues:")
+    for issue_key in successfully_updated_issues:
+        logger.info(issue_key)
 
     if errors:
         for error in errors:
             logger.exception("Error while updating issue in Jira.", exc_info=error)
         raise ExceptionGroup("Failed to update all issues.", errors)
+
+
+@retry(exceptions=jira.JIRAError, tries=3, delay=1)
+def apply_function_with_retry(function: Callable, *args, **kwargs):
+    return function(*args, **kwargs)
 
 
 def main():
@@ -157,10 +177,6 @@ def main():
     )
 
     update_issues(jira_client=jira_client, issues=issues, logger=logger)
-
-    logger.info("Successfully updated issues:")
-    for issue in issues:
-        logger.info(issue.key)
 
 
 if __name__ == "__main__":
