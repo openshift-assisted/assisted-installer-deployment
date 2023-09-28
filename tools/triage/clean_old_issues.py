@@ -80,6 +80,8 @@ def update_issues(jira_client: jira.JIRA, issues: list[jira.Issue], logger: logg
 
     for issue in issues:
         for watcher in apply_function_with_retry(jira_client.watchers, issue).watchers:
+            if not watcher.active:
+                continue
             try:
                 apply_function_with_retry(jira_client.remove_watcher, issue.key, watcher.name)
                 logger.debug(f"Removed watcher {watcher.name} from issue {issue.key}.")
