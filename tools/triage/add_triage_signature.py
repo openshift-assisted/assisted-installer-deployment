@@ -2983,6 +2983,41 @@ class EmptyManifest(ErrorSignature):
             self._update_triaging_ticket("see MGMT-15243")
 
 
+class MissingMC(ErrorSignature):
+    """
+    Looks for missing MachineConfig error in SNO
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. Missing MachineConfig issue",
+            function_impact_label="sno_missing_mc",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        cluster = get_metadata_json(url)["cluster"]
+
+        if cluster.get("high_availability_mode") != "None":
+            return
+
+        cluster_id = cluster["id"]
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+
+        try:
+            log = triage_logs_tar.get(
+                "controller_logs.tar.gz/must-gather.tar.gz/must-gather.local.*/*/cluster-scoped-resources/machineconfiguration.openshift.io/machineconfigpools/master.yaml",
+                mode="rb",
+            )
+        except FileNotFoundError:
+            return
+
+        regex = r"rendered-master-[0-9a-f]{32}.*not found"
+        if re.search(regex, log.decode("utf-8")) is not None:
+            self._update_triaging_ticket("Missing rendered MachineConfig issue detected")
+
+
 ############################
 # Common functionality
 ############################
@@ -3039,6 +3074,7 @@ ALL_SIGNATURES = [
     SNOHostnameHasEtcd,
     PendingUserAction,
     EmptyManifest,
+    MissingMC,
 ]
 
 ############################
