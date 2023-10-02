@@ -73,7 +73,7 @@ pycparser==2.21
     # via cffi
 pyfakefs==5.2.4
     # via -r requirements.in
-pygithub==1.59.1
+pygithub==2.1.1
     # via -r requirements.in
 pyjwt[crypto]==2.6.0
     # via pygithub
@@ -82,7 +82,9 @@ pynacl==1.5.0
 pytest==7.4.2
     # via -r requirements.in
 python-dateutil==2.8.2
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   pygithub
 python-gitlab==3.15.0
     # via -r requirements.in
 python-jenkins==1.8.1
@@ -135,9 +137,13 @@ tabulate==0.9.0
 tqdm==4.66.1
     # via -r requirements.in
 typing-extensions==4.5.0
-    # via jira
+    # via
+    #   jira
+    #   pygithub
 urllib3==1.26.14
-    # via requests
+    # via
+    #   pygithub
+    #   requests
 wrapt==1.14.1
     # via deprecated
 
