@@ -3018,6 +3018,68 @@ class MissingMC(ErrorSignature):
             self._update_triaging_ticket("Missing rendered MachineConfig issue detected")
 
 
+class DuplicateVIP(ErrorSignature):
+    """
+    Looks for nodes holding the same VIP
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            **kwargs,
+            comment_identifying_string="h1. VIP found in multiple nodes",
+            function_impact_label="vip_duplicate",
+        )
+
+    def _process_ticket(self, url, issue_key):
+        cluster = get_metadata_json(url)["cluster"]
+
+        # SNO doesn't need balancing
+        if cluster.get("high_availability_mode") == "None":
+            return
+
+        # VIPs are not relevant with load balancer
+        if cluster.get("user_managed_networking") == True:  # noqa: E712
+            return
+
+        vips = [vip["ip"] for vip in cluster.get("api_vips", [])]
+
+        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster["id"])
+
+        collisions = []
+        for vip in vips:
+            try:
+                non_bootstrap_with_vip = [
+                    os.path.basename(node_dir)
+                    for node_dir in triage_logs_tar.get(f"{NEW_LOG_BUNDLE_PATH}/control-plane/").iterdir()
+                    if vip
+                    in triage_logs_tar.get(
+                        f"{NEW_LOG_BUNDLE_PATH}/control-plane/{os.path.basename(node_dir)}/network/ip-addr.txt"
+                    )
+                ]
+
+                bootstrap_with_vip = [
+                    "bootstrap"
+                    for _ in [None]
+                    if vip in triage_logs_tar.get(f"{NEW_LOG_BUNDLE_PATH}/bootstrap/network/ip-addr.txt")
+                ]
+            except FileNotFoundError:
+                continue
+
+            nodes_with_vip = non_bootstrap_with_vip + bootstrap_with_vip
+
+            if len(nodes_with_vip) > 1:
+                collisions.append((vip, nodes_with_vip))
+
+        if len(collisions) > 0:
+            self._update_triaging_ticket(
+                "\n".join(
+                    f"Found duplicate VIP {vip} in control-plane hosts {' and '.join(nodes_with_vip)}"
+                    for (vip, nodes_with_vip) in collisions
+                )
+            )
+
+
 ############################
 # Common functionality
 ############################
@@ -3075,6 +3137,7 @@ ALL_SIGNATURES = [
     PendingUserAction,
     EmptyManifest,
     MissingMC,
+    DuplicateVIP,
 ]
 
 ############################
