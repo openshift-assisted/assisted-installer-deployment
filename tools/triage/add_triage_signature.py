@@ -3514,7 +3514,12 @@ class MissingMC(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        cluster = get_metadata_json(url)["cluster"]
+        cluster = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )["cluster"]
 
         if cluster.get("high_availability_mode") != "None":
             return
@@ -3549,7 +3554,12 @@ class DuplicateVIP(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        cluster = get_metadata_json(url)["cluster"]
+        cluster = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )["cluster"]
 
         # SNO doesn't need balancing
         if cluster.get("high_availability_mode") == "None":
