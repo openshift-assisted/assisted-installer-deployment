@@ -7,13 +7,15 @@ pipeline {
         string(name: 'ASSISTED_INSTALLER_DEPLOYMENT_BRANCH', defaultValue: 'master', description: 'Branch on assisted-installer-deployment repo to use')
         string(name: 'ASSISTED_TEST_INFRA_REMOTE', defaultValue: 'https://github.com/openshift/assisted-test-infra', description: 'assisted-test-infra repo URL to use')
         string(name: 'ASSISTED_TEST_INFRA_BRANCH', defaultValue: 'master', description: 'Branch on assisted-test-infra repo to use')
+        choice(name: 'SIGNATURES_SOURCE', choices: ['logs_server', 'jira'], description: 'Signatures will get created from the specified data source')
+        booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Flag to determine whether to run in dry run mode')
     }
 
     triggers { cron('H/30 * * * *') }
 
     environment {
         SKIPPER_PARAMS = " "
-
+        SIGNATURES_SOURCE = "${params.SIGNATURES_SOURCE}"
         LOGS_DEST = "/var/ai-logs/triage_logs"
 
         // Credentials
@@ -56,7 +58,10 @@ pipeline {
         stage('Create tickets') {
             steps {
                 dir ('assisted-installer-deployment') {
-                  sh 'skipper run -e PULL_SECRET_CONTENTS ./tools/triage/create_triage_tickets.py --jira-access-token ${JIRA_ACCESS_TOKEN} -v'
+                    script {
+                        def dryRunFlag = params.DRY_RUN ? '--dry-run' : ''
+                        sh "skipper run -e PULL_SECRET_CONTENTS -e SIGNATURES_SOURCE ./tools/triage/create_triage_tickets.py --jira-access-token ${JIRA_ACCESS_TOKEN} -v ${dryRunFlag}"
+                    }     
                 }
             }
         }

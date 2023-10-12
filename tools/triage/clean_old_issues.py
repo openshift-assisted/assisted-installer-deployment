@@ -1,14 +1,13 @@
 import argparse
 import logging
 import os
-from typing import Callable, Final
+from typing import Final
 
 import jira
-from retry import retry
 
 from tools.jira_client import JiraClientFactory
 from tools.jira_client.consts import CLOSED_STATUS
-from tools.triage.common import JIRA_PROJECT
+from tools.triage.common import JIRA_PROJECT, apply_function_with_retry
 
 LOG_LEVEL_DEFAULT: Final[str] = "INFO"
 ISSUES_LIMIT_DEFAULT: Final[int] = 50
@@ -121,11 +120,6 @@ def update_issues(jira_client: jira.JIRA, issues: list[jira.Issue], logger: logg
         for error in errors:
             logger.exception("Error while updating issue in Jira.", exc_info=error)
         raise ExceptionGroup("Failed to update all issues.", errors)
-
-
-@retry(exceptions=jira.JIRAError, tries=3, delay=1)
-def apply_function_with_retry(function: Callable, *args, **kwargs):
-    return function(*args, **kwargs)
 
 
 def main():

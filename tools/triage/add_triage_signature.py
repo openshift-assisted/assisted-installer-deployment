@@ -17,7 +17,6 @@ import sys
 import tempfile
 from collections import Counter, OrderedDict, defaultdict
 from datetime import datetime
-from itertools import filterfalse
 from textwrap import dedent
 
 import colorlog
@@ -32,7 +31,22 @@ from retry import retry
 from tabulate import tabulate
 
 from tools.jira_client import JiraClientFactory
-from tools.triage.common import JIRA_PROJECT, get_cluster_logs_base_url
+from tools.triage.common import (
+    JIRA_PROJECT,
+    SignaturesSource,
+    get_cluster_logs_base_url,
+    get_metadata_json,
+)
+from tools.triage.exceptions import (
+    FailedToGetLogsTarException,
+    FailedToGetMetadataException,
+)
+from tools.triage.utils.extraction.jira_attachment_querier.jira_remote_archive_querier import (
+    JiraAttachmentsQuerier,
+)
+from tools.triage.utils.extraction.jira_attachment_querier.local_nested_archive_extractor import (
+    LocalNestedArchiveExtractor,
+)
 
 DEFAULT_DAYS_TO_HANDLE = 30
 SUMMARY_PATTERN = r"cloud\.redhat\.com failure: (?P<failure_id>.+)"
@@ -102,57 +116,44 @@ def format_description(failure_data):
     return JIRA_DESCRIPTION.format(**failure_data)
 
 
-class FailedToGetMetadataException(Exception):
-    pass
-
-
-class FailedToGetInstallConfigException(Exception):
-    pass
-
-
-def clean_metadata_json(md):
-    installation_start_time = dateutil.parser.isoparse(md["cluster"]["install_started_at"])
-
-    def host_deleted_before_installation_started(host):
-        if deleted_at := host.get("deleted_at"):
-            return dateutil.parser.isoparse(deleted_at) < installation_start_time
-        return False
-
-    md["cluster"]["deleted_hosts"] = list(filter(host_deleted_before_installation_started, md["cluster"]["hosts"]))
-    md["cluster"]["hosts"] = list(filterfalse(host_deleted_before_installation_started, md["cluster"]["hosts"]))
-
-    return md
-
-
-@functools.lru_cache(maxsize=1000)
-def get_metadata_json(cluster_url):
+def get_manifests(
+    cluster_url: str,
+    jira_client: jira.JIRA,
+    issue_key: str,
+    signatures_source: SignaturesSource = SignaturesSource.LOGS_SERVER,
+):
+    # the format is: [{"name": ..., "type": ..., "mtime": ..., "size": ...}, ...]
     try:
-        res = requests.get("{}/metadata.json".format(cluster_url))
-        res.raise_for_status()
-        return clean_metadata_json(res.json())
-    except Exception as e:
-        raise FailedToGetMetadataException from e
+        if signatures_source == SignaturesSource.JIRA:
+            jira_querier = JiraAttachmentsQuerier(
+                jira_client=jira_client, issue_key=issue_key, attachment_file_name="cluster_files.tar.gz", logger=logger
+            )
+            return LocalNestedArchiveExtractor().convert_directory_to_json(jira_querier.get("cluster_files/manifests"))
 
-
-def get_manifests(cluster_url):
-    try:
         res = requests.get("{}/cluster_files/manifests".format(cluster_url))
         res.raise_for_status()
-
-        # the format is: [{"name": ..., "type": ..., "mtime": ..., "size": ...}, ...]
         return res.json()
+
     except Exception as e:
         raise FailedToGetMetadataException from e
 
 
 @functools.lru_cache(maxsize=1000)
-def get_installconfig_yaml(cluster_url):
-    try:
-        res = requests.get("{}/cluster_files/install-config.yaml".format(cluster_url))
-        res.raise_for_status()
-        return yaml.safe_load(res._content)
-    except Exception as e:
-        raise FailedToGetInstallConfigException from e
+def get_installconfig_yaml(
+    cluster_url: str,
+    jira_client: jira.JIRA,
+    issue_key: str,
+    signatures_source: SignaturesSource = SignaturesSource.LOGS_SERVER,
+):
+    if signatures_source == SignaturesSource.JIRA:
+        jira_querier = JiraAttachmentsQuerier(
+            jira_client=jira_client, issue_key=issue_key, attachment_file_name="cluster_files.tar.gz", logger=logger
+        )
+        return yaml.safe_load(jira_querier.get("cluster_files/install-config.yaml", mode="rb"))
+
+    res = requests.get("{}/cluster_files/install-config.yaml".format(cluster_url))
+    res.raise_for_status()
+    return yaml.safe_load(res._content)
 
 
 def partition(iterator, predicate):
@@ -173,32 +174,72 @@ def partition(iterator, predicate):
 
 
 @functools.lru_cache(maxsize=1000)
-def _get_all_cluster_events(logs_url, cluster_id):
+def _get_all_cluster_events(
+    logs_url: str,
+    cluster_id: str,
+    jira_client: jira.JIRA,
+    issue_key: str,
+    signatures_source: SignaturesSource = SignaturesSource.LOGS_SERVER,
+):
     """
     WARNING - It's likely you do not want to use this function
     as it returns all recorded events for this cluster rather than
     just the events relevant to the latest installation attempt for
     which this ticket was created
     """
+    if signatures_source == SignaturesSource.JIRA:
+        jq = JiraAttachmentsQuerier(
+            jira_client=jira_client,
+            issue_key=issue_key,
+            attachment_file_name=f"cluster_{cluster_id}_events.json",
+            logger=logger,
+        )
+        return json.loads(jq.get(mode="rb"))
+
     res = requests.get(f"{logs_url}/cluster_{cluster_id}_events.json")
     res.raise_for_status()
     return res.json()
 
 
-def _partition_cluster_events(logs_url, cluster_id):
+def _partition_cluster_events(
+    logs_url: str,
+    cluster_id: str,
+    jira_client: jira.JIRA,
+    issue_key: str,
+    signatures_source: SignaturesSource = SignaturesSource.LOGS_SERVER,
+):
     """
     Use the reset event to partition the events list into separate installations
     """
     return partition(
-        _get_all_cluster_events(logs_url, cluster_id), lambda event: event["name"] == "cluster_installation_reset"
+        _get_all_cluster_events(
+            logs_url=logs_url,
+            cluster_id=cluster_id,
+            jira_client=jira_client,
+            issue_key=issue_key,
+            signatures_source=signatures_source,
+        ),
+        lambda event: event["name"] == "cluster_installation_reset",
     )
 
 
-def get_cluster_installation_events(logs_url, cluster_id):
+def get_cluster_installation_events(
+    logs_url: str,
+    cluster_id: str,
+    jira_client: jira.JIRA,
+    issue_key: str,
+    signatures_source: SignaturesSource = SignaturesSource.LOGS_SERVER,
+):
     # Use just the last partition, as it contains all the events that apply to
     # this current installation, as the logs for this failure were collected
     # right after this installation failed, before the cluster was reset.
-    return _partition_cluster_events(logs_url, cluster_id)[-1]
+    return _partition_cluster_events(
+        logs_url=logs_url,
+        cluster_id=cluster_id,
+        jira_client=jira_client,
+        issue_key=issue_key,
+        signatures_source=signatures_source,
+    )[-1]
 
 
 @functools.lru_cache(maxsize=100)
@@ -206,22 +247,46 @@ def get_remote_archive(tar_url):
     return nestedarchive.RemoteNestedArchive(tar_url, init_download=True)
 
 
-class FailedToGetLogsTarException(Exception):
-    pass
-
-
-def get_triage_logs_tar(triage_url, cluster_id):
+def get_triage_logs_tar(
+    triage_url: str,
+    cluster_id: str,
+    jira_client: jira.JIRA,
+    issue_key: str,
+    signatures_source: SignaturesSource = SignaturesSource.LOGS_SERVER,
+) -> nestedarchive.RemoteNestedArchive | JiraAttachmentsQuerier:
     try:
+        if signatures_source == SignaturesSource.JIRA:
+            return JiraAttachmentsQuerier(
+                jira_client=jira_client,
+                issue_key=issue_key,
+                attachment_file_name=f"cluster_{cluster_id}_logs.tar",
+                logger=logger,
+            )
+
         tar_url = f"{triage_url}/cluster_{cluster_id}_logs.tar"
         return get_remote_archive(tar_url)
-    except requests.exceptions.HTTPError as e:
+
+    except Exception as e:
         raise FailedToGetLogsTarException from e
 
 
-def get_controller_logs(triage_url):
-    return get_triage_logs_tar(triage_url=triage_url, cluster_id=get_metadata_json(triage_url)["cluster"]["id"]).get(
-        "controller_logs.tar.gz/assisted-installer-controller*.logs"
-    )
+def get_controller_logs(
+    triage_url: str,
+    jira_client: jira.JIRA,
+    issue_key: str,
+    signatures_source: SignaturesSource = SignaturesSource.LOGS_SERVER,
+):
+    cluster_id = get_metadata_json(
+        cluster_url=triage_url, jira_client=jira_client, issue_key=issue_key, signatures_source=signatures_source
+    )["cluster"]["id"]
+
+    return get_triage_logs_tar(
+        triage_url=triage_url,
+        cluster_id=cluster_id,
+        jira_client=jira_client,
+        issue_key=issue_key,
+        signatures_source=signatures_source,
+    ).get("controller_logs.tar.gz/assisted-installer-controller*.logs")
 
 
 def get_host_log_file(triage_logs_tar, host_id, filename):
@@ -253,9 +318,21 @@ def get_journal(triage_logs_tar, host_ip, journal_file, **kwargs):
         return triage_logs_tar.get(old_logs_path, **kwargs)
 
 
-def get_events_by_host(logs_url, cluster_id):
+def get_events_by_host(
+    logs_url: str,
+    cluster_id: str,
+    jira_client: jira.JIRA,
+    issue_key: str,
+    signatures_source: SignaturesSource = SignaturesSource.LOGS_SERVER,
+):
     events_by_host = defaultdict(list)
-    for event in get_cluster_installation_events(logs_url, cluster_id):
+    for event in get_cluster_installation_events(
+        logs_url=logs_url,
+        cluster_id=cluster_id,
+        jira_client=jira_client,
+        issue_key=issue_key,
+        signatures_source=signatures_source,
+    ):
         if "host_id" not in event:
             # Cluster-level event, no host_id associated with it
             continue
@@ -267,18 +344,11 @@ def get_event_timestamp(event):
     return dateutil.parser.isoparse(event["event_time"])
 
 
-class FailedToGetMustgatherException(Exception):
-    pass
-
-
 def get_mustgather(triage_logs_tar):
-    try:
-        return triage_logs_tar.get(
-            "controller_logs.tar.gz/must-gather.tar.gz",
-            mode="rb",
-        )
-    except Exception as e:
-        raise FailedToGetMustgatherException from e
+    return triage_logs_tar.get(
+        "controller_logs.tar.gz/must-gather.tar.gz",
+        mode="rb",
+    )
 
 
 ############################
@@ -294,6 +364,7 @@ class Signature(abc.ABC):
         should_reevaluate=False,
         old_comment_string=None,
         pull_secret_file=None,
+        signatures_source: SignaturesSource = SignaturesSource.LOGS_SERVER,
     ):
         self._jira_client: jira.JIRA = jira_client
         self._identifing_string = comment_identifying_string
@@ -302,6 +373,7 @@ class Signature(abc.ABC):
         self.should_reevaluate = should_reevaluate
         self.issue_key = issue_key
         self.pull_secret_file = pull_secret_file
+        self.signatures_source = signatures_source
 
     def process_ticket(self, url, issue_key):
         try:
@@ -310,12 +382,15 @@ class Signature(abc.ABC):
             browse_url = get_ticket_browse_url(issue_key)
             logger.error(f"Error getting metadata for {browse_url} at {url}: {e.__cause__}, it may have been deleted")
         except FailedToGetLogsTarException as e:
-            if e.__cause__.response.status_code == 404:
-                logger.warning(
-                    f"{get_ticket_browse_url(issue_key)} doesn't have a log tar, skipping {type(self).__name__}"
-                )
-                return
-            raise
+            try:
+                if e.__cause__.response.status_code == 404:
+                    logger.warning(
+                        f"{get_ticket_browse_url(issue_key)} doesn't have a log tar, skipping {type(self).__name__}"
+                    )
+                    return
+                raise
+            except Exception:
+                raise e
         except Exception:
             logger.exception("error updating ticket %s", issue_key)
 
@@ -520,7 +595,12 @@ class OpenShiftVersionSignature(Signature):
         super().__init__(*args, **kwargs, comment_identifying_string="")
 
     def _process_ticket(self, url, issue_key):
-        metadata = get_metadata_json(url)
+        metadata = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         major, minor, *_ = metadata["cluster"]["openshift_version"].split(".")
         ticket_affected_version_field = f"OpenShift {major}.{minor}"
 
@@ -537,11 +617,21 @@ class HostsStatusSignature(Signature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         try:
-            installconfig = get_installconfig_yaml(url)
-        except FailedToGetInstallConfigException:
+            installconfig = get_installconfig_yaml(
+                cluster_url=url,
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )
+        except Exception:
             logger.exception("Failed to get install-config.yaml")
             self._update_triaging_ticket(
                 "Installation status signature cannot be created. This cluster's collected logs are missing install-config.yaml for an unknown reason, why is it missing?"
@@ -596,7 +686,12 @@ class DeletedHostsStatusSignature(Signature):
         super().__init__(*args, **kwargs, comment_identifying_string="h1. Deleted hosts status")
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         if len(md["cluster"]["deleted_hosts"]) < 1:
             return
@@ -694,7 +789,12 @@ class FailureDescription(Signature):
         return format_description(cluster_data)
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         cluster = md["cluster"]
 
@@ -745,7 +845,12 @@ class FailureDetails(Signature):
         issue = self._jira_client.issue(issue_key)
         cluster_md = []
         try:
-            md = get_metadata_json(url)
+            md = get_metadata_json(
+                cluster_url=url,
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )
             cluster_md = md["cluster"]
         except Exception:
             # if we cannot find the failure logs on the log-server, we'll just use whatever information we
@@ -804,7 +909,12 @@ class HostsExtraDetailSignature(Signature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         cluster = md["cluster"]
 
@@ -844,7 +954,12 @@ class MasterFailedToPullIgnitionSignature(ErrorSignature):
 
     def _process_ticket(self, url, issue_key):
         hosts = []
-        cluster_hosts = get_metadata_json(url)["cluster"]["hosts"]
+        cluster_hosts = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )["cluster"]["hosts"]
         # this signature is not relevant for SNO
         if len(cluster_hosts) <= 1:
             return
@@ -902,12 +1017,23 @@ class InstallationDiskFIOSignature(Signature):
         return ((event, get_duration(event)) for event in events if get_duration(event) is not None)
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         cluster = md["cluster"]
 
         cluster_id = cluster["id"]
-        events = get_cluster_installation_events(url, cluster_id)
+        events = get_cluster_installation_events(
+            logs_url=url,
+            cluster_id=cluster_id,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         fio_events = self._get_fio_events(events)
 
         fio_events_by_host = defaultdict(list)
@@ -963,12 +1089,23 @@ class SlowImageDownload(ErrorSignature):
         return [image_info for event in events if (image_info := get_image_download_info(event)) is not None]
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         cluster = md["cluster"]
 
         cluster_id = cluster["id"]
-        events = get_cluster_installation_events(url, cluster_id)
+        events = get_cluster_installation_events(
+            logs_url=url,
+            cluster_id=cluster_id,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         image_info_list = self._list_image_download_info(events)
 
         abnormal_image_info = []
@@ -1008,12 +1145,23 @@ class PendingUserAction(ErrorSignature):
         return [status for event in events if (status := get_cluster_status(event)) is not None]
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         cluster = md["cluster"]
 
         cluster_id = cluster["id"]
-        events = get_cluster_installation_events(url, cluster_id)
+        events = get_cluster_installation_events(
+            logs_url=url,
+            cluster_id=cluster_id,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         cluster_status_list = self._list_cluster_status_updates(events)
         # This is signing triage tickets where the last status is always "error"
         if len(cluster_status_list) >= 2 and cluster_status_list[-2] == "installing-pending-user-action":
@@ -1034,7 +1182,12 @@ class StorageDetailSignature(Signature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         cluster = md["cluster"]
 
@@ -1073,7 +1226,12 @@ class SNOMachineCidrSignature(Signature):
         super().__init__(*args, **kwargs, comment_identifying_string="h1. Invalid machine cidr")
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         cluster = md["cluster"]
 
@@ -1111,7 +1269,12 @@ class ComponentsVersionSignature(Signature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         report = ""
         release_tag = md.get("release_tag")
@@ -1141,7 +1304,12 @@ class LibvirtRebootFlagSignature(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         cluster = md["cluster"]
 
@@ -1192,7 +1360,13 @@ class ApiInvalidCertificateSignature(ErrorSignature):
 
     def _process_ticket(self, url, issue_key):
         try:
-            controller_logs = get_controller_logs(url)
+            controller_logs = get_controller_logs(
+                triage_url=url,
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )
+
         except FileNotFoundError:
             return
 
@@ -1223,10 +1397,21 @@ class NameserverInClusterNetwork(ErrorSignature):
             comment_identifying_string="h1. Nameserver in internal network",
         )
 
-    def _get_resolv_conf_files(self, url, base_path):
+    def _get_resolv_conf_files(self, url, base_path, issue_key: str):
         files = []
         try:
-            triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"])
+            triage_logs_tar = get_triage_logs_tar(
+                triage_url=url,
+                cluster_id=get_metadata_json(
+                    cluster_url=url,
+                    jira_client=self._jira_client,
+                    issue_key=issue_key,
+                    signatures_source=self.signatures_source,
+                )["cluster"]["id"],
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )
         except FileNotFoundError:
             return files
 
@@ -1253,9 +1438,9 @@ class NameserverInClusterNetwork(ErrorSignature):
         network = ipaddress.ip_network(cidr_str, strict=False)
         return ip_address in network
 
-    def _get_nameservers(self, url, base_path):
+    def _get_nameservers(self, url, base_path, issue_key: str):
         nameservers = set()
-        for resolvconf in self._get_resolv_conf_files(url, base_path):
+        for resolvconf in self._get_resolv_conf_files(url, base_path, issue_key=issue_key):
             for line in resolvconf.splitlines():
                 match = re.search(self.NAMESERVER_PATTERN, line)
                 if match:
@@ -1264,11 +1449,16 @@ class NameserverInClusterNetwork(ErrorSignature):
         return nameservers
 
     def _process_ticket_helper(self, path, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         cidrs = [network["cidr"] for network in md["cluster"]["cluster_networks"]]
 
         report = ""
-        for nameserver in self._get_nameservers(url, path):
+        for nameserver in self._get_nameservers(url, path, issue_key=issue_key):
             for cidr in cidrs:
                 if self._check_ip_in_cidr(nameserver, cidr):
                     report += f"user defined nameserver {nameserver} which overlaps with the cluster nw {cidr}\n"
@@ -1299,13 +1489,25 @@ class ApiExpiredCertificateSignature(ErrorSignature):
             comment_identifying_string="h1. Expired Certificate",
         )
 
-    def _process_ticket_helper(self, url, path):
+    def _process_ticket_helper(self, url, path, issue_key: str):
         try:
-            bootstrap_kube_apiserver_logs = get_triage_logs_tar(
-                triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]
-            ).get(path)
+            triage_logs_tar = get_triage_logs_tar(
+                triage_url=url,
+                cluster_id=get_metadata_json(
+                    cluster_url=url,
+                    jira_client=self._jira_client,
+                    issue_key=issue_key,
+                    signatures_source=self.signatures_source,
+                )["cluster"]["id"],
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )
+            bootstrap_kube_apiserver_logs = triage_logs_tar.get(path)
+
         except FileNotFoundError:
             return
+
         if invalid_api_log_lines := self.LOG_PATTERN.findall(bootstrap_kube_apiserver_logs):
             report = f"{{code}}{invalid_api_log_lines[0]}{{code}}"
             if (num_lines := len(invalid_api_log_lines)) > 1:
@@ -1316,11 +1518,11 @@ class ApiExpiredCertificateSignature(ErrorSignature):
         new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/bootstrap/containers/bootstrap-control-plane/kube-apiserver.log"
         old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/bootstrap/containers/bootstrap-control-plane/kube-apiserver.log"
         try:
-            self._process_ticket_helper(url, new_logs_path)
+            self._process_ticket_helper(url, new_logs_path, issue_key=issue_key)
             logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
             logger.debug("Searching logs under the old location %s", old_logs_path)
-            self._process_ticket_helper(url, old_logs_path)
+            self._process_ticket_helper(url, old_logs_path, issue_key=issue_key)
 
 
 class AllInstallationAttemptsSignature(Signature):
@@ -1332,7 +1534,12 @@ class AllInstallationAttemptsSignature(Signature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         cluster = md["cluster"]
         cluster_id = cluster["id"]
         cluster_triage_tickets = self._jira_client.search_issues(
@@ -1363,7 +1570,12 @@ class MediaDisconnectionSignature(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         cluster = md["cluster"]
 
         hosts = list()
@@ -1406,7 +1618,12 @@ class CoreOSInstallerErrorSignature(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         cluster = md["cluster"]
 
         hosts = list()
@@ -1467,12 +1684,23 @@ class IpChangedAfterReboot(ErrorSignature):
         return address_map
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         cluster = md["cluster"]
         cluster_id = cluster["id"]
 
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+        triage_logs_tar = get_triage_logs_tar(
+            triage_url=url,
+            cluster_id=cluster_id,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         for host in cluster["hosts"]:
             host_id = host["id"]
@@ -1562,12 +1790,23 @@ class AgentStepFailureSignature(Signature):
         return "".join(output_lines)
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         cluster = md["cluster"]
         cluster_id = cluster["id"]
 
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+        triage_logs_tar = get_triage_logs_tar(
+            triage_url=url,
+            cluster_id=cluster_id,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         report = ""
         for host in cluster["hosts"]:
@@ -1629,7 +1868,12 @@ class MissingMustGatherLogs(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         cluster_hosts = md["cluster"]["hosts"]
         bootstrap_node = [host for host in cluster_hosts if host["bootstrap"]][0]
 
@@ -1643,10 +1887,16 @@ class MissingMustGatherLogs(ErrorSignature):
 
         if md["cluster"]["logs_info"] in ("timeout", "completed"):
             cluster_id = md["cluster"]["id"]
-            triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+            triage_logs_tar = get_triage_logs_tar(
+                triage_url=url,
+                cluster_id=cluster_id,
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )
             try:
                 get_mustgather(triage_logs_tar)
-            except FailedToGetMustgatherException:
+            except Exception:
                 self._update_triaging_ticket(
                     "This cluster's collected logs are missing must-gather logs although it should be collected, why is it missing?"
                 )
@@ -1670,13 +1920,24 @@ class MustGatherAnalysis(Signature):
                 logger.debug("must-gather analysis already exists as attachment %s", attachment.filename)
                 return
 
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         cluster_id = md["cluster"]["id"]
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+        triage_logs_tar = get_triage_logs_tar(
+            triage_url=url,
+            cluster_id=cluster_id,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         try:
             mustgather = get_mustgather(triage_logs_tar)
-        except FailedToGetMustgatherException:
+        except Exception:
             return
 
         with tempfile.NamedTemporaryFile(suffix=".tar.gz") as tmp_mustgather:
@@ -1792,8 +2053,19 @@ class OSInstallationTime(Signature):
         return entry
 
     def _process_ticket(self, url, issue_key):
-        cluster = get_metadata_json(url)["cluster"]
-        events_by_host = get_events_by_host(url, cluster["id"])
+        cluster = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )["cluster"]
+        events_by_host = get_events_by_host(
+            logs_url=url,
+            cluster_id=cluster["id"],
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         host_entries = [self.host_entry(host, events_by_host[host["id"]]) for host in cluster["hosts"]]
 
         # Only report if we have at least one slow host
@@ -1820,7 +2092,12 @@ class NonstandardNetworkType(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        install_config = get_installconfig_yaml(url)
+        install_config = get_installconfig_yaml(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         network_type = install_config["networking"]["networkType"]
 
         if network_type not in self.allowed_network_types:
@@ -1844,7 +2121,18 @@ class FlappingValidations(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        events = get_events_by_host(url, get_metadata_json(url)["cluster"]["id"])
+        events = get_events_by_host(
+            logs_url=url,
+            cluster_id=get_metadata_json(
+                cluster_url=url,
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )["cluster"]["id"],
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         host_tables = {}
         for host, events in events.items():
@@ -1896,7 +2184,12 @@ class WrongBootOrderSignature(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         cluster = md["cluster"]
         status_info = cluster["status_info"]
@@ -1906,7 +2199,13 @@ class WrongBootOrderSignature(ErrorSignature):
 
         cluster_id = cluster["id"]
         report = ""
-        events = get_cluster_installation_events(url, cluster_id)
+        events = get_cluster_installation_events(
+            logs_url=url,
+            cluster_id=cluster_id,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         reboot_events_by_host = defaultdict(list)
         for event in events:
             if self.EVENT_PATTERN in event["message"]:
@@ -1951,12 +2250,23 @@ class ReleasePullErrorSignature(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         cluster = md["cluster"]
         cluster_id = cluster["id"]
 
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+        triage_logs_tar = get_triage_logs_tar(
+            triage_url=url,
+            cluster_id=cluster_id,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         report = ""
         for host in cluster["hosts"]:
@@ -1993,15 +2303,34 @@ class EventsInstallationAttempts(Signature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         cluster = md["cluster"]
         cluster_id = cluster["id"]
 
-        installation_attempts = len(_partition_cluster_events(url, cluster_id))
+        installation_attempts = len(
+            _partition_cluster_events(
+                logs_url=url,
+                cluster_id=cluster_id,
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )
+        )
 
         if installation_attempts != 1:
-            last_attempt_first_event = get_cluster_installation_events(url, cluster_id)[0]
+            last_attempt_first_event = get_cluster_installation_events(
+                logs_url=url,
+                cluster_id=cluster_id,
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )[0]
             self._update_triaging_ticket(
                 dedent(
                     f"""
@@ -2034,7 +2363,13 @@ class ControllerOperatorStatus(Signature):
                 return
 
         try:
-            controller_logs = get_controller_logs(url)
+            controller_logs = get_controller_logs(
+                triage_url=url,
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )
+
         except FileNotFoundError:
             return
 
@@ -2090,11 +2425,22 @@ class DualStackBadRoute(ErrorSignature):
             function_impact_label="bz2088346",
         )
 
-    def _process_ticket_helper(self, url, path):
+    def _process_ticket_helper(self, url, path, issue_key: str):
         try:
-            ovnkube_logs = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]).get(
-                path
+            triage_logs_tar = get_triage_logs_tar(
+                triage_url=url,
+                cluster_id=get_metadata_json(
+                    cluster_url=url,
+                    jira_client=self._jira_client,
+                    issue_key=issue_key,
+                    signatures_source=self.signatures_source,
+                )["cluster"]["id"],
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
             )
+            ovnkube_logs = triage_logs_tar.get(path)
+
         except FileNotFoundError:
             return
 
@@ -2111,11 +2457,11 @@ class DualStackBadRoute(ErrorSignature):
         new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/control-plane/*/containers/ovnkube-node-*.log"
         old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/control-plane/*/containers/ovnkube-node-*.log"
         try:
-            self._process_ticket_helper(url, new_logs_path)
+            self._process_ticket_helper(url, new_logs_path, issue_key=issue_key)
             logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
             logger.debug("Searching logs under the old location %s", old_logs_path)
-            self._process_ticket_helper(url, old_logs_path)
+            self._process_ticket_helper(url, old_logs_path, issue_key=issue_key)
 
 
 class StaticNetworking(Signature):
@@ -2141,7 +2487,12 @@ class StaticNetworking(Signature):
         )
 
     def _process_ticket(self, url, issue_key):
-        infraenvs = get_metadata_json(url).get("infraenvs", [])
+        infraenvs = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        ).get("infraenvs", [])
         messages = [
             f"""Infraenv {infraenv["name"]} has static network config:
 {{code}}
@@ -2178,11 +2529,20 @@ class NodeStatus(Signature):
 
         return f"Status {condition['status']} with reason {condition['reason']}, message {condition['message']}"
 
-    def _process_ticket_helper(self, url, path):
+    def _process_ticket_helper(self, url, path, issue_key: str):
         try:
-            nodes_json = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]).get(
-                path
-            )
+            nodes_json = get_triage_logs_tar(
+                triage_url=url,
+                cluster_id=get_metadata_json(
+                    cluster_url=url,
+                    jira_client=self._jira_client,
+                    issue_key=issue_key,
+                    signatures_source=self.signatures_source,
+                )["cluster"]["id"],
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            ).get(path)
         except FileNotFoundError:
             return
 
@@ -2215,11 +2575,11 @@ class NodeStatus(Signature):
         new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/resources/nodes.json"
         old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/resources/nodes.json"
         try:
-            report = self._process_ticket_helper(url, new_logs_path)
+            report = self._process_ticket_helper(url, new_logs_path, issue_key=issue_key)
             logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
             logger.debug("Searching logs under the old location %s", old_logs_path)
-            return self._process_ticket_helper(url, old_logs_path)
+            return self._process_ticket_helper(url, old_logs_path, issue_key=issue_key)
         return report
 
 
@@ -2232,7 +2592,12 @@ class HostsInterfacesSignature(Signature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         cluster = md["cluster"]
 
@@ -2283,11 +2648,25 @@ class NetworksMtuMismatch(ErrorSignature):
 
     def _process_ticket(self, url, issue_key):
         try:
-            sdn_logs = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]).get(
+            triage_logs_tar = get_triage_logs_tar(
+                triage_url=url,
+                cluster_id=get_metadata_json(
+                    cluster_url=url,
+                    jira_client=self._jira_client,
+                    issue_key=issue_key,
+                    signatures_source=self.signatures_source,
+                )["cluster"]["id"],
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )
+            sdn_logs = triage_logs_tar.get(
                 "controller_logs.tar.gz/must-gather.tar.gz/must-gather.local.*/*/namespaces/openshift-sdn/pods/sdn-*/sdn/sdn/logs/*.log"
             )
+
         except FileNotFoundError:
             return
+
         if match := self.LOG_PATTERN.search(sdn_logs):
             self._update_triaging_ticket(
                 "SDN failed to start: Overlay (cluster) network MTU {}"
@@ -2336,9 +2715,22 @@ class ErrorCreatingReadWriteLayer(ErrorSignature):
 
     def _process_ticket(self, url, issue_key):
         try:
-            must_gather_namespaces_dir = get_triage_logs_tar(
-                triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]
-            ).get("controller_logs.tar.gz/must-gather.tar.gz/must-gather.local.*/*/namespaces")
+            triage_logs_tar = get_triage_logs_tar(
+                triage_url=url,
+                cluster_id=get_metadata_json(
+                    cluster_url=url,
+                    jira_client=self._jira_client,
+                    issue_key=issue_key,
+                    signatures_source=self.signatures_source,
+                )["cluster"]["id"],
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )
+
+            must_gather_namespaces_dir = triage_logs_tar.get(
+                "controller_logs.tar.gz/must-gather.tar.gz/must-gather.local.*/*/namespaces"
+            )
         except FileNotFoundError:
             return
 
@@ -2359,11 +2751,23 @@ class DualstackrDNSBug(ErrorSignature):
             function_impact_label="mgmt11651",
         )
 
-    def _process_ticket_helper(self, url, path):
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"])
+    def _process_ticket_helper(self, url, path, issue_key: str):
+        triage_logs_tar = get_triage_logs_tar(
+            triage_url=url,
+            cluster_id=get_metadata_json(
+                cluster_url=url,
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )["cluster"]["id"],
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         try:
             kubeapiserver_logs = triage_logs_tar.get(path)
+
         except FileNotFoundError:
             return
 
@@ -2376,11 +2780,11 @@ class DualstackrDNSBug(ErrorSignature):
         new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/bootstrap/containers/kube-apiserver-*.log"
         old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/bootstrap/containers/kube-apiserver-*.log"
         try:
-            self._process_ticket_helper(url, new_logs_path)
+            self._process_ticket_helper(url, new_logs_path, issue_key=issue_key)
             logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
             logger.debug("Searching logs under the old location %s", old_logs_path)
-            self._process_ticket_helper(url, old_logs_path)
+            self._process_ticket_helper(url, old_logs_path, issue_key=issue_key)
 
 
 class InsufficientLVMCleanup(ErrorSignature):
@@ -2393,7 +2797,12 @@ class InsufficientLVMCleanup(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        cluster = get_metadata_json(url)["cluster"]
+        cluster = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )["cluster"]
 
         host_messages = [
             f"Host {self._get_hostname(host)} has LVM disks and has the 'Can't open' coreos-installer error, this is probably due to MGMT-11695"
@@ -2425,8 +2834,19 @@ class ErrorOnCleanupInstallDevice(Signature):
         )
 
     def _process_ticket(self, url, issue_key):
-        cluster = get_metadata_json(url)["cluster"]
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster["id"])
+        cluster = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )["cluster"]
+        triage_logs_tar = get_triage_logs_tar(
+            triage_url=url,
+            cluster_id=cluster["id"],
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         hosts = []
         for host in cluster["hosts"]:
@@ -2463,7 +2883,12 @@ class UserManagedNetworkingLoadBalancer(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        md = get_metadata_json(url)
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         cluster_md = md["cluster"]
         if not cluster_md.get("user_managed_networking", False):
             return
@@ -2472,7 +2897,13 @@ class UserManagedNetworkingLoadBalancer(ErrorSignature):
             return
 
         try:
-            controller_logs = get_controller_logs(url)
+            controller_logs = get_controller_logs(
+                triage_url=url,
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )
+
         except FileNotFoundError:
             return
 
@@ -2503,7 +2934,16 @@ class TagAnalysis(Signature):
         )
 
     def _process_ticket(self, url, issue_key):
-        tags = set(get_metadata_json(url)["cluster"].get("tags", "").split(","))
+        tags = set(
+            get_metadata_json(
+                cluster_url=url,
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )["cluster"]
+            .get("tags", "")
+            .split(",")
+        )
 
         if tags == {""}:
             return
@@ -2539,7 +2979,12 @@ class SkipDisks(ErrorSignature):
     def _process_ticket(self, url, issue_key):
         skip_disks = {
             host["id"]: host["skip_formatting_disks"].split(",")
-            for host in get_metadata_json(url)["cluster"].get("hosts", [])
+            for host in get_metadata_json(
+                cluster_url=url,
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )["cluster"].get("hosts", [])
             if host.get("skip_formatting_disks", None) is not None and host["skip_formatting_disks"] != ""
         }
 
@@ -2575,8 +3020,19 @@ class FailedRequestTriggersHostTimeout(Signature):
         )
 
     def _process_ticket(self, url, issue_key):
-        cluster = get_metadata_json(url)["cluster"]
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster["id"])
+        cluster = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )["cluster"]
+        triage_logs_tar = get_triage_logs_tar(
+            triage_url=url,
+            cluster_id=cluster["id"],
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         failed_requests_hosts = self._failed_requests_hosts(cluster, triage_logs_tar)
         timed_out_hosts = self._timed_out_hosts(cluster)
@@ -2624,7 +3080,12 @@ class ControllerWarnings(Signature):
 
     def _process_ticket(self, url, issue_key):
         try:
-            controller_logs = get_controller_logs(url)
+            controller_logs = get_controller_logs(
+                triage_url=url,
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )
         except FileNotFoundError:
             logger.info("Skipping ControllerWarnings signature because no controller logs")
             return
@@ -2655,10 +3116,21 @@ class UserHasLoggedIntoCluster(Signature):
         )
 
     def _process_ticket(self, url, issue_key):
-        cluster = get_metadata_json(url)["cluster"]
+        cluster = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )["cluster"]
         cluster_id = cluster["id"]
 
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+        triage_logs_tar = get_triage_logs_tar(
+            triage_url=url,
+            cluster_id=cluster_id,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         report = ""
         for host in cluster["hosts"]:
@@ -2739,9 +3211,20 @@ class OSTreeCommitMismatch(ErrorSignature):
             release_data = commitid
         return status == release_data
 
-    def _process_ticket_helper(self, url, path):
-        md = get_metadata_json(url)
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=md["cluster"]["id"])
+    def _process_ticket_helper(self, url, path, issue_key: str):
+        md = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
+        triage_logs_tar = get_triage_logs_tar(
+            triage_url=url,
+            cluster_id=md["cluster"]["id"],
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         if not (os_content_image := self.get_os_content_image(md["cluster"]["ocp_release_image"])):
             self._update_triaging_ticket(
@@ -2805,12 +3288,12 @@ class OSTreeCommitMismatch(ErrorSignature):
         old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/control-plane"
 
         try:
-            self._process_ticket_helper(url, new_logs_path)
+            self._process_ticket_helper(url, new_logs_path, issue_key=issue_key)
             logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
             try:
                 logger.debug("Searching logs under the old location %s", old_logs_path)
-                self._process_ticket_helper(url, old_logs_path)
+                self._process_ticket_helper(url, old_logs_path, issue_key=issue_key)
             except FileNotFoundError:
                 logger.debug("no logs-bundle available")
                 return
@@ -2829,14 +3312,25 @@ class ControllerFailedToStart(ErrorSignature):
             comment_identifying_string="h1. Assisted Installer Controller failed to start",
         )
 
-    def _process_ticket_helper(self, url, path):
-        cluster = get_metadata_json(url)["cluster"]
+    def _process_ticket_helper(self, url, path, issue_key: str):
+        cluster = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )["cluster"]
         bootstrap_node = [host for host in cluster["hosts"] if host["bootstrap"]][0]
 
         if bootstrap_node["progress"]["current_stage"] != "Waiting for controller":
             return
 
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster["id"])
+        triage_logs_tar = get_triage_logs_tar(
+            triage_url=url,
+            cluster_id=cluster["id"],
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
         try:
             # Fetch pods.json from the bootstrap log bundle
             pods_json = triage_logs_tar.get(path)
@@ -2885,11 +3379,11 @@ class ControllerFailedToStart(ErrorSignature):
         new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/resources/pods.json"
         old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/resources/pods.json"
         try:
-            self._process_ticket_helper(url, new_logs_path)
+            self._process_ticket_helper(url, new_logs_path, issue_key=issue_key)
             logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
             logger.debug("Searching logs under the old location %s", old_logs_path)
-            self._process_ticket_helper(url, old_logs_path)
+            self._process_ticket_helper(url, old_logs_path, issue_key=issue_key)
 
 
 class MachineConfigDaemonErrorExtracting(ErrorSignature):
@@ -2906,9 +3400,22 @@ class MachineConfigDaemonErrorExtracting(ErrorSignature):
             comment_identifying_string="h1. machine-config-daemon could not extract machine-os-content",
         )
 
-    def _process_ticket_helper(self, url, path):
+    def _process_ticket_helper(self, url, path, issue_key: str):
         try:
-            mcd_logs = get_triage_logs_tar(triage_url=url, cluster_id=get_metadata_json(url)["cluster"]["id"]).get(path)
+            triage_logs_tar = get_triage_logs_tar(
+                triage_url=url,
+                cluster_id=get_metadata_json(
+                    cluster_url=url,
+                    jira_client=self._jira_client,
+                    issue_key=issue_key,
+                    signatures_source=self.signatures_source,
+                )["cluster"]["id"],
+                jira_client=self._jira_client,
+                issue_key=issue_key,
+                signatures_source=self.signatures_source,
+            )
+            mcd_logs = triage_logs_tar.get(path)
+
         except FileNotFoundError:
             return
 
@@ -2925,11 +3432,11 @@ class MachineConfigDaemonErrorExtracting(ErrorSignature):
         new_logs_path = f"{NEW_LOG_BUNDLE_PATH}/control-plane/*/journals/machine-config-daemon-firstboot.log"
         old_logs_path = f"{OLD_LOG_BUNDLE_PATH}/control-plane/*/journals/machine-config-daemon-firstboot.log"
         try:
-            self._process_ticket_helper(url, new_logs_path)
+            self._process_ticket_helper(url, new_logs_path, issue_key=issue_key)
             logger.debug("Found logs under the new location %s", new_logs_path)
         except FileNotFoundError:
             logger.debug("Searching logs under the old location %s", old_logs_path)
-            self._process_ticket_helper(url, old_logs_path)
+            self._process_ticket_helper(url, old_logs_path, issue_key=issue_key)
 
 
 class SNOHostnameHasEtcd(ErrorSignature):
@@ -2946,7 +3453,12 @@ class SNOHostnameHasEtcd(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        cluster = get_metadata_json(url)["cluster"]
+        cluster = get_metadata_json(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )["cluster"]
 
         if cluster.get("high_availability_mode") != "None":
             return
@@ -2975,7 +3487,12 @@ class EmptyManifest(ErrorSignature):
         )
 
     def _process_ticket(self, url, issue_key):
-        manifests = get_manifests(url)
+        manifests = get_manifests(
+            cluster_url=url,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         # Sometimes manifest have "empty" junk like spaces or "---", so if it's
         # less than 30 bytes, it's probably "empty"
@@ -3276,6 +3793,7 @@ def process_issues(
     only_specific_signatures,
     dry_run_file,
     pull_secret_file=None,
+    signatures_source: SignaturesSource = SignaturesSource.LOGS_SERVER,
 ):
     logger.info(f"Found {len(issues)} tickets, processing...")
 
@@ -3304,6 +3822,7 @@ def process_issues(
             only_specific_signatures=only_specific_signatures,
             dry_run_file=dry_run_file,
             pull_secret_file=pull_secret_file,
+            signatures_source=signatures_source,
         )
 
         # Hacky solution to prevent tqdm from writing over the last line of the signature
@@ -3318,6 +3837,7 @@ def main(args):
     )
 
     pull_secret_file = args.pull_secret_file
+    signatures_source = SignaturesSource(args.signatures_source)
 
     if args.pull_secret_contents:
         pull_secret_tmp_file = tempfile.NamedTemporaryFile(mode="w")
@@ -3343,6 +3863,7 @@ def main(args):
                 only_specific_signatures=args.update_signature,
                 dry_run_file=dry_run_file,
                 pull_secret_file=pull_secret_file,
+                signatures_source=signatures_source,
             )
             logger.info(f"Dry run output written to {dry_run_file.name}")
         return
@@ -3354,6 +3875,7 @@ def main(args):
         only_specific_signatures=args.update_signature,
         dry_run_file=sys.stdout if args.dry_run else None,
         pull_secret_file=pull_secret_file,
+        signatures_source=signatures_source,
     )
 
 
@@ -3370,6 +3892,7 @@ def process_ticket_with_signatures(
     dry_run_file,
     pull_secret_file=None,
     should_reevaluate=False,
+    signatures_source: SignaturesSource = SignaturesSource.LOGS_SERVER,
 ):
     signatures = (
         ALL_SIGNATURES
@@ -3390,6 +3913,7 @@ def process_ticket_with_signatures(
             should_reevaluate=True if only_specific_signatures is not None else should_reevaluate,
             issue_key=issue_key,
             dry_run_file=dry_run_file,
+            signatures_source=signatures_source,
         ).process_ticket(
             ticket_logs_url,
             issue_key,
@@ -3434,9 +3958,14 @@ def parse_args():
         "--pull-secret-contents",
         default=os.environ.get("PULL_SECRET_CONTENTS"),
         required=False,
-        help="pull secret acutal file contents",
+        help="The source of the data used to generate the signatures",
     )
-
+    parser.add_argument(
+        "--signatures-source",
+        default=os.environ.get("SIGNATURES_SOURCE", SignaturesSource.LOGS_SERVER.value),
+        required=False,
+        help="Signatures will get created from the specified data source",
+    )
     selectors_group = parser.add_argument_group(title="Issues selection")
     selectors = selectors_group.add_mutually_exclusive_group(required=True)
     selectors.add_argument(
@@ -3486,13 +4015,6 @@ def parse_args():
         action="store_true",
         help=dry_run_msg.format("stdout"),
     )
-    dry_run_args.add_argument(
-        "-t",
-        "--dry-run-temp",
-        action="store_true",
-        help=dry_run_msg.format("a temp file"),
-    )
-
     parser.add_argument(
         "-us",
         "--update-signature",
