@@ -3525,7 +3525,13 @@ class MissingMC(ErrorSignature):
             return
 
         cluster_id = cluster["id"]
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster_id)
+        triage_logs_tar = get_triage_logs_tar(
+            triage_url=url,
+            cluster_id=cluster_id,
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         try:
             log = triage_logs_tar.get(
@@ -3571,7 +3577,13 @@ class DuplicateVIP(ErrorSignature):
 
         vips = [vip["ip"] for vip in cluster.get("api_vips", [])]
 
-        triage_logs_tar = get_triage_logs_tar(triage_url=url, cluster_id=cluster["id"])
+        triage_logs_tar = get_triage_logs_tar(
+            triage_url=url,
+            cluster_id=cluster["id"],
+            jira_client=self._jira_client,
+            issue_key=issue_key,
+            signatures_source=self.signatures_source,
+        )
 
         collisions = []
         for vip in vips:
