@@ -4,7 +4,7 @@
 #
 #    make pip-freeze
 #
-astroid==2.15.6
+astroid==3.0.1
     # via pylint
 asttokens==2.0.5
     # via stack-data
@@ -12,7 +12,7 @@ autopep8==2.0.4
     # via -r dev-requirements.in
 backcall==0.2.0
     # via ipython
-black==23.9.1
+black==23.10.1
     # via -r dev-requirements.in
 build==0.8.0
     # via pip-tools
@@ -40,8 +40,6 @@ isort==5.12.0
     #   pylint
 jedi==0.18.1
     # via ipython
-lazy-object-proxy==1.7.1
-    # via astroid
 matplotlib-inline==0.1.3
     # via ipython
 mccabe==0.7.0
@@ -50,7 +48,7 @@ mccabe==0.7.0
     #   pylint
 mypy-extensions==0.4.3
     # via black
-packaging==23.1
+packaging==23.2
     # via
     #   black
     #   build
@@ -84,7 +82,7 @@ pyflakes==3.1.0
     # via flake8
 pygments==2.15.0
     # via ipython
-pylint==2.17.5
+pylint==3.0.2
     # via -r dev-requirements.in
 six==1.16.0
     # via asttokens
@@ -102,8 +100,6 @@ wcwidth==0.2.5
     # via prompt-toolkit
 wheel==0.38.1
     # via pip-tools
-wrapt==1.14.1
-    # via astroid
 
 # The following packages are considered to be unsafe in a requirements file:
 # pip
