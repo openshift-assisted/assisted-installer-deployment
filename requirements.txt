@@ -34,7 +34,7 @@ idna==3.4
     # via requests
 iniconfig==2.0.0
     # via pytest
-insights-core==3.2.22
+insights-core==3.2.23
     # via -r requirements.in
 jinja2==3.1.2
     # via insights-core
@@ -63,7 +63,7 @@ packaging==23.2
     #   -r requirements.in
     #   jira
     #   pytest
-pbr==5.11.1
+pbr==6.0.0
     # via python-jenkins
 pluggy==1.0.0
     # via pytest
@@ -89,7 +89,7 @@ python-dateutil==2.8.2
     #   pygithub
 python-gitlab==4.1.1
     # via -r requirements.in
-python-jenkins==1.8.1
+python-jenkins==1.8.2
     # via -r requirements.in
 python-levenshtein==0.23.0
     # via -r requirements.in
@@ -148,6 +148,3 @@ urllib3==1.26.14
     #   requests
 wrapt==1.14.1
     # via deprecated
-
-# The following packages are considered to be unsafe in a requirements file:
-# setuptools
