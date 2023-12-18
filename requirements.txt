@@ -16,7 +16,7 @@ cffi==1.15.1
     #   pynacl
 charset-normalizer==2.0.12
     # via requests
-colorlog==6.7.0
+colorlog==6.8.0
     # via -r requirements.in
 cryptography==41.0.2
     # via pyjwt
@@ -34,7 +34,7 @@ idna==3.4
     # via requests
 iniconfig==2.0.0
     # via pytest
-insights-core==3.2.22
+insights-core==3.2.26
     # via -r requirements.in
 jinja2==3.1.2
     # via insights-core
@@ -63,7 +63,7 @@ packaging==23.2
     #   -r requirements.in
     #   jira
     #   pytest
-pbr==5.11.1
+pbr==6.0.0
     # via python-jenkins
 pluggy==1.0.0
     # via pytest
@@ -71,7 +71,7 @@ py==1.11.0
     # via retry
 pycparser==2.21
     # via cffi
-pyfakefs==5.3.0
+pyfakefs==5.3.2
     # via -r requirements.in
 pygithub==2.1.1
     # via -r requirements.in
@@ -87,9 +87,9 @@ python-dateutil==2.8.2
     # via
     #   -r requirements.in
     #   pygithub
-python-gitlab==4.1.1
+python-gitlab==4.2.0
     # via -r requirements.in
-python-jenkins==1.8.1
+python-jenkins==1.8.2
     # via -r requirements.in
 python-levenshtein==0.23.0
     # via -r requirements.in
@@ -132,7 +132,7 @@ six==1.16.0
     #   insights-core
     #   python-dateutil
     #   python-jenkins
-slack-sdk==3.23.0
+slack-sdk==3.26.1
     # via -r requirements.in
 tabulate==0.9.0
     # via -r requirements.in
@@ -148,6 +148,3 @@ urllib3==1.26.14
     #   requests
 wrapt==1.14.1
     # via deprecated
-
-# The following packages are considered to be unsafe in a requirements file:
-# setuptools
