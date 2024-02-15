@@ -6,7 +6,7 @@ openshift/assisted-installer:
   - quay.io/edge-infrastructure/assisted-installer-controller
   - quay.io/edge-infrastructure/assisted-installer
 openshift/assisted-service:
-  revision: f40deb8c11fb726116d23890f0bd5082e2feab26
+  revision: 759e3e01336c3a7dc5da43f265179ecc470cf6f6
   categories:
   - backend
   images:
