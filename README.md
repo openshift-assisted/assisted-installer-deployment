@@ -1,5 +1,8 @@
 # assisted-installer-deployment
 
+> [!NOTE]  
+> Repository is archived. All changes should now be made in GitLab.
+
 ## Release a new version
 
 You can release a new version by creating a tag in all the assisted-installer repositories.
